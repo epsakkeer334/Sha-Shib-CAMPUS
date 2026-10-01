@@ -6,9 +6,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('institutes', function (Blueprint $table) {
@@ -34,16 +31,12 @@ return new class extends Migration
             $table->softDeletes();
             $table->timestamps();
 
-            // Indexes for frequently queried fields
             $table->index('status');
             $table->index('created_at');
             $table->index('created_by');
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('institutes');

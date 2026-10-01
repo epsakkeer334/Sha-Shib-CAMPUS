@@ -26,7 +26,7 @@ class RoleSeeder extends Seeder
         $superAdminUser = User::firstOrCreate(
             ['email' => $email],
             [
-                'name' => env('CAMP_SUPER_ADMIN_NAME', 'Sha Shib Admin'),
+                'name' => env('CAMP_SUPER_ADMIN_NAME', 'Sha-Shib-CAMPUS Admin'),
                 'password' => Hash::make($password),
             ]
         );
