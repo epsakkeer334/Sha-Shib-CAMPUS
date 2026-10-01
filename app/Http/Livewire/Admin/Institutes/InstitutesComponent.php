@@ -125,7 +125,19 @@ class InstitutesComponent extends Component
 
     public function mount()
     {
+        $this->authorizeSuperAdmin();
         $this->loadCountries();
+    }
+
+    public function hydrate()
+    {
+        $this->authorizeSuperAdmin();
+    }
+
+    // Only Super Admin can add/edit/delete institutes.
+    protected function authorizeSuperAdmin()
+    {
+        abort_unless(auth()->user() && auth()->user()->isSuperAdmin(), 403);
     }
 
     protected function loadCountries()

@@ -23,6 +23,8 @@ class User extends Authenticatable
      * @var array<int, string>
      */
     protected $fillable = [
+        'institute_id',
+        'employee_code',
         'name',
         'email',
         'password',
@@ -32,6 +34,8 @@ class User extends Authenticatable
         'email_verified_at',
         'last_login_at',
         'last_login_ip',
+        'created_by',
+        'updated_by',
     ];
 
     /**
@@ -64,6 +68,59 @@ class User extends Authenticatable
         'status_text'
     ];
 
+    protected static function booted()
+    {
+        static::creating(function ($user) {
+            if (auth()->check()) {
+                $user->created_by = $user->created_by ?? auth()->id();
+                $user->updated_by = auth()->id();
+            }
+        });
+
+        static::updating(function ($user) {
+            if (auth()->check()) {
+                $user->updated_by = auth()->id();
+            }
+        });
+    }
+
+    public function institute()
+    {
+        return $this->belongsTo(Institute::class);
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->hasRole('super-admin');
+    }
+
+    /**
+     * Role slugs this user may assign when creating/editing users (config/camp.php).
+     */
+    public function assignableRoles(): array
+    {
+        $roles = [];
+        foreach (config('camp.assignable_roles') as $role => $allowed) {
+            if ($this->hasRole($role)) {
+                $roles = array_merge($roles, $allowed);
+            }
+        }
+
+        return array_values(array_unique($roles));
+    }
+
+    /**
+     * Users visible in lists: Super Admin sees everyone, others only their own institute.
+     */
+    public function scopeVisibleTo($query, $user)
+    {
+        if ($user && !$user->isSuperAdmin()) {
+            $query->where('institute_id', $user->institute_id);
+        }
+
+        return $query;
+    }
+
     /**
      * Get the profile photo URL.
      */
@@ -86,17 +143,7 @@ class User extends Authenticatable
         }
 
         $role = $roles->first();
-        return match($role) {
-            'super-admin' => 'Super Admin',
-            'institute-admin' => 'Institute Admin',
-            'accounts' => 'Accounts',
-            'training-manager' => 'Training Manager',
-            'hot' => 'HOT',
-            'bic' => 'BIC',
-            'faculty' => 'Faculty',
-            'student' => 'Student',
-            default => ucfirst(str_replace('-', ' ', $role))
-        };
+        return config("camp.roles.{$role}", ucfirst(str_replace('-', ' ', $role)));
     }
 
     /**
@@ -117,6 +164,7 @@ class User extends Authenticatable
             'training-manager' => 'bg-info',
             'hot' => 'bg-warning',
             'bic' => 'bg-secondary',
+            'examination-manager' => 'bg-primary',
             'faculty' => 'bg-dark',
             'student' => 'bg-teal',
             default => 'bg-secondary'

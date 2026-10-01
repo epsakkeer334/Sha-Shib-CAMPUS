@@ -153,6 +153,23 @@ class Institute extends BaseModel
     }
 
     /**
+     * Institutes visible in lists: Super Admin sees all, others only their own.
+     */
+    public function scopeVisibleTo($query, $user)
+    {
+        if ($user && !$user->isSuperAdmin()) {
+            $query->whereKey($user->institute_id);
+        }
+
+        return $query;
+    }
+
+    public function users()
+    {
+        return $this->hasMany(\App\Models\User::class);
+    }
+
+    /**
      * Scope to get active institutes only
      */
     public function scopeActive($query)

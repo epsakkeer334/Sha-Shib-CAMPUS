@@ -210,7 +210,7 @@ class DataTable extends Component
     protected function applyFilters($query)
     {
         // Main filter (status filter)
-        if ($this->filter !== 'All Status' && $this->filter !== 'All Category' && $this->filter !== '') {
+        if (!in_array($this->filter, ['All', 'All Status', 'All Category', ''], true)) {
             $filterValue = $this->filter;
 
             // Check if we're filtering by a relation or direct column
@@ -299,6 +299,12 @@ class DataTable extends Component
     public function render()
     {
         $query = app($this->modelClass)::query();
+
+        // Server-side visibility (institute scoping). Applied here, not through public
+        // properties, so it cannot be removed from the browser.
+        if (method_exists(app($this->modelClass), 'scopeVisibleTo')) {
+            $query->visibleTo(auth()->user());
+        }
 
         // Apply query modifier if provided
         if ($this->queryModifier && is_callable($this->queryModifier)) {

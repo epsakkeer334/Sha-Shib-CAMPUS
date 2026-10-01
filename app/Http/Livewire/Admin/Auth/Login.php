@@ -6,6 +6,7 @@ use Livewire\Component;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Session;
 use Jenssegers\Agent\Agent;
+use App\Http\Middleware\EnsureUserIsActive;
 
 class Login extends Component
 {
@@ -13,6 +14,12 @@ class Login extends Component
     public $password = '';
     public $remember = false;
     public $errorMessage = '';
+
+    public function mount()
+    {
+        // Set by EnsureUserIsActive when a signed-in user is logged out.
+        $this->errorMessage = session('error', '');
+    }
 
     protected function getDeviceInfo()
     {
@@ -40,6 +47,12 @@ class Login extends Component
 
             $user = Auth::user();
 
+            if ($reason = EnsureUserIsActive::blockReason($user)) {
+                Auth::logout();
+                $this->errorMessage = $reason;
+                return;
+            }
+
             // Update last login information
             $user->update([
                 'last_login_at' => now(),
@@ -53,33 +66,8 @@ class Login extends Component
                 'device_info' => $this->getDeviceInfo(),
             ]);
 
-            // ✅ Redirect based on role
-            if ($user->hasRole('super-admin')) {
-                return redirect()->intended(route('admin.dashboard'));
-            } elseif ($user->hasRole('vendor')) {
-                return redirect()->intended(route('vendor.dashboard'));
-            } elseif ($user->hasRole('employee')) {
-                return redirect()->intended(route('employee.dashboard'));
-            } elseif ($user->hasRole('institute-admin')) {
-                return redirect()->intended(route('institute.dashboard'));
-            } elseif ($user->hasRole('accounts')) {
-                return redirect()->intended(route('accounts.dashboard'));
-            } elseif ($user->hasRole('training-manager')) {
-                return redirect()->intended(route('tm.dashboard'));
-            } elseif ($user->hasRole('hot')) {
-                return redirect()->intended(route('hot.dashboard'));
-            } elseif ($user->hasRole('bic')) {
-                return redirect()->intended(route('bic.dashboard'));
-            } elseif ($user->hasRole('faculty')) {
-                return redirect()->intended(route('faculty.dashboard'));
-            } elseif ($user->hasRole('student')) {
-                return redirect()->intended(route('student.dashboard'));
-            } else {
-                // fallback in case of no role
-                Auth::logout();
-                $this->errorMessage = 'Unauthorized access — please contact admin.';
-                return;
-            }
+            // Every role uses the same dashboard; its content and the side menu depend on the role.
+            return redirect()->intended(route('admin.dashboard'));
         }
 
         $this->errorMessage = 'Invalid credentials. Please try again.';

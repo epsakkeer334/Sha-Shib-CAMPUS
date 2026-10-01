@@ -1,9 +1,6 @@
 @php
     $user = Auth::user();
-    $dashboardRoute = match ($user->role ?? '') {
-        'super-admin' => 'admin.dashboard',
-        default       => 'admin.dashboard', // fallback
-    };
+    $dashboardRoute = 'admin.dashboard'; // one dashboard for every role
 @endphp
 <div class="header">
     <div class="main-header">
@@ -99,7 +96,7 @@
                                         <div>
                                             <h5 class="mb-0">{{ auth()->user()->name }}</h5>
                                             <p class="fs-12 fw-medium mb-0">{{ auth()->user()->email }}</p>
-                                            <p class="fs-12 text-muted mb-0">{{ auth()->user()->role ?? 'User' }}</p>
+                                            <p class="fs-12 text-muted mb-0">{{ auth()->user()->role_display_name }}</p>
                                         </div>
                                     </div>
                                 </div>

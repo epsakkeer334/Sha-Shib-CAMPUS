@@ -48,6 +48,28 @@ class AuditTrail extends Model
         return $this->morphTo();
     }
 
+    /**
+     * Rows visible in lists: Super Admin sees all, others only their institute.
+     */
+    public function scopeVisibleTo($query, $user)
+    {
+        if ($user && !$user->isSuperAdmin()) {
+            $query->where('institute_id', $user->institute_id);
+        }
+
+        return $query;
+    }
+
+    public function getFormattedCreatedAtAttribute()
+    {
+        return $this->created_at ? $this->created_at->format('d M Y, h:i A') : '-';
+    }
+
+    public function getReferenceLabelAttribute()
+    {
+        return $this->reference_type ? class_basename($this->reference_type) . ' #' . $this->reference_id : '-';
+    }
+
     public function scopeModule($query, $module)
     {
         return $query->where('module', $module);

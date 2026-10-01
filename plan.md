@@ -64,7 +64,20 @@ Core functional pillars, drawn from your two documents:
 | **Faculty** | Single institute | Attendance & lesson-plan uploads |
 | **Student** | Self only | Profile, document upload, exam application, downloads |
 
-Implemented with `spatie/laravel-permission` (`model_has_roles`) + `institute_id` on the `users` table (nullable for Super Admin). No `role_id` column on `users`.
+Implemented with `spatie/laravel-permission` (`model_has_roles`) + `institute_id` on the `users` table (nullable for Super Admin). No `role_id` column on `users`. Role slugs and labels: `config/camp.php` → `roles`.
+
+**Who can create whom** (`config/camp.php` → `assignable_roles`) ✅
+
+| Creator | Can create | Institute |
+| --- | --- | --- |
+| Super Admin | Super Admin, Institute Admin, Accounts, TM, BiC, EM, HoT, Faculty | selects the institute (none for Super Admin) |
+| Institute Admin | Accounts, TM, BiC, EM, HoT, Faculty | always their own institute (enforced server-side) |
+
+Only Super Admin adds/edits institutes. Students are created by Module 2 (onboarding), not from the Users screen.
+
+**Side menu** ✅ — role × menu matrix in `config/menu.php`, rendered by `App\Services\MenuService`. An item shows when its route exists and the user has the listed role/permission, so menu items for Modules 2–8 appear automatically as each module is built. Non-Super-Admin dashboards show the same items as quick links.
+
+**Permissions** ✅ — defined in `config/camp.php` → `permissions` (Module 1: `institutes.manage`, `users.view/create/update/delete`, `roles.manage`, `audit.view`, `notifications.view`, `serials.manage`); editable per role on the Roles & Permissions screen. Super Admin passes every check (`Gate::before`).
 
 ---
 
@@ -77,7 +90,11 @@ Common columns from `BaseModel` (`created_by`, `updated_by`, `deleted_at`, `time
 
 **Purpose:** institutes, users, roles, notifications, audit trail — shared by every other module.
 
-**Livewire components:** `Admin\Institutes\InstitutesComponent` ✅ (exists), `UserManager`, `RoleAssignment`, `NotificationCenter`, `AuditLogViewer`
+**Status:** ✅ implemented (tests: `tests/Feature/Module1CoreTest.php`).
+
+**Livewire components:** `Admin\Institutes\InstitutesComponent` ✅, `Admin\Users\UsersComponent` ✅ (all users, or one institute's users via Institutes → Users), `Admin\Roles\RolesComponent` ✅ (role × permission matrix), `Admin\AuditTrail\AuditTrailComponent` ✅, `Admin\Notifications\NotificationLogComponent` ✅
+
+**Services / support:** `SerialNumberService` ✅, `NotificationService` ✅ (email sent + logged; SMS logged as pending until a gateway is chosen), `MenuService` ✅, `BelongsToInstitute` trait ✅ (for Module 2+ models), `EnsureUserIsActive` middleware ✅ (blocks inactive users, users without a role, and users of inactive institutes)
 
 **Tables**
 
@@ -96,12 +113,14 @@ Common columns from `BaseModel` (`created_by`, `updated_by`, `deleted_at`, `time
 | logo, banner | string nullable |  |
 | status | boolean default true |  |
 
-`users` ✅ (exists — needs one new migration)
+`users` ✅
 
 | Field | Type | Notes |
 | --- | --- | --- |
 | id | bigint PK |  |
-| institute_id | bigint FK nullable | **NEW migration** — null = central/Super Admin |
+| institute_id | bigint FK nullable | null = central/Super Admin |
+| employee_code | string nullable |  |
+| created_by, updated_by | bigint FK nullable |  |
 | name, email | string |  |
 | phone | string(15) unique nullable |  |
 | password | string |  |
@@ -113,7 +132,7 @@ Common columns from `BaseModel` (`created_by`, `updated_by`, `deleted_at`, `time
 
 Roles via spatie tables (`2025_11_26_064444_create_permission_tables`).
 
-`serial_counters` (new)
+`serial_counters` ✅ (series formats: `config/camp.php` → `serial_series`)
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -123,6 +142,7 @@ Roles via spatie tables (`2025_11_26_064444_create_permission_tables`).
 | year | smallint |  |
 | last_value | bigint | incremented under row lock |
 | prefix_format | string | e.g. `SSG-{institute_code}-{year}-` |
+| pad_length | tinyint | zero-padding of the number |
 | unique | (series_key, institute_id, year) |  |
 
 `audit_trail` ✅ (implemented — replaces the old `activity_logs` table; append-only, no soft deletes)
@@ -139,16 +159,19 @@ Roles via spatie tables (`2025_11_26_064444_create_permission_tables`).
 | meta | json nullable | before/after values (`old`, `new`), `reason`, `description` |
 | created_at | timestamp | acts as the "time-stamp" |
 
-`notifications_log` (new)
+`notifications_log` ✅
 
 | Field | Type | Notes |
 | --- | --- | --- |
 | id | bigint PK |  |
+| institute_id | bigint FK nullable |  |
 | notifiable_type / notifiable_id | polymorphic | user or student |
 | channel | enum(sms,email) |  |
+| recipient | string nullable | email / phone used |
 | event_type | string | `er_issued`, `exam_approved`, `result_published`, `mou_expiry` |
 | payload | json |  |
 | status | enum(pending,sent,failed) |  |
+| error | text nullable |  |
 | sent_at | timestamp nullable |  |
 
 ---
@@ -625,7 +648,7 @@ Export feature: a queued job zips the `document_final_records` of all `documents
 
 | Phase | Duration (suggested) | Scope |
 | --- | --- | --- |
-| **Sprint 0 — Foundation** | 1 week remaining | ✅ Done: Laravel/Livewire setup, auth, spatie roles & permissions, institutes CRUD, audit trail, soft deletes, DataTable. **Remaining:** `users.institute_id` migration, `BelongsToInstitute` scope trait, roles/permissions seeder, `serial_counters` + `SerialNumberService`, `config/camp.php` |
+| **Sprint 0 — Foundation (Module 1)** | ✅ Done | Laravel/Livewire setup, auth, roles & permissions (seeder + matrix screen), institutes CRUD with auto code, user management, role-based side menu, audit trail + viewer, notification log, `users.institute_id`, `BelongsToInstitute`, `SerialNumberService`, `config/camp.php` |
 | **Sprint 1 — Student Onboarding** | 2 weeks | Student registration (+ user account), document upload wizard, student dues, dual-gate approval (Admin + Accounts), ER generation, ID card issuance |
 | **Sprint 2 — Exam Application & Approval** | 2 weeks | Programs/subjects/syllabus mapping, exam appearance requests, Accounts dues gate + BiC bypass, TM attendance gate, admit card generation |
 | **Sprint 3 — Question Bank & Paper Setup** | 1–2 weeks | Question bank CRUD (Super Admin + Institute), exam paper builder |

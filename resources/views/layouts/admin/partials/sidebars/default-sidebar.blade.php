@@ -1,10 +1,6 @@
-<!-- Sidebar -->
+<!-- Sidebar (items and role matrix: config/menu.php) -->
 @php
-    $user = Auth::user();
-    $dashboardRoute = match ($user->role ?? '') {
-        'super-admin' => 'admin.dashboard',
-        default       => 'admin.dashboard', // fallback
-    };
+    $menuSections = \App\Services\MenuService::for(Auth::user());
 @endphp
 
 <div class="sidebar" id="sidebar">
@@ -14,10 +10,10 @@
             <img src="{{ asset('admin/assets/img/small_logo.png') }}" alt="Logo" class="img-fluid" style="max-width: 90%;">
         </a>
 
-        <a href="{{ route($dashboardRoute) }}" class="logo-small">
+        <a href="{{ route('admin.dashboard') }}" class="logo-small">
             <img src="{{ asset('admin/assets/img/small_logo.png') }}" alt="Logo">
         </a>
-        <a href="{{ route($dashboardRoute) }}" class="dark-logo">
+        <a href="{{ route('admin.dashboard') }}" class="dark-logo">
             <img src="{{ asset('admin/assets/img/small_logo.png') }}" alt="Logo">
         </a>
     </div>
@@ -26,43 +22,44 @@
     <div class="sidebar-inner slimscroll">
         <div id="sidebar-menu" class="sidebar-menu">
             <ul>
-                <!-- DASHBOARD -->
-                <li class="menu-title"><span>Main</span></li>
-                <li>
-                    <ul>
-                        <li>
-                            <a href="{{ route($dashboardRoute) }}">
-                                <i class="ti ti-layout-dashboard"></i>
-                                <span>Dashboard</span>
-                            </a>
-                        </li>
-                    </ul>
-                </li>
+                @foreach($menuSections as $section)
+                    <li class="menu-title"><span>{{ $section['title'] }}</span></li>
+                    <li>
+                        <ul>
+                            @foreach($section['items'] as $item)
+                                @php $isActive = isActiveMenu(\App\Services\MenuService::activePatterns($item)); @endphp
 
-                <!-- INSTITUTE MANAGEMENT -->
-                @hasrole('super-admin')
-                <li class="menu-title"><span>Institute Management</span></li>
-                <li>
-                    <ul>
-                        <li class="submenu">
-                            <a href="javascript:void(0);" class="{{ isActiveMenu(['admin.institutes*', 'admin.institute-users*']) ? 'active subdrop' : '' }}">
-                                <i class="ti ti-building"></i>
-                                <span>Institute Management</span>
-                                <span class="menu-arrow"></span>
-                            </a>
-                            <ul style="{{ isActiveMenu(['admin.institutes*']) ? 'display: block;' : '' }}">
-                                <li>
-                                    <a href="{{ route('admin.institutes') }}" class="menu-item {{ request()->routeIs('admin.institutes') ? 'active' : '' }}">
-                                        <i class="ti ti-building-community"></i> Manage Institutes
-                                    </a>
-                                </li>
-
-                            </ul>
-                        </li>
-                    </ul>
-                </li>
-                @endhasrole
-
+                                @if(!empty($item['children']))
+                                    {{-- Collapsible group --}}
+                                    <li class="submenu">
+                                        <a href="javascript:void(0);" class="{{ $isActive ? 'active subdrop' : '' }}">
+                                            <i class="{{ $item['icon'] }}"></i>
+                                            <span>{{ $item['label'] }}</span>
+                                            <span class="menu-arrow"></span>
+                                        </a>
+                                        <ul style="{{ $isActive ? 'display: block;' : '' }}">
+                                            @foreach($item['children'] as $child)
+                                                <li>
+                                                    <a href="{{ route($child['route']) }}"
+                                                       class="menu-item {{ isActiveMenu(\App\Services\MenuService::activePatterns($child)) ? 'active' : '' }}">
+                                                        <i class="{{ $child['icon'] }}"></i> {{ $child['label'] }}
+                                                    </a>
+                                                </li>
+                                            @endforeach
+                                        </ul>
+                                    </li>
+                                @else
+                                    <li>
+                                        <a href="{{ route($item['route']) }}" class="{{ $isActive ? 'active' : '' }}">
+                                            <i class="{{ $item['icon'] }}"></i>
+                                            <span>{{ $item['label'] }}</span>
+                                        </a>
+                                    </li>
+                                @endif
+                            @endforeach
+                        </ul>
+                    </li>
+                @endforeach
             </ul>
         </div>
     </div>
