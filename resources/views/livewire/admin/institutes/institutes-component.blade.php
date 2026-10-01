@@ -51,233 +51,322 @@
 
     <!-- Add/Edit Modal -->
     <div class="modal fade" id="instituteModal" tabindex="-1" aria-hidden="true" wire:ignore.self>
-        <div class="modal-dialog modal-dialog-centered modal-xl">
-            <div class="modal-content border-0 shadow">
-                <div class="modal-header bg-light">
-                    <h4 class="modal-title fw-semibold">{{ $isEdit ? 'Edit Institute' : 'Add Institute' }}</h4>
+        <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg rounded-3">
+                <!-- Header -->
+                <div class="modal-header bg-primary bg-opacity-10 border-bottom">
+                    <div class="d-flex align-items-center">
+                        <div class="avatar avatar-md bg-soft-primary bg-opacity-10 rounded-circle me-3 d-flex align-items-center justify-content-center">
+                            <i class="ti ti-building-bank text-primary fs-14"></i>
+                        </div>
+                        <div>
+                            <h4 class="modal-title fw-semibold mb-0">{{ $isEdit ? 'Edit Institute' : 'Add New Institute' }}</h4>
+                            <small class="text-muted">{{ $isEdit ? 'Update the institute details below' : 'Fill in the details to create a new institute' }}</small>
+                        </div>
+                    </div>
                     <button type="button" class="btn-close" wire:click="closeModal"></button>
                 </div>
 
-                <div class="modal-body">
-                    <div class="row g-3">
-                        <!-- Basic Information Section -->
-                        <div class="col-12">
-                            <h5 class="fw-semibold mb-3">Basic Information</h5>
-                            <hr class="mt-0">
-                        </div>
+                <!-- Body -->
+                <div class="modal-body p-4">
+                    <!-- Section: Basic Information -->
+                    <div class="card border-0 bg-light bg-opacity-50 mb-3">
+                        <div class="card-body p-3">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="ti ti-info-circle text-primary me-2 fs-14"></i>
+                                <h6 class="fw-semibold mb-0">Basic Information</h6>
+                            </div>
+                            <div class="row g-3">
+                                <!-- Institute Name -->
+                                <div class="col-md-6">
+                                    <label class="form-label fw-medium small">Institute Name <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control @error('name') is-invalid @enderror" wire:model="name" placeholder="Enter institute name">
+                                    @error('name') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
 
-                        <!-- Institute Name -->
-                        <div class="col-md-6">
-                            <label class="form-label fw-medium">Institute Name <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control @error('name') is-invalid @enderror" wire:model="name" placeholder="Enter institute name">
-                            @error('name') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
+                                <!-- Established Year -->
+                                <div class="col-md-3">
+                                    <label class="form-label fw-medium small">Established Year <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control @error('established_year') is-invalid @enderror" wire:model="established_year"
+                                        min="1800" max="{{ date('Y') }}" placeholder="e.g., {{ date('Y') }}">
+                                    @error('established_year') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
 
-                        <!-- Institute Code -->
-                        <div class="col-md-6">
-                            <label class="form-label fw-medium">Institute Code <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control @error('code') is-invalid @enderror" wire:model="code" placeholder="e.g., INST001">
-                            @error('code') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
-
-                        <!-- Status -->
-                        <div class="col-md-6">
-                            <label class="form-label fw-medium">Status</label>
-                            <select class="form-select @error('status') is-invalid @enderror" wire:model="status">
-                                <option value="1">Active</option>
-                                <option value="0">Inactive</option>
-                            </select>
-                            @error('status') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
-
-                        <!-- Description -->
-                        <div class="col-12">
-                            <label class="form-label fw-medium">Description</label>
-                            <textarea class="form-control @error('description') is-invalid @enderror" wire:model="description" rows="3"
-                                      placeholder="Enter institute description"></textarea>
-                            @error('description') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
-
-                        <!-- Address Section -->
-                        <div class="col-12 mt-3">
-                            <h5 class="fw-semibold mb-3">Address Information</h5>
-                            <hr class="mt-0">
-                        </div>
-
-                        <!-- Address -->
-                        <div class="col-12">
-                            <label class="form-label fw-medium">Address</label>
-                            <textarea class="form-control @error('address') is-invalid @enderror" wire:model="address" rows="2"
-                                      placeholder="Enter street address"></textarea>
-                            @error('address') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
-
-                        <!-- City -->
-                        <div class="col-md-4">
-                            <label class="form-label fw-medium">City</label>
-                            <input type="text" class="form-control @error('city') is-invalid @enderror" wire:model="city" placeholder="City">
-                            @error('city') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
-
-                        <!-- Country -->
-                        <div class="col-md-4">
-                            <label class="form-label fw-medium">Country <span class="text-danger">*</span></label>
-                            <select class="form-select @error('country_id') is-invalid @enderror" wire:model="country_id">
-                                <option value="">Select Country</option>
-                                @foreach($countries as $id => $name)
-                                    <option value="{{ $id }}">{{ $name }}</option>
-                                @endforeach
-                            </select>
-                            @error('country_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
-
-                        <!-- State -->
-                        <div class="col-md-4">
-                            <label class="form-label fw-medium">State <span class="text-danger">*</span></label>
-                            <select class="form-select @error('state_id') is-invalid @enderror" wire:model="state_id" {{ empty($states) ? 'disabled' : '' }}>
-                                <option value="">Select State</option>
-                                @foreach($states as $id => $name)
-                                    <option value="{{ $id }}">{{ $name }}</option>
-                                @endforeach
-                            </select>
-                            @error('state_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                            @if(empty($states) && $country_id)
-                                <small class="text-muted">No states available for selected country</small>
-                            @endif
-                        </div>
-
-                        <!-- Postal Code -->
-                        <div class="col-md-4">
-                            <label class="form-label fw-medium">Postal Code</label>
-                            <input type="text" class="form-control @error('postal_code') is-invalid @enderror" wire:model="postal_code" placeholder="Postal code">
-                            @error('postal_code') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
-
-                        <!-- Contact Information Section -->
-                        <div class="col-12 mt-3">
-                            <h5 class="fw-semibold mb-3">Contact Information</h5>
-                            <hr class="mt-0">
-                        </div>
-
-                        <!-- Contact Person -->
-                        <div class="col-md-6">
-                            <label class="form-label fw-medium">Contact Person</label>
-                            <input type="text" class="form-control @error('contact_person') is-invalid @enderror" wire:model="contact_person" placeholder="Contact person name">
-                            @error('contact_person') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
-
-                        <!-- Email -->
-                        <div class="col-md-6">
-                            <label class="form-label fw-medium">Email <span class="text-danger">*</span></label>
-                            <input type="email" class="form-control @error('email') is-invalid @enderror" wire:model="email" placeholder="institute@example.com">
-                            @error('email') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
-
-                        <!-- Phone -->
-                        <div class="col-md-6">
-                            <label class="form-label fw-medium">Phone <span class="text-danger">*</span></label>
-                            <input type="tel" class="form-control @error('phone') is-invalid @enderror" wire:model="phone" placeholder="Phone number">
-                            @error('phone') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
-
-                        <!-- Website -->
-                        <div class="col-md-6">
-                            <label class="form-label fw-medium">Website</label>
-                            <input type="url" class="form-control @error('website') is-invalid @enderror" wire:model="website" placeholder="https://example.com">
-                            @error('website') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
-
-                        <!-- Media Section -->
-                        <div class="col-12 mt-3">
-                            <h5 class="fw-semibold mb-3">Media</h5>
-                            <hr class="mt-0">
-                        </div>
-
-                        <!-- Logo Upload -->
-                        <div class="col-md-6">
-                            <label class="form-label fw-medium">Institute Logo <span class="text-danger">*</span></label>
-                            <input type="file" class="form-control @error('logo') is-invalid @enderror" wire:model="logo" accept="image/*">
-                            @error('logo') <div class="invalid-feedback">{{ $message }}</div> @enderror
-
-                            <div class="mt-2">
-                                @if ($logo && !is_string($logo))
-                                    <div class="mb-2">
-                                        <label class="form-label fw-medium small">New Logo Preview:</label>
-                                        <img src="{{ $logo->temporaryUrl() }}" class="img-thumbnail" style="max-height: 100px; max-width: 200px;">
+                                <!-- Institute Code -->
+                                <div class="col-md-3">
+                                    <label class="form-label fw-medium small">Institute Code</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light"><i class="ti ti-hash fs-14"></i></span>
+                                        <input type="text" class="form-control bg-light" value="{{ $code }}" readonly
+                                               placeholder="Auto-generated">
                                     </div>
-                                @elseif($isEdit && $recordId)
-                                    @php $institute = \App\Models\Admin\Institute::find($recordId) @endphp
-                                    @if($institute && $institute->logo)
-                                        <div>
-                                            <label class="form-label fw-medium small">Current Logo:</label>
-                                            <img src="{{ $institute->logo_url }}" class="img-thumbnail" style="max-height: 100px; max-width: 200px;">
-                                            <div class="alert alert-info py-2 small mt-2">
-                                                <i class="ti ti-info-circle me-1"></i>
-                                                Upload a new logo to replace the current one (optional)
-                                            </div>
-                                        </div>
-                                    @endif
-                                @else
-                                    <div class="alert alert-info py-2 small mt-2">
-                                        <i class="ti ti-info-circle me-1"></i>
-                                        Upload an institute logo (Recommended: 200x200 pixels)
-                                    </div>
-                                @endif
+                                    <small class="text-muted" style="font-size: 0.7rem;">
+                                        {{ $isEdit ? 'Code cannot be changed.' : 'Format: first 3 letters/year/number. Final code is assigned on save.' }}
+                                    </small>
+                                </div>
+
+                                <!-- Description -->
+                                <div class="col-12">
+                                    <label class="form-label fw-medium small">Description</label>
+                                    <textarea class="form-control @error('description') is-invalid @enderror" wire:model="description" rows="2"
+                                            placeholder="Brief description about the institute"></textarea>
+                                    @error('description') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- Banner Upload -->
-                        <div class="col-md-6">
-                            <label class="form-label fw-medium">Institute Banner</label>
-                            <input type="file" class="form-control @error('banner') is-invalid @enderror" wire:model="banner" accept="image/*">
-                            @error('banner') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    <!-- Section: Address Information -->
+                    <div class="card border-0 bg-light bg-opacity-50 mb-3">
+                        <div class="card-body p-3">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="ti ti-map-pin text-primary me-2 fs-14"></i>
+                                <h6 class="fw-semibold mb-0">Address Information</h6>
+                            </div>
+                            <div class="row g-3">
+                                <!-- Address -->
+                                <div class="col-12">
+                                    <label class="form-label fw-medium small">Street Address</label>
+                                    <textarea class="form-control @error('address') is-invalid @enderror" wire:model="address" rows="2"
+                                            placeholder="Enter street address"></textarea>
+                                    @error('address') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
 
-                            <div class="mt-2">
-                                @if ($banner && !is_string($banner))
-                                    <div class="mb-2">
-                                        <label class="form-label fw-medium small">New Banner Preview:</label>
-                                        <img src="{{ $banner->temporaryUrl() }}" class="img-thumbnail" style="max-height: 150px; width: 100%; object-fit: cover;">
-                                    </div>
-                                @elseif($isEdit && $recordId)
-                                    @php $institute = \App\Models\Admin\Institute::find($recordId) @endphp
-                                    @if($institute && $institute->banner)
-                                        <div>
-                                            <label class="form-label fw-medium small">Current Banner:</label>
-                                            <img src="{{ $institute->banner_url }}" class="img-thumbnail" style="max-height: 150px; width: 100%; object-fit: cover;">
-                                            <div class="alert alert-info py-2 small mt-2">
-                                                <i class="ti ti-info-circle me-1"></i>
-                                                Leave empty to keep current banner
-                                            </div>
-                                        </div>
+                                <!-- Country -->
+                                <div class="col-md-4">
+                                    <label class="form-label fw-medium small">Country <span class="text-danger">*</span></label>
+                                    <select class="form-select @error('country_id') is-invalid @enderror" wire:model="country_id">
+                                        <option value="">Select Country</option>
+                                        @foreach($countries as $id => $name)
+                                            <option value="{{ $id }}">{{ $name }}</option>
+                                        @endforeach
+                                    </select>
+                                    @error('country_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
+
+                                <!-- State -->
+                                <div class="col-md-4">
+                                    <label class="form-label fw-medium small">State <span class="text-danger">*</span></label>
+                                    <select class="form-select @error('state_id') is-invalid @enderror" wire:model="state_id" {{ empty($states) ? 'disabled' : '' }}>
+                                        <option value="">Select State</option>
+                                        @foreach($states as $id => $name)
+                                            <option value="{{ $id }}">{{ $name }}</option>
+                                        @endforeach
+                                    </select>
+                                    @error('state_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                    @if(empty($states) && $country_id)
+                                        <small class="text-muted" style="font-size: 0.7rem;">No states available</small>
                                     @endif
-                                @endif
+                                </div>
+
+                                <!-- City -->
+                                <div class="col-md-2">
+                                    <label class="form-label fw-medium small">City</label>
+                                    <input type="text" class="form-control @error('city') is-invalid @enderror" wire:model="city" placeholder="City">
+                                    @error('city') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
+
+                                <!-- Postal Code -->
+                                <div class="col-md-2">
+                                    <label class="form-label fw-medium small">Postal Code</label>
+                                    <input type="text" class="form-control @error('postal_code') is-invalid @enderror" wire:model="postal_code" placeholder="Postal">
+                                    @error('postal_code') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- About Section -->
-                        <div class="col-12 mt-3">
-                            <h5 class="fw-semibold mb-3">About Institute</h5>
-                            <hr class="mt-0">
+                    <!-- Section: Contact Information -->
+                    <div class="card border-0 bg-light bg-opacity-50 mb-3">
+                        <div class="card-body p-3">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="ti ti-phone text-primary me-2 fs-14"></i>
+                                <h6 class="fw-semibold mb-0">Contact Information</h6>
+                            </div>
+                            <div class="row g-3">
+                                <!-- Contact Person -->
+                                <div class="col-md-6">
+                                    <label class="form-label fw-medium small">Contact Person</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-white"><i class="ti ti-user text-muted fs-14"></i></span>
+                                        <input type="text" class="form-control @error('contact_person') is-invalid @enderror" wire:model="contact_person" placeholder="Full name">
+                                    </div>
+                                    @error('contact_person') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
+
+                                <!-- Email -->
+                                <div class="col-md-6">
+                                    <label class="form-label fw-medium small">Email <span class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-white"><i class="ti ti-mail text-muted fs-14"></i></span>
+                                        <input type="email" class="form-control @error('email') is-invalid @enderror" wire:model="email" placeholder="institute@example.com">
+                                    </div>
+                                    @error('email') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
+
+                                <!-- Phone -->
+                                <div class="col-md-6">
+                                    <label class="form-label fw-medium small">Phone <span class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-white"><i class="ti ti-phone text-muted fs-14"></i></span>
+                                        <input type="tel" class="form-control @error('phone') is-invalid @enderror" wire:model="phone" placeholder="Phone number">
+                                    </div>
+                                    @error('phone') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
+
+                                <!-- Website -->
+                                <div class="col-md-6">
+                                    <label class="form-label fw-medium small">Website</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-white"><i class="ti ti-world text-muted fs-14"></i></span>
+                                        <input type="url" class="form-control @error('website') is-invalid @enderror" wire:model="website" placeholder="https://example.com">
+                                    </div>
+                                    @error('website') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                </div>
+                            </div>
                         </div>
+                    </div>
 
-                        <!-- About with Summernote Editor -->
-                        <div class="col-12">
-                            <label class="form-label fw-medium">About Institute</label>
+                    <!-- Section: Media -->
+                    <div class="card border-0 bg-light bg-opacity-50 mb-3">
+                        <div class="card-body p-3">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="ti ti-photo text-primary me-2 fs-14"></i>
+                                <h6 class="fw-semibold mb-0">Media</h6>
+                            </div>
+                            <div class="row g-3">
+                                <!-- Logo Upload -->
+                                <div class="col-md-6">
+                                    <label class="form-label fw-medium small">Institute Logo <span class="text-danger">*</span></label>
+                                    <input type="file" class="form-control @error('logo') is-invalid @enderror" wire:model="logo" accept="image/*">
+                                    @error('logo') <div class="invalid-feedback">{{ $message }}</div> @enderror
+
+                                    <div class="mt-2">
+                                        @if ($logo && !is_string($logo))
+                                            <div class="d-flex align-items-center gap-2 p-2 bg-white rounded border">
+                                                <img src="{{ $logo->temporaryUrl() }}" class="rounded" style="height: 60px; width: 60px; object-fit: cover;">
+                                                <div>
+                                                    <span class="badge bg-success bg-opacity-10 text-success small">New Logo</span>
+                                                    <p class="mb-0 text-muted small">Preview ready</p>
+                                                </div>
+                                            </div>
+                                        @elseif($isEdit && $recordId)
+                                            @php $institute = \App\Models\Admin\Institute::find($recordId) @endphp
+                                            @if($institute && $institute->logo)
+                                                <div class="d-flex align-items-center gap-2 p-2 bg-white rounded border">
+                                                    <img src="{{ $institute->logo_url }}" class="rounded" style="height: 60px; width: 60px; object-fit: cover;">
+                                                    <div>
+                                                        <span class="badge bg-info bg-opacity-10 text-info small">Current Logo</span>
+                                                        <p class="mb-0 text-muted small">Upload new to replace</p>
+                                                    </div>
+                                                </div>
+                                            @endif
+                                        @else
+                                            <div class="p-2 bg-white rounded border text-center">
+                                                <i class="ti ti-cloud-upload text-muted fs-3"></i>
+                                                <p class="mb-0 text-muted small">Recommended: 200x200px</p>
+                                            </div>
+                                        @endif
+                                    </div>
+                                </div>
+
+                                <!-- Banner Upload -->
+                                <div class="col-md-6">
+                                    <label class="form-label fw-medium small">Institute Banner</label>
+                                    <input type="file" class="form-control @error('banner') is-invalid @enderror" wire:model="banner" accept="image/*">
+                                    @error('banner') <div class="invalid-feedback">{{ $message }}</div> @enderror
+
+                                    <div class="mt-2">
+                                        @if ($banner && !is_string($banner))
+                                            <div class="p-2 bg-white rounded border">
+                                                <img src="{{ $banner->temporaryUrl() }}" class="rounded w-100" style="height: 60px; object-fit: cover;">
+                                                <span class="badge bg-success bg-opacity-10 text-success small mt-1">New Banner</span>
+                                            </div>
+                                        @elseif($isEdit && $recordId)
+                                            @php $institute = \App\Models\Admin\Institute::find($recordId) @endphp
+                                            @if($institute && $institute->banner)
+                                                <div class="p-2 bg-white rounded border">
+                                                    <img src="{{ $institute->banner_url }}" class="rounded w-100" style="height: 60px; object-fit: cover;">
+                                                    <span class="badge bg-info bg-opacity-10 text-info small mt-1">Current Banner</span>
+                                                </div>
+                                            @endif
+                                        @else
+                                            <div class="p-2 bg-white rounded border text-center">
+                                                <i class="ti ti-photo text-muted fs-3"></i>
+                                                <p class="mb-0 text-muted small">Recommended: 1200x400px</p>
+                                            </div>
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section: About Institute -->
+                    <div class="card border-0 bg-light bg-opacity-50 mb-3">
+                        <div class="card-body p-3">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="ti ti-file-description text-primary me-2 fs-14"></i>
+                                <h6 class="fw-semibold mb-0">About Institute</h6>
+                            </div>
                             <div wire:ignore>
                                 <textarea id="summernote" class="form-control @error('about') is-invalid @enderror"
-                                          rows="10" placeholder="Enter detailed information about the institute"></textarea>
+                                        rows="10" placeholder="Enter detailed information about the institute"></textarea>
                             </div>
-                            @error('about') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            @error('about') <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
                             <small class="text-muted mt-1">Use the toolbar to format text, add images, links, and more.</small>
+                        </div>
+                    </div>
+
+                    <!-- Section: Status -->
+                    <div class="card border-0 bg-light bg-opacity-50">
+                        <div class="card-body p-3">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center">
+                                    <i class="ti ti-toggle-right text-primary me-2 fs-14"></i>
+                                    <div>
+                                        <h6 class="fw-semibold mb-0">Status</h6>
+                                        <small class="text-muted">Set institute active or inactive</small>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="statusSwitch"
+                                            wire:model="status" value="1" @if($status == 1) checked @endif>
+                                        <label class="form-check-label fw-medium" for="statusSwitch">
+                                            {{ $status == 1 ? 'Active' : 'Inactive' }}
+                                        </label>
+                                    </div>
+                                    <span class="badge {{ $status == 1 ? 'bg-success' : 'bg-danger' }} bg-opacity-10 {{ $status == 1 ? 'text-success' : 'text-danger' }}">
+                                        {{ $status == 1 ? 'Active' : 'Inactive' }}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="modal-footer border-top-0">
-                    <button class="btn btn-light px-4" wire:click="closeModal">Cancel</button>
-                    <button type="button" class="btn btn-primary px-4" onclick="saveInstitute()">
-                        <i class="ti ti-device-floppy me-1"></i> {{ $isEdit ? 'Update' : 'Save' }}
-                    </button>
+                <!-- Footer -->
+                <div class="modal-footer bg-light border-top">
+                    <div class="d-flex justify-content-between w-100 align-items-center">
+                        <small class="text-muted">
+                            <i class="ti ti-info-circle me-1 fs-16"></i>
+                            Fields marked with <span class="text-danger">*</span> are required
+                        </small>
+                        <div>
+                            <button class="btn btn-light px-4 me-2" wire:click="closeModal">
+                                <i class="ti ti-x me-1 fs-16"></i> Cancel
+                            </button>
+                            <button type="button" class="btn btn-primary px-4" onclick="saveInstitute()" wire:loading.attr="disabled">
+                                <span wire:loading.remove wire:target="save,update">
+                                    <i class="ti ti-device-floppy me-1 fs-16"></i> {{ $isEdit ? 'Update Institute' : 'Save Institute' }}
+                                </span>
+                                <span wire:loading wire:target="save,update">
+                                    <span class="spinner-border spinner-border-sm me-1"></span> Saving...
+                                </span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

@@ -86,8 +86,9 @@ Common columns from `BaseModel` (`created_by`, `updated_by`, `deleted_at`, `time
 | Field | Type | Notes |
 | --- | --- | --- |
 | id | bigint PK |  |
-| name | string, unique |  |
-| code | string, unique | short code used in ER/serial prefixes |
+| name | string, unique | must contain ≥ 3 letters |
+| established_year | smallint | required in form, 1800 – current year |
+| code | string, unique | auto-generated on create, read-only after: format `first 3 letters/year/running no.`, running no. group-wide from 1010 (e.g. `SHA/2005/1010`); used in ER/serial prefixes |
 | description, about | text nullable |  |
 | address, city, postal_code | string nullable |  |
 | country, state | string nullable | `countries` / `states` tables exist |

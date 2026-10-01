@@ -8,6 +8,7 @@ use Livewire\WithFileUploads;
 use App\Models\Admin\Institute;
 use App\Models\Admin\Country;
 use App\Models\Admin\State;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Traits\RecordsAuditTrail;
 
@@ -18,7 +19,7 @@ class InstitutesComponent extends Component
     protected $paginationTheme = 'bootstrap';
 
     // Form fields
-    public $name, $code, $description, $address, $city, $state_id, $country_id, $postal_code;
+    public $name, $established_year, $code, $description, $address, $city, $state_id, $country_id, $postal_code;
     public $contact_person, $email, $phone, $website, $logo, $banner, $about, $status = 1;
     public $recordId;
     public $isEdit = false;
@@ -45,8 +46,8 @@ class InstitutesComponent extends Component
     protected function rules()
     {
         $rules = [
-            'name' => 'required|string|max:255',
-            'code' => 'required|string|max:50',
+            'name' => ['required', 'string', 'max:255', 'regex:/(.*[A-Za-z]){3}/'],
+            'established_year' => 'required|integer|digits:4|min:1800|max:' . date('Y'),
             'description' => 'nullable|string',
             'address' => 'nullable|string|max:500',
             'city' => 'nullable|string|max:100',
@@ -62,17 +63,15 @@ class InstitutesComponent extends Component
             'logo' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
         ];
 
-        // Add unique validation for name, code, email, phone
+        // Add unique validation for name, email, phone (code is auto-generated on save)
         if (!$this->isEdit) {
             // For create: check uniqueness
-            $rules['name'] = 'required|string|max:255|unique:institutes,name';
-            $rules['code'] = 'required|string|max:50|unique:institutes,code';
+            $rules['name'][] = 'unique:institutes,name';
             $rules['email'] = 'required|email|max:255|unique:institutes,email';
             $rules['phone'] = 'required|string|max:20|unique:institutes,phone';
         } else {
             // For update: check uniqueness except current record
-            $rules['name'] = 'required|string|max:255|unique:institutes,name,' . $this->recordId;
-            $rules['code'] = 'required|string|max:50|unique:institutes,code,' . $this->recordId;
+            $rules['name'][] = 'unique:institutes,name,' . $this->recordId;
             $rules['email'] = 'required|email|max:255|unique:institutes,email,' . $this->recordId;
             $rules['phone'] = 'required|string|max:20|unique:institutes,phone,' . $this->recordId;
 
@@ -92,10 +91,12 @@ class InstitutesComponent extends Component
         'name.required' => 'Institute name is required.',
         'name.max' => 'Name must not exceed 255 characters.',
         'name.unique' => 'This institute name is already taken.',
+        'name.regex' => 'Name must contain at least 3 letters (used for the institute code).',
 
-        'code.required' => 'Institute code is required.',
-        'code.max' => 'Code must not exceed 50 characters.',
-        'code.unique' => 'This institute code is already taken.',
+        'established_year.required' => 'Established year is required.',
+        'established_year.digits' => 'Established year must be a 4-digit year.',
+        'established_year.min' => 'Established year must be 1800 or later.',
+        'established_year.max' => 'Established year cannot be in the future.',
 
         'email.required' => 'Email address is required.',
         'email.email' => 'Please enter a valid email address.',
@@ -156,6 +157,26 @@ class InstitutesComponent extends Component
         $this->state_id = null;
     }
 
+    public function updatedName()
+    {
+        $this->refreshCodePreview();
+    }
+
+    public function updatedEstablishedYear()
+    {
+        $this->refreshCodePreview();
+    }
+
+    /**
+     * Show the code that will be generated. The final code is generated again on save.
+     */
+    protected function refreshCodePreview()
+    {
+        if (!$this->isEdit) {
+            $this->code = Institute::generateCode((string) $this->name, $this->established_year);
+        }
+    }
+
     public function updateAboutValue($value)
     {
         $this->about = $value;
@@ -201,6 +222,7 @@ class InstitutesComponent extends Component
         $this->fill([
             'recordId' => $institute->id,
             'name' => $institute->name,
+            'established_year' => $institute->established_year,
             'code' => $institute->code,
             'description' => $institute->description,
             'address' => $institute->address,
@@ -235,7 +257,7 @@ class InstitutesComponent extends Component
     protected function resetFields()
     {
         $this->reset([
-            'recordId', 'name', 'code', 'description', 'address', 'city', 'state_id', 'country_id',
+            'recordId', 'name', 'established_year', 'code', 'description', 'address', 'city', 'state_id', 'country_id',
             'postal_code', 'contact_person', 'email', 'phone', 'website', 'logo', 'banner',
             'about', 'status', 'isEdit'
         ]);
@@ -260,7 +282,7 @@ class InstitutesComponent extends Component
 
         $data = [
             'name' => $this->name,
-            'code' => $this->code,
+            'established_year' => $this->established_year,
             'description' => $this->description,
             'address' => $this->address,
             'city' => $this->city,
@@ -287,7 +309,11 @@ class InstitutesComponent extends Component
             $data['banner'] = $bannerName;
         }
 
-        $institute = Institute::create($data);
+        $institute = DB::transaction(function () use ($data) {
+            $data['code'] = Institute::generateCode($this->name, $this->established_year, true);
+
+            return Institute::create($data);
+        });
 
         // Audit trail
         $this->auditCreate($institute, 'institutes', "Created new institute: {$institute->name} ({$institute->code})");
@@ -308,14 +334,14 @@ class InstitutesComponent extends Component
 
         // Capture old values before update
         $oldValues = $institute->only([
-            'name', 'code', 'description', 'address', 'city', 'state_id', 'country_id',
+            'name', 'established_year', 'code', 'description', 'address', 'city', 'state_id', 'country_id',
             'postal_code', 'contact_person', 'email', 'phone', 'website', 'logo',
             'banner', 'about', 'status'
         ]);
 
         $data = [
             'name' => $this->name,
-            'code' => $this->code,
+            'established_year' => $this->established_year,
             'description' => $this->description,
             'address' => $this->address,
             'city' => $this->city,
@@ -354,7 +380,7 @@ class InstitutesComponent extends Component
 
         // Log the update with old and new values
         $newValues = $institute->only([
-            'name', 'code', 'description', 'address', 'city', 'state_id', 'country_id',
+            'name', 'established_year', 'code', 'description', 'address', 'city', 'state_id', 'country_id',
             'postal_code', 'contact_person', 'email', 'phone', 'website', 'logo',
             'banner', 'about', 'status'
         ]);

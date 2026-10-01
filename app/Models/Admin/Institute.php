@@ -8,8 +8,12 @@ class Institute extends BaseModel
 {
     use SoftDeletes;
 
+    /** Running number of the first institute code, e.g. SHA/2005/1010 */
+    const CODE_SEQUENCE_START = 1010;
+
     protected $fillable = [
         'name',
+        'established_year',
         'code',
         'description',
         'address',
@@ -31,6 +35,7 @@ class Institute extends BaseModel
 
     protected $casts = [
         'status' => 'boolean',
+        'established_year' => 'integer',
     ];
 
     protected $appends = [
@@ -41,6 +46,33 @@ class Institute extends BaseModel
         'country_name',
         'state_name'
     ];
+
+    /**
+     * Build the next institute code: first 3 letters of the name + established year
+     * + a group-wide running number starting at CODE_SEQUENCE_START (e.g. SHA/2005/1010).
+     * Call inside a DB transaction when saving so concurrent creates cannot collide.
+     */
+    public static function generateCode(string $name, $establishedYear, bool $lock = false): ?string
+    {
+        $prefix = strtoupper(substr(preg_replace('/[^A-Za-z]/', '', $name), 0, 3));
+
+        if (strlen($prefix) < 3 || !preg_match('/^\d{4}$/', (string) $establishedYear)) {
+            return null;
+        }
+
+        $query = static::withTrashed()->select('code');
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+
+        $lastSequence = $query->pluck('code')
+            ->map(fn ($code) => preg_match('~^[A-Z]{3}/\d{4}/(\d+)$~', (string) $code, $m) ? (int) $m[1] : 0)
+            ->max();
+
+        $sequence = max((int) $lastSequence + 1, self::CODE_SEQUENCE_START);
+
+        return "{$prefix}/{$establishedYear}/{$sequence}";
+    }
 
     /**
      * Get the country that owns the institute
