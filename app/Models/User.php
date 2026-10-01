@@ -11,7 +11,7 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use App\Models\Admin\ActivityLog;
+use App\Models\Admin\AuditTrail;
 
 class User extends Authenticatable
 {
@@ -197,9 +197,9 @@ class User extends Authenticatable
         return $query->where('last_login_at', '>', now()->subDays($days));
     }
 
-    public function activityLogs()
+    public function auditTrail()
     {
-        return $this->hasMany(ActivityLog::class, 'user_id');
+        return $this->hasMany(AuditTrail::class, 'user_id');
     }
 
     /**

@@ -9,11 +9,11 @@ use App\Models\Admin\Institute;
 use App\Models\Admin\Country;
 use App\Models\Admin\State;
 use Illuminate\Support\Facades\Storage;
-use App\Traits\LogsActivity;
+use App\Traits\RecordsAuditTrail;
 
 class InstitutesComponent extends Component
 {
-    use WithPagination, WithFileUploads, LogsActivity;
+    use WithPagination, WithFileUploads, RecordsAuditTrail;
 
     protected $paginationTheme = 'bootstrap';
 
@@ -289,8 +289,8 @@ class InstitutesComponent extends Component
 
         $institute = Institute::create($data);
 
-        // Log the activity
-        $this->logCreate($institute, 'institutes', "Created new institute: {$institute->name} ({$institute->code})");
+        // Audit trail
+        $this->auditCreate($institute, 'institutes', "Created new institute: {$institute->name} ({$institute->code})");
 
         $this->closeModal();
         $this->emit('refreshTable');
@@ -358,14 +358,7 @@ class InstitutesComponent extends Component
             'postal_code', 'contact_person', 'email', 'phone', 'website', 'logo',
             'banner', 'about', 'status'
         ]);
-        $this->logActivity(
-            action: 'update',
-            module: 'institutes',
-            model: $institute,
-            oldValues: $oldValues,
-            newValues: $newValues,
-            description: "Updated institute: {$institute->name} ({$institute->code})"
-        );
+        $this->auditUpdate($institute, 'institutes', $oldValues, $newValues, "Updated institute: {$institute->name} ({$institute->code})");
 
         $this->closeModal();
         $this->emit('refreshTable');
@@ -396,8 +389,8 @@ class InstitutesComponent extends Component
                 Storage::delete('public/institutes/banners/' . $institute->banner);
             }
 
-            // Log the delete activity
-            $this->logDelete($institute, 'institutes', "Deleted institute: {$institute->name} ({$institute->code})");
+            // Audit trail
+            $this->auditDelete($institute, 'institutes', "Deleted institute: {$institute->name} ({$institute->code})");
 
             $institute->delete();
 

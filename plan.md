@@ -1,82 +1,687 @@
-## Requested project-root document
+# CAMP — Central Academic Management Portal
 
-- User confirmed the literal project folder is `d:\Laravel Service\-Sha-Shib-CAMPUS` (leading hyphen included) and the requested filename is `PROJECT_PLAN.md` at the project root.
-- Folder currently contains only `.git/`; no existing application files or local project instructions were visible.
-- Planned document content: the complete Sha Shib CAMPUS development roadmap below, formatted as a standalone Markdown project plan, including project identity/location, phases and exit gates, architecture, relevant implementation areas, verification checklist, and open decisions/boundaries.
-- Current mode is planning-only; do not create or edit the workspace file in this turn. The target document is ready for implementation handoff.
+### Laravel 9 + Livewire 2 Development Plan (Multi-Institute)
 
+---
 
-## Plan: Sha Shib CAMPUS Development
+## 1. Project Overview
 
-Greenfield development plan for **Sha Shib Centralised Academic Management & Performance Unified System (Sha Shib CAMPUS)** as a standalone Laravel + Livewire application in a new folder named **Sha Shib CAMPUS** under the Laravel Service workspace. Use the supplied CAMP Part 1/Part 2 specification as the business source of truth; keep technical recommendations and unresolved management decisions explicitly separate. No implementation or scaffolding is included in this planning stage.
+CAMP is a multi-tenant academic and compliance management system serving 10+ institutes under the Sha Shib Group. It is **centralized for data integrity** (single source of truth for ER numbers, question banks, marksheet serials) and **decentralized for operational approvals** (institutes run their own day-to-day workflows).
 
-**Steps**
+Core functional pillars, drawn from your two documents:
 
-### Phase 0 — Scope, decisions, and acceptance baseline
-1. Treat the user-provided CAMP Part 1/Part 2-derived plan as the source boundary. Convert each business rule, workflow, role, report, and retention obligation into traceable requirements and acceptance tests; do not invent business rules.
-2. Approve initial platform choices before project setup: exact Laravel/PHP versions, MySQL/MariaDB version, authentication provider, SMS/email vendors, storage, hosting, backup/DR, institution list/codes, external approval authorities, online-exam process, record retention, and physical-signature verification.
-3. Resolve data and workflow ambiguities before the affected modules: whether student/ER/marksheet identifiers are global or institution-scoped; role multiplicity and cross-institution access; ER and exam approval ordering and rejection/resubmission behavior; attendance eligibility calculation for the 75% rule (source says 75% but does not define denominator/exceptions); marks correction and result republishing rules; DMS 7-Day Rule calendar/business-day and escalation semantics; MoU alert recipients/repeat policy; and which CAMP rules are configurable.
-4. Define module owners, UAT users, migration/import needs, and a signed-off acceptance gate for each phase.
+1. **Student Onboarding & ER Number Generation**
+2. **Examination Lifecycle** (Application → Approval → Admit Card → Conduct)
+3. **Grading & Result Publication**
+4. **Document Management System (DMS)** — MTOE/SOP/Training Manual approvals
+5. **MoU (Practical Accessor) Tracking**
+6. **Compliance & Audit Dashboard**
 
-### Phase 1 — Foundation and security baseline
-5. Create an independent Laravel project in the selected Sha Shib CAMPUS folder, configure environments, coding standards, automated tests, CI/deployment conventions, and database migrations.
-6. Implement institutions, users, roles, permissions, user-role and role-permission mappings, institution scope, authentication, authorization policies, and initial seed data. Use a modular monolith, Blade + Livewire, and Tailwind as recommendations pending approval.
-7. Add a central audit service/table before operational workflows. Establish private file storage, upload validation, authorization, queue infrastructure, scheduler setup, secrets management, and backup/restore procedure.
-8. **Exit gate:** login and permission tests pass; cross-institution access is denied by default; sensitive state changes create actor/time audit records; deployment can restore a tested backup.
+---
 
-### Phase 2 — Academic masters and student lifecycle
-9. Implement academic years, programs, semesters, subjects, syllabus/version records, and syllabus-subject mappings, including institution scoping and configurable thresholds.
-10. Implement student profiles, parent/guardian records, private KYC/document uploads, checklist/verification state, and student access boundaries.
-11. **Exit gate:** master-data and student UAT; validation, duplicate identifier policy, document access, and institution isolation tests pass.
+## 2. Tech Stack (current project — keep as is)
 
-### Phase 3 — ER, ID card, and academic evidence
-12. Implement ER request, Admin and Accounts approval gates, ER number allocation only after both approvals, TM signature checkpoint, request/archive references, and ID card lifecycle. Keep audit and notification actions within service-layer transactions.
-13. Implement attendance and lesson-plan evidence needed for TM verification, using the approved student/subject/semester model.
-14. **Exit gate:** every approval permutation is tested; ER cannot be issued with either gate pending; identifier uniqueness is enforced at the database level; ID-card and evidence UAT passes.
+| Layer | Choice | Notes |
+| --- | --- | --- |
+| Framework | Laravel 9.x (PHP ^8.0.2) | Already installed — no upgrade in scope |
+| UI | Livewire 2.12 + Alpine.js | Components live in `app/Http/Livewire/` |
+| Styling | Tailwind CSS | Already configured (`tailwind.config.js`) |
+| Auth | Laravel Breeze (installed) + custom Livewire admin login | `app/Http/Livewire/Admin/Auth/Login.php` |
+| Roles/Permissions | `spatie/laravel-permission` (installed) | Roles: Super Admin, Institute Admin, Accounts, TM, BiC, EM, HoT, Faculty, Student |
+| Multi-tenancy | Single DB, `institute_id` scoping (not separate DBs) | Simpler ops for 10+ institutes; use Laravel Global Scopes |
+| PDF generation | `barryvdh/laravel-dompdf` (to install, Laravel 9 compatible) | Admit cards, marksheets, ID cards |
+| File storage | Laravel Filesystem — **private disk** for KYC/medical/signed docs | Downloads only through authorized routes / temporary signed URLs |
+| Notifications | Laravel Notifications (Mail + SMS gateway TBD) | ER issuance, exam approval, results, MoU expiry |
+| Queues | Laravel Queue (database/Redis driver) | Notification dispatch, PDF generation |
+| Audit logging | Custom `audit_trail` table + `App\Traits\RecordsAuditTrail` + `App\Models\Admin\AuditTrail` | Replaces the old `activity_logs`; no external audit package |
+| Search/Filters | **Existing** `Admin\Components\Table\DataTable` Livewire component | Reuse for all list screens |
+| Testing | PHPUnit + `Livewire::test()` | Approval-chain logic needs solid test coverage |
 
-### Phase 4 — Examination and question bank
-15. Implement exam setup, subject mappings, student applications, Accounts/TM approval gates, BiC override with mandatory reason/supporting evidence, and admit-card generation after the approved gates/signatures.
-16. Build question topics/paras, tagged questions, imports, and exam-question assignment. This work can proceed in parallel with exam workflow after Phase 2 data contracts are agreed.
-17. **Exit gate:** pending/denied gate blocks admit cards; unauthorized approvals and BiC overrides are rejected; question tagging and exam assignment UAT passes.
+---
 
-### Phase 5 — Assessment and results
-18. Implement objective/descriptive/practical marks entry, validation, submission, result calculation/publication, correction governance, marksheets, consolidated marksheets, and centrally generated unique serials. Implement the 75% rule only after its calculation and exception policy are approved.
-19. **Exit gate:** calculation fixtures and boundary cases pass; non-Super Admin post-submission correction is denied; serial duplication is blocked by a unique constraint; publication, signature, and reissue flows are accepted.
+## 3. Architecture Notes
 
-### Phase 6 — DMS and MoU (parallel modules)
-20. DMS: document metadata, versions, private file references, HoT review/return/approval history, external submission/approval tracking, final signed archive, compliance record, and scheduled 7-Day Rule checks/alerts.
-21. MoU: accessors, institute scope, training scope, validity, supporting document, expiry status, and scheduled 60-day alert records.
-22. These two modules can be developed in parallel once foundation authorization, audit, storage, queue, and scheduler contracts are stable.
-23. **Exit gate:** version/history and approval audit is preserved; DMS due-date behavior is tested at the agreed boundary; MoU 60-day alerts go only to approved recipients and are not duplicated contrary to policy.
+- **Single Laravel app, single database**, every tenant-scoped table carries `institute_id`. Use a Global Scope + trait (`BelongsToInstitute`) so every model auto-filters by the logged-in user's institute (Super Admin bypasses the scope).
+- **Base model convention (existing):** all new models extend `App\Models\Admin\BaseModel`, which gives soft deletes and auto-filled `created_by` / `updated_by`. Therefore every new table includes `created_by`, `updated_by`, `deleted_at`, `timestamps` — not repeated in each table below. Restore/force-delete UI uses the existing `SoftDeleteManager` component.
+- **State machine pattern** for anything that moves through approval gates (student ER request, exam appearance request, document lifecycle): a `status` enum on the record + its approvals table — this maps directly to your "Trigger → Approval → Execution" logic. Every status change is also written to `audit_trail`.
+- **Serial Number Generator**: one central service class (`SerialNumberService`) backed by a `serial_counters` table (locked row per series/institute/year) so no two requests collide, even under concurrency (use `DB::transaction` + `lockForUpdate`).
+- **Signature handling**: "Physical Signature" requirements (TM, EM) are modeled as a status flag + optional uploaded scan, not a digital signature workflow — matches your description of printed/physically signed documents that get archived.
+- **Configurable rules**: pass percentage (75%) and attendance threshold live in `config/camp.php` (later movable to a settings table), never hard-coded in services.
 
-### Phase 7 — Notifications, compliance, and reporting
-24. Add event-driven in-app/email/SMS delivery through queued jobs and templates; record delivery outcomes. Implement compliance dashboard, pending approvals, revisions, MoU expiry, audit readiness, and approved student/exam/result/DMS/MoU/audit reports with required exports.
-25. **Exit gate:** retries/failures are observable; role-scoped dashboard/report results are verified; exports respect permissions and institution scope.
+---
 
-### Phase 8 — Integrated UAT, hardening, and go-live
-26. Run end-to-end role-based journeys across admission → ER → examination → marks/result → marksheet, and DMS/MoU compliance journeys. Complete negative authorization, concurrency/unique-number, file security, scheduler/queue, and audit tests.
-27. Conduct performance/load tests against agreed volumes; verify monitoring, backup/restore, DR, deployment rollback, migration strategy, retention, training, and operational runbooks.
-28. Fix UAT defects, obtain management and technical sign-off, then deploy through a staged release with post-launch monitoring.
+## 4. User Roles & Permissions Matrix
 
-**Architecture and reusable patterns**
-- Recommended modular monolith with Livewire components as UI only; put business rules in domain services and enforce authorization both at routes and action/policy boundaries.
-- Reuse shared institution scoping, enums/status transitions, audit logging, notification events, private file handling, and service-level transaction boundaries.
-- Suggested domains: Foundation/Access, Academics, Students/ER, Attendance, Examinations, Question Bank, Results, DMS, MoU, Notifications, Compliance/Reports.
-- Apply database foreign keys and indexes; unique constraints for approved identifiers and marksheet serials; use soft deletes only where retention policy allows. Keep approval actor, action/status, timestamp, and reason in durable history.
+| Role | Scope | Key Powers |
+| --- | --- | --- |
+| **Super Admin** | Global (all institutes) | Subject/syllabus mapping, question bank, result governance & corrections, serial number oversight, compliance dashboard |
+| **Institute Admin** | Single institute | Exam creation, document verification (initial vetting), local reporting |
+| **Accounts** | Single institute | Fee/dues verification (onboarding + exam gate) |
+| **TM (Training Manager)** | Single institute | Attendance verification, ER form signature, admit card signature, marksheet signature |
+| **BiC (Base In-Charge)** | Single institute | Override/bypass dues-block with recorded reason |
+| **EM (Examination Manager)** | Single institute | Admit card signature, marksheet signature |
+| **HoT (Head of Training)** | Single institute (or group) | DMS approvals, MoU expiry alerts, document return/approve |
+| **Faculty** | Single institute | Attendance & lesson-plan uploads |
+| **Student** | Self only | Profile, document upload, exam application, downloads |
 
-**Relevant implementation areas**
-- New standalone project root: Sha Shib CAMPUS under the Laravel Service workspace (exact folder selected by user).
-- Planned Laravel areas: migrations/seeders/factories; Eloquent models/enums; policies; domain services; jobs/events/notifications; Livewire Admin components and Blade views; routes; feature/unit tests; deployment and operations configuration.
-- Do not extend the currently open KPI-Dashboard project unless separately requested.
+Implemented with `spatie/laravel-permission` (`model_has_roles`) + `institute_id` on the `users` table (nullable for Super Admin). No `role_id` column on `users`.
 
-**Verification**
-1. Maintain traceability from each source requirement to migration/model, policy/service/UI, and automated test.
-2. Run unit and feature tests by module and integrated test suite; include positive, negative, boundary, unauthorized, cross-institution, and concurrent identifier-allocation cases.
-3. Explicitly verify: ER needs Admin + Accounts; exam admit card needs approved gates; BiC override requires reason; only Super Admin may make approved post-submission correction; 75% eligibility boundary per approved definition; duplicate marksheet serial rejection; DMS signed-scan 7-day flag; MoU alert within 60 days; Institution A cannot read Institution B records; approval audits record actor/time.
-4. Manually UAT all role-specific workflows and inspect private file access, generated PDFs, exports, notifications, scheduler behavior, backup restoration, and rollback.
+---
 
-**Decisions and boundaries**
-- Product name: Sha Shib Centralised Academic Management & Performance Unified System; short name: Sha Shib CAMPUS.
-- Greenfield, standalone Laravel + Livewire application in a separate folder under Laravel Service; not a modification to existing applications.
-- Business rules come from the supplied CAMP Part 1/Part 2 content. Laravel modular monolith, Tailwind, MySQL/MariaDB, auth provider, vendors, and hosting are recommendations/open approvals—not source-defined requirements.
-- Included: phased development plan, data/domain coverage, security, testing, deployment, and sign-off gates. Excluded: creating files/project, selecting vendors or final platform versions without approval, inventing missing business rules, and importing/migrating legacy data until assessed.
+## 5. Module-Wise Breakdown
+
+Each module below lists: **purpose → Livewire components → database tables & fields**.
+Common columns from `BaseModel` (`created_by`, `updated_by`, `deleted_at`, `timestamps`) are implied on every table and not listed.
+
+### Module 1 — Core / Foundation
+
+**Purpose:** institutes, users, roles, notifications, audit trail — shared by every other module.
+
+**Livewire components:** `Admin\Institutes\InstitutesComponent` ✅ (exists), `UserManager`, `RoleAssignment`, `NotificationCenter`, `AuditLogViewer`
+
+**Tables**
+
+`institutes` ✅ (exists — `2026_03_25_180000_create_institutes_table`)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| name | string, unique |  |
+| code | string, unique | short code used in ER/serial prefixes |
+| description, about | text nullable |  |
+| address, city, postal_code | string nullable |  |
+| country, state | string nullable | `countries` / `states` tables exist |
+| contact_person, email, phone, website | string nullable |  |
+| logo, banner | string nullable |  |
+| status | boolean default true |  |
+
+`users` ✅ (exists — needs one new migration)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| institute_id | bigint FK nullable | **NEW migration** — null = central/Super Admin |
+| name, email | string |  |
+| phone | string(15) unique nullable |  |
+| password | string |  |
+| user_image | string nullable |  |
+| status | tinyint | 0=Inactive, 1=Active, 2=Pending, 3=Suspended |
+| last_login_at | timestamp nullable |  |
+| last_login_ip | string nullable |  |
+| deleted_at | soft delete |  |
+
+Roles via spatie tables (`2025_11_26_064444_create_permission_tables`).
+
+`serial_counters` (new)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| series_key | string | `ER`, `MARKSHEET`, `CONSOLIDATED_MARKSHEET`, `ADMIT_CARD` |
+| institute_id | bigint FK nullable | null = global series |
+| year | smallint |  |
+| last_value | bigint | incremented under row lock |
+| prefix_format | string | e.g. `SSG-{institute_code}-{year}-` |
+| unique | (series_key, institute_id, year) |  |
+
+`audit_trail` ✅ (implemented — replaces the old `activity_logs` table; append-only, no soft deletes)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| user_id | bigint FK nullable | null = system/scheduled job |
+| institute_id | bigint FK nullable |  |
+| action | string | e.g. `approve`, `bypass`, `correct_marks` |
+| module | string |  |
+| reference_type / reference_id | string / bigint | polymorphic target |
+| ip_address | string |  |
+| meta | json nullable | before/after values (`old`, `new`), `reason`, `description` |
+| created_at | timestamp | acts as the "time-stamp" |
+
+`notifications_log` (new)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| notifiable_type / notifiable_id | polymorphic | user or student |
+| channel | enum(sms,email) |  |
+| event_type | string | `er_issued`, `exam_approved`, `result_published`, `mou_expiry` |
+| payload | json |  |
+| status | enum(pending,sent,failed) |  |
+| sent_at | timestamp nullable |  |
+
+---
+
+### Module 2 — Student Onboarding & ER Number
+
+**Purpose:** implements Phase 1 (KYC upload, dual-gate approval, ER generation, ID card).
+
+**Livewire components:** `StudentRegistrationForm`, `DocumentUploadWizard`, `AdminDocumentVerification`, `AccountsFeeVerification`, `ERRequestGenerator`, `IDCardIssuance`
+
+**Tables**
+
+`students`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| institute_id | bigint FK |  |
+| user_id | bigint FK nullable unique | student login account (Student role) |
+| program_id | bigint FK |  |
+| er_number | string nullable unique | **single source of the ER number** — populated after dual approval |
+| first_name, last_name | string |  |
+| dob | date |  |
+| gender | string |  |
+| email, phone | string |  |
+| address | text |  |
+| parent_name, parent_phone, parent_email | string |  |
+| joining_date | date | 30-day onboarding window starts here |
+| onboarding_deadline | date | computed = joining_date + 30 |
+| status | enum(draft,pending_docs,pending_approval,er_issued,active,alumni,rejected) |  |
+
+`student_documents`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| student_id | bigint FK |  |
+| institute_id | bigint FK |  |
+| document_type | enum(kyc_photo,medical_certificate,marksheet_10,marksheet_12,other) |  |
+| file_path | string | private disk |
+| uploaded_at | timestamp |  |
+| verified_by | bigint FK nullable (users) | Admin role |
+| verified_at | timestamp nullable |  |
+| verification_status | enum(pending,verified,rejected) |  |
+| remarks | text nullable |  |
+
+`student_dues` (new — data source for the Accounts gate)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| student_id | bigint FK |  |
+| institute_id | bigint FK |  |
+| fee_head | string | e.g. admission, semester fee |
+| amount_due, amount_paid | decimal |  |
+| due_date | date |  |
+| status | enum(pending,partial,cleared) | "no dues" = all rows cleared |
+
+`enrollment_approvals`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| student_id | bigint FK |  |
+| institute_id | bigint FK |  |
+| gate | enum(admin_doc_verification, accounts_fee_verification) | the "dual gate" |
+| approved_by | bigint FK (users) |  |
+| status | enum(pending,approved,rejected) |  |
+| remarks | text nullable |  |
+| approved_at | timestamp nullable |  |
+| unique | (student_id, gate) |  |
+
+`er_requests`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| student_id | bigint FK unique | ER number read from `students.er_number` |
+| institute_id | bigint FK |  |
+| request_form_path | string | auto-generated PDF |
+| tm_signed_by | bigint FK nullable |  |
+| tm_signature_status | enum(pending,physically_signed) |  |
+| archived_at | timestamp nullable | physical file archive confirmation |
+| status | enum(generated,printed,archived) |  |
+
+`id_cards`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| student_id | bigint FK | ER number read from `students.er_number` |
+| institute_id | bigint FK |  |
+| issue_date | date |  |
+| tm_signature_status | enum(pending,physically_signed) | mandatory for validation |
+| file_path | string nullable | printable template |
+| status | enum(pending,issued,reprinted) |  |
+
+---
+
+### Module 3 — Examination Lifecycle
+
+**Purpose:** implements Phase 2 — Trigger → Approval → Execution.
+
+**Livewire components:** `ExamAppearanceApplication`, `AccountsDuesApproval`, `BiCOverridePanel`, `TMAttendanceApproval`, `AdmitCardGenerator`, `ExamScheduleManager`, `SyllabusMappingManager`
+
+**Tables**
+
+`programs`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| institute_id | bigint FK |  |
+| name, code | string |  |
+| duration_months | int |  |
+| total_semesters | int |  |
+
+`subjects`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| institute_id | bigint FK nullable | null = central/master subject (used by master question bank) |
+| program_id | bigint FK nullable | null for central subjects |
+| name, code | string |  |
+| semester_no | int |  |
+| syllabus_topics | json | list of topics used for % mapping |
+
+`syllabus_mapping`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| subject_id | bigint FK |  |
+| institute_id | bigint FK |  |
+| mapped_by | bigint FK (users, Super Admin only) |  |
+| exam_type | enum(mid_sem,semester) |  |
+| threshold_percent | int | 40 for mid-sem, 100 for semester |
+| covered_percent | int | syllabus covered so far; exam can be scheduled only when covered ≥ threshold |
+
+`exams`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| institute_id | bigint FK |  |
+| program_id | bigint FK |  |
+| exam_type | enum(mid_sem,semester) |  |
+| semester_no | int |  |
+| scheduled_date | date |  |
+| mode | enum(online,offline) |  |
+| status | enum(scheduled,ongoing,completed,cancelled) |  |
+
+`exam_appearance_requests`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| student_id | bigint FK |  |
+| exam_id | bigint FK |  |
+| institute_id | bigint FK |  |
+| submitted_at | timestamp |  |
+| status | enum(submitted,accounts_review,tm_review,approved,rejected) |  |
+| unique | (student_id, exam_id) |  |
+
+`exam_appearance_subjects` (pivot)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| exam_appearance_request_id | bigint FK |  |
+| subject_id | bigint FK |  |
+| unique | (exam_appearance_request_id, subject_id) |  |
+
+`exam_approvals`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| exam_appearance_request_id | bigint FK |  |
+| approver_role | enum(accounts,tm) |  |
+| approver_id | bigint FK (users) |  |
+| verification_metric | enum(no_dues_status,attendance) | dues from `student_dues`; attendance % vs `config('camp.attendance_threshold')` |
+| result | enum(green,red,pending) |  |
+| bypassed | boolean default false |  |
+| bypass_reason | text nullable |  |
+| bypassed_by | bigint FK nullable (users, BiC) |  |
+| decided_at | timestamp nullable |  |
+
+`attendance_records`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| student_id | bigint FK |  |
+| subject_id | bigint FK |  |
+| institute_id | bigint FK |  |
+| date | date |  |
+| status | enum(present,absent) |  |
+| uploaded_by | bigint FK (faculty) |  |
+| lesson_plan_ref | string nullable |  |
+| unique | (student_id, subject_id, date) |  |
+
+`admit_cards`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| exam_appearance_request_id | bigint FK unique |  |
+| institute_id | bigint FK |  |
+| admit_card_no | string unique | serial generator |
+| generated_at | timestamp | only when both approvals green |
+| em_signature_status | enum(pending,physically_signed) |  |
+| tm_signature_status | enum(pending,physically_signed) |  |
+| printed_at | timestamp nullable |  |
+
+---
+
+### Module 4 — Question Bank & Exam Paper (Super Admin + Institute)
+
+**Livewire components:** `QuestionBankManager`, `QuestionUploadBulk`, `ExamPaperBuilder`
+
+**Tables**
+
+`question_bank`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| subject_id | bigint FK | central subject for master questions |
+| institute_id | bigint FK nullable | null = master/central bank |
+| question_text | text |  |
+| question_type | enum(objective,descriptive,practical) |  |
+| topic | string |  |
+| para | string nullable |  |
+| level | enum(easy,medium,hard) |  |
+| options_json | json nullable | for objective type |
+| correct_answer | text nullable |  |
+
+`exam_papers`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| exam_id | bigint FK |  |
+| institute_id | bigint FK |  |
+| source | enum(master_bank,custom,mixed) |  |
+| status | enum(draft,final) |  |
+
+`exam_paper_questions`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| exam_paper_id | bigint FK |  |
+| question_id | bigint FK |  |
+| marks | decimal |  |
+| unique | (exam_paper_id, question_id) |  |
+
+---
+
+### Module 5 — Grading & Result Publication
+
+**Purpose:** Phase 3 — mixed-mode marking, 75% pass criteria, Super Admin override, marksheets.
+
+**Livewire components:** `MarksEntryGrid`, `ResultPublisher`, `MarkCorrectionPanel` (Super Admin only), `MarksheetGenerator`, `ConsolidatedMarksheetGenerator`
+
+**Tables**
+
+`marks`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| student_id | bigint FK |  |
+| exam_id | bigint FK |  |
+| subject_id | bigint FK |  |
+| institute_id | bigint FK |  |
+| mark_type | enum(objective,descriptive,practical) |  |
+| marks_obtained | decimal |  |
+| max_marks | decimal |  |
+| entered_by | bigint FK |  |
+| entered_at | timestamp |  |
+| unique | (student_id, exam_id, subject_id, mark_type) |  |
+
+`results`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| student_id | bigint FK |  |
+| exam_id | bigint FK |  |
+| subject_id | bigint FK nullable | null = overall exam result row |
+| institute_id | bigint FK |  |
+| total_marks, max_marks | decimal |  |
+| percentage | decimal |  |
+| pass_status | enum(pass,fail) | threshold from `config('camp.pass_percentage')` (75) |
+| published_at | timestamp nullable |  |
+| published_by | bigint FK nullable |  |
+| unique | (student_id, exam_id, subject_id) |  |
+
+`mark_correction_logs` (governance record; each correction is also written to `audit_trail`)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| mark_id | bigint FK |  |
+| corrected_by | bigint FK (Super Admin only) |  |
+| old_value | decimal |  |
+| new_value | decimal |  |
+| reason | text |  |
+| corrected_at | timestamp |  |
+
+`marksheets`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| student_id | bigint FK |  |
+| exam_id | bigint FK |  |
+| institute_id | bigint FK |  |
+| serial_number | string unique | via `SerialNumberService` |
+| file_path | string |  |
+| tm_signature_status | enum(pending,physically_signed) |  |
+| em_signature_status | enum(pending,physically_signed) |  |
+| generated_at | timestamp |  |
+
+`consolidated_marksheets`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| student_id | bigint FK |  |
+| program_id | bigint FK |  |
+| institute_id | bigint FK |  |
+| serial_number | string unique |  |
+| file_path | string |  |
+| generated_at | timestamp | end-of-program aggregate |
+
+---
+
+### Module 6 — Document Management System (DMS)
+
+**Purpose:** Part 2, Section 1–2 — MTOE/SOP drafting, HoT approval, external submission tracking, 7-day rule, final repository.
+
+**Livewire components:** `DocumentUploadForm`, `HoTReviewQueue`, `RegulatorySubmissionTracker`, `DocumentRepository`, `SevenDayRuleMonitor` (scheduled command + dashboard widget)
+
+**Tables**
+
+`documents`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| institute_id | bigint FK nullable | null = central document |
+| document_name | string | e.g. "MTOE Part 1" |
+| document_type | enum(mtoe,sop,training_manual,other) |  |
+| draft_version | string | e.g. v1.0 |
+| temp_issue_no, temp_revision_no | string | proposed numbers pre-approval |
+| uploaded_by | bigint FK |  |
+| file_path | string | draft PDF/Word |
+| status | enum(draft,hot_review,returned_for_correction,submitted_external,externally_approved,archived) |  |
+| external_authority | string nullable | e.g. DGCA, Director of Airworthiness |
+| submitted_external_at | timestamp nullable |  |
+| externally_approved_at | timestamp nullable | starts the 7-day clock |
+| seven_day_flag | boolean default false | set by scheduled job if no final record/scan 7 days after external approval |
+
+`document_reviews`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| document_id | bigint FK |  |
+| reviewer_id | bigint FK (HoT) |  |
+| action | enum(approve,return_for_correction) |  |
+| remarks | text nullable |  |
+| reviewed_at | timestamp |  |
+
+`document_final_records` (created when the signed scan is uploaded — clears the 7-day flag)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| document_id | bigint FK unique |  |
+| issue_number | string |  |
+| revision_number | string |  |
+| revision_date | date | effective date |
+| approving_authority | string | HoT, DGCA, etc. |
+| digital_signature_file_path | string | scanned signed PDF (private disk) |
+| uploaded_at | timestamp |  |
+
+`document_revision_history`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| document_id | bigint FK |  |
+| issue_number, revision_number | string |  |
+| effective_date | date |  |
+| change_summary | text |  |
+
+---
+
+### Module 7 — MoU (Practical Accessor) Tracker
+
+**Purpose:** Part 2, Section 3.
+
+**Livewire components:** `MoURegister`, `MoUExpiryAlertsWidget`
+
+**Tables**
+
+`mou_records`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| institute_id | bigint FK | base-specific visibility |
+| accessor_name | string | organization/MRO |
+| scope_of_training | json | e.g. \["B1.1","B2","Engine","Avionics"\] |
+| start_date, expiry_date | date |  |
+| file_path | string nullable | scanned MoU |
+| status | enum(active,renewal_pending,expired) | refreshed daily by scheduled command from expiry_date |
+
+`mou_alerts`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| mou_id | bigint FK |  |
+| alert_due_date | date | expiry_date − 60 days |
+| sent_to | bigint FK (users) | one row per HoT of that institute |
+| sent_at | timestamp nullable |  |
+| status | enum(pending,sent) |  |
+
+---
+
+### Module 8 — Compliance Dashboard (Super Admin)
+
+**Purpose:** Part 2, Section 4 — aggregate reporting, no new core data, mostly query/service layer + export.
+
+**Livewire components:** `ComplianceHeatmap`, `PendingApprovalsWidget`, `RevisionDueList`, `AuditReadyExportButton`
+
+**Supporting table**
+
+`compliance_snapshots` (optional, for caching heavy aggregates)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| institute_id | bigint FK nullable |  |
+| metric_key | string | `active_sops`, `pending_hot_approvals`, `pending_external_approvals`, `due_for_revision` |
+| value | int |  |
+| generated_at | timestamp | refreshed via scheduled job |
+
+Export feature: a queued job zips the `document_final_records` of all `documents` where `documents.status = externally_approved` (Active & Signed) into a downloadable archive per institute/auditor request.
+
+---
+
+## 6. Cross-Cutting Technical Features (from your requirements)
+
+| Requirement | Implementation |
+| --- | --- |
+| Audit Trail on every approval | `audit_trail` table + `RecordsAuditTrail` trait (`audit`, `auditCreate/Update/Delete`, `auditApprove/Reject`, `auditBypass`) called from every approval action (Accounts, TM, BiC, HoT, Super Admin corrections) |
+| Centralized serial numbers (ER, marksheets, admit cards) | `SerialNumberService` + `serial_counters` table with row-level locking |
+| SMS/Email notifications | `notifications_log` table + Laravel Notification classes + queued jobs, triggered on ER issuance, exam approval, result publication, MoU 60-day alert |
+| 7-Day Rule flag | Laravel Scheduled Command (daily) scanning `documents` where `externally_approved_at` < now − 7 days and no `document_final_records` row |
+| Role-based data visibility (Institute sees only its own MoUs/students/exams) | `BelongsToInstitute` Global Scope on `institute_id`, bypassed only for Super Admin role |
+| Soft deletes / retention | Existing `BaseModel` soft deletes + `SoftDeleteManager` (see `SOFT_DELETES_IMPLEMENTATION.md`) |
+| Sensitive files | Private disk + authorized download routes |
+
+---
+
+## 7. Suggested Development Phases / Sprint Plan
+
+| Phase | Duration (suggested) | Scope |
+| --- | --- | --- |
+| **Sprint 0 — Foundation** | 1 week remaining | ✅ Done: Laravel/Livewire setup, auth, spatie roles & permissions, institutes CRUD, audit trail, soft deletes, DataTable. **Remaining:** `users.institute_id` migration, `BelongsToInstitute` scope trait, roles/permissions seeder, `serial_counters` + `SerialNumberService`, `config/camp.php` |
+| **Sprint 1 — Student Onboarding** | 2 weeks | Student registration (+ user account), document upload wizard, student dues, dual-gate approval (Admin + Accounts), ER generation, ID card issuance |
+| **Sprint 2 — Exam Application & Approval** | 2 weeks | Programs/subjects/syllabus mapping, exam appearance requests, Accounts dues gate + BiC bypass, TM attendance gate, admit card generation |
+| **Sprint 3 — Question Bank & Paper Setup** | 1–2 weeks | Question bank CRUD (Super Admin + Institute), exam paper builder |
+| **Sprint 4 — Grading & Results** | 2 weeks | Marks entry (all three modes), result computation (configurable pass %), Super Admin correction workflow, marksheet + consolidated marksheet generation with unique serials |
+| **Sprint 5 — Document Management System** | 2 weeks | Document upload → HoT review → external submission tracking → final repository, 7-day rule scheduled job |
+| **Sprint 6 — MoU Tracker** | 1 week | MoU CRUD, institute-scoped visibility, 60-day expiry alert job |
+| **Sprint 7 — Compliance Dashboard & Reporting** | 1–2 weeks | Heatmap widgets, pending approvals list, revision-due list, audit-ready bulk export |
+| **Sprint 8 — Notification Engine Hardening + QA** | 1–2 weeks | SMS/Email templates, queue tuning, end-to-end testing across all approval chains, UAT with pilot institute |
+
+*(Total: roughly 13–17 weeks for a single small-to-mid dev team; adjust to your actual team size/velocity.)*
+
+---
+
+## 8. Laravel Project Structure (Livewire 2 layout)
+
+```
+app/
+  Http/Livewire/
+    Admin/
+      Auth/                Login ✅
+      Components/          SoftDeleteManager ✅, Table/DataTable ✅
+      Dashboard/           Dashboard ✅
+      Institutes/          InstitutesComponent ✅
+      Core/                UserManager, RoleAssignment, AuditLogViewer, NotificationCenter
+      Onboarding/          StudentRegistrationForm, DocumentUploadWizard, AdminDocumentVerification, AccountsFeeVerification, ERRequestGenerator, IDCardIssuance
+      Exams/               ExamAppearanceApplication, AccountsDuesApproval, BiCOverridePanel, TMAttendanceApproval, AdmitCardGenerator, ExamScheduleManager, SyllabusMappingManager
+      QuestionBank/        QuestionBankManager, QuestionUploadBulk, ExamPaperBuilder
+      Grading/             MarksEntryGrid, ResultPublisher, MarkCorrectionPanel, MarksheetGenerator, ConsolidatedMarksheetGenerator
+      DMS/                 DocumentUploadForm, HoTReviewQueue, RegulatorySubmissionTracker, DocumentRepository
+      MoU/                 MoURegister, MoUExpiryAlertsWidget
+      Compliance/          ComplianceHeatmap, PendingApprovalsWidget, RevisionDueList, AuditReadyExportButton
+  Models/
+    User.php ✅
+    Admin/                 BaseModel ✅, Institute ✅, AuditTrail ✅, Country ✅, State ✅, (one model per new table, extending BaseModel)
+  Traits/                  RecordsAuditTrail ✅, BelongsToInstitute
+  Services/                SerialNumberService, NotificationService, PdfGenerationService, ComplianceAggregationService
+  Policies/                StudentPolicy, ExamApprovalPolicy, DocumentPolicy, MoUPolicy ...
+  Console/Commands/        CheckSevenDayRule, SendMoUExpiryAlerts, RefreshMoUStatus, RefreshComplianceSnapshots
+config/
+  camp.php                 pass_percentage, attendance_threshold, onboarding_days, mou_alert_days, seven_day_rule_days
+database/
+  migrations/              one per new table listed in Section 5
+  seeders/                 RolesAndPermissionsSeeder, DemoInstituteSeeder
+```
+
+---
+
+## 9. Open Questions to Resolve Before Sprint 1
+
+1. Digital signatures: are TM/EM/HoT signatures purely a "physically signed, then scanned" status flag (as modeled above), or do you eventually want e-signature capture in-app?
+2. Multi-institute hierarchy: do any institutes share students/programs, or is every student strictly single-institute?
+3. SMS gateway preference (for the notification engine) — affects which Laravel notification channel driver to install.
+4. Should Institute Admins be able to see other institutes' anonymized compliance stats, or is visibility strictly siloed except for Super Admin?
+5. Dues source: will Accounts maintain fee rows in CAMP (`student_dues`), or just set a manual "no dues" flag / import from an external accounts system?
+6. Attendance threshold for the TM gate — what % counts as green (e.g. 75% / 80%), and is it per subject or overall?
+7. Serial numbering: should ER/marksheet/admit card counters run per institute per year, or one global running series?
+
+---
+
+*This plan maps directly to the two requirement documents you shared (Student Onboarding/ER/Exam/Grading and the Document Management/MoU/Compliance system), is aligned with the existing Laravel 9 / Livewire 2 codebase, and is structured so each module can be built, tested, and deployed independently.*

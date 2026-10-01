@@ -12,7 +12,7 @@ use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
 use App\Models\Admin\SerialNumberGenerator;
 use App\Models\Admin\DocumentChecklist;
-use App\Models\Admin\ActivityLog;
+use App\Models\Admin\AuditTrail;
 
 echo "\n";
 echo "════════════════════════════════════════════════════════════════\n";
@@ -26,7 +26,7 @@ printf("  ✓ Roles Created:              %3d / 8\n", Role::count());
 printf("  ✓ Permissions Created:        %3d / 69\n", Permission::count());
 printf("  ✓ Serial Number Generators:   %3d / 3\n", SerialNumberGenerator::count());
 printf("  ✓ Default Checklists:         %3d / 6\n", DocumentChecklist::count());
-printf("  ✓ Activity Logs Created:      %3d\n\n", ActivityLog::count());
+printf("  ✓ Audit Trail Entries:        %3d\n\n", AuditTrail::count());
 
 // Role Details
 echo "👥 ROLE CONFIGURATION:\n";
