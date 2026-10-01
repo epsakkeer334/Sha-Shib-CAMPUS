@@ -1,0 +1,98 @@
+.menu-item i {
+    margin-right: 8px; /* Adjust spacing as needed */
+}
+#toast-container {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 1055;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* Slide-in with slight bounce */
+.toast-slide-in {
+    transform: translateX(100%) scale(0.8);
+    opacity: 0;
+    animation: slideInRight 0.6s forwards;
+}
+
+@keyframes slideInRight {
+    0% { transform: translateX(100%) scale(0.8); opacity: 0; }
+    60% { transform: translateX(-10%) scale(1.05); opacity: 1; }
+    80% { transform: translateX(5%) scale(0.95); }
+    100% { transform: translateX(0) scale(1); }
+}
+
+/* Slide-out animation */
+.toast-slide-out {
+    animation: slideOutRight 0.8s forwards; /* smooth hide */
+}
+
+@keyframes slideOutRight {
+    0% { transform: translateX(0) scale(1); opacity: 1; }
+    100% { transform: translateX(100%) scale(0.8); opacity: 0; }
+}
+
+/* Toast styling */
+.toast-custom {
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    min-width: 350px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+    background: #fff;
+    box-shadow: 0 0.25rem 0.75rem rgba(0,0,0,0.15);
+    border-left: 4px solid transparent;
+}
+
+/* Type-specific borders */
+.toast-success { border-left-color: #28a745; }
+.toast-info { border-left-color: #0dcaf0; }
+.toast-warning { border-left-color: #ffc107; }
+.toast-danger { border-left-color: #dc3545; }
+
+/* Icon size */
+.toast-custom i { font-size: 1.2rem; }
+
+.chosen-container {
+    width: 100% !important;
+}
+
+  /* Chosen Select Styles */
+.chosen-container-multi .chosen-choices {
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    background: #fff;
+    min-height: 38px;
+}
+.chosen-container-multi .chosen-choices li.search-choice {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    margin: 2px;
+}
+.chosen-container-multi .chosen-choices li.search-choice .search-choice-close {
+    color: white;
+    opacity: 0.7;
+}
+.chosen-container-multi .chosen-choices li.search-choice .search-choice-close:hover {
+    opacity: 1;
+}
+.chosen-container-active .chosen-choices {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.25);
+}
+/* Error state */
+.chosen-select.is-invalid + .chosen-container .chosen-choices {
+    border-color: #dc3545;
+}
+.chosen-select.is-valid + .chosen-container .chosen-choices {
+    border-color: #198754;
+}
