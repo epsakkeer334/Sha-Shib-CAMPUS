@@ -21,6 +21,9 @@ use App\Http\Livewire\Admin\Onboarding\DocumentVerificationComponent;
 use App\Http\Livewire\Admin\Onboarding\PaymentVerificationComponent;
 use App\Http\Livewire\Admin\Onboarding\EnrollmentQueueComponent;
 use App\Http\Livewire\Admin\Onboarding\FeeStructureComponent;
+use App\Http\Livewire\Admin;
+use App\Http\Livewire\Portal;
+use App\Http\Controllers\PortalController;
 
 Route::get('/', fn () => redirect()->route('admin.login'));
 Route::get('/admin/login', Login::class)->name('admin.login')->middleware('guest');
@@ -34,8 +37,33 @@ Route::get('/logout', function () {
     return redirect()->route('admin.login');
 })->name('admin.logout');
 
-Route::prefix('admin')->middleware(['auth', 'active.user'])->group(function () {
+// Admissions portal (Module 2.6) — student website: register, academic, documents, payment, status
+Route::prefix('admissions')->name('portal.')->group(function () {
+    Route::get('/', Portal\HomePage::class)->name('home');
+    Route::get('/login', Portal\LoginPage::class)->name('login');
+    Route::get('/apply', Portal\DetailsPage::class)->name('register');
+    Route::get('/logout', [PortalController::class, 'logout'])->name('logout');
+
+    Route::middleware('student')->group(function () {
+        Route::get('/application', Portal\StatusPage::class)->name('status');
+        Route::get('/application/details', Portal\DetailsPage::class)->name('details');
+        Route::get('/application/academic', Portal\AcademicPage::class)->name('academic');
+        Route::get('/application/documents', Portal\DocumentsPage::class)->name('documents');
+        Route::get('/application/payment', Portal\PaymentPage::class)->name('payment');
+        Route::get('/files/documents/{document}', [PortalController::class, 'document'])->name('document');
+        Route::get('/files/receipts/{payment}', [PortalController::class, 'receipt'])->name('receipt');
+        Route::get('/files/payment-qr/{setting}', [PortalController::class, 'paymentQr'])->name('payment-qr');
+    });
+});
+
+Route::prefix('admin')->middleware(['auth', 'staff', 'active.user'])->group(function () {
     Route::get('/dashboard', AdminDashboard::class)->name('admin.dashboard');
+
+    // Institute Management — payment methods per institute (UPI ID / QR shown on the portal)
+    Route::middleware('permission:fees.manage')->group(function () {
+        Route::get('/payment-settings', Admin\Institutes\PaymentSettingsComponent::class)->name('admin.institute-payment-settings');
+        Route::get('/payment-settings/{setting}/qr', [PortalController::class, 'paymentQr'])->name('admin.institute-payment-settings.qr');
+    });
 
     // Module 1 — Core / Foundation
     Route::get('/institutes', InstitutesComponent::class)->name('admin.institutes')->middleware('role:super-admin');

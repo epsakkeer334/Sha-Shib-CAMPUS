@@ -112,6 +112,26 @@ class DocumentVerificationComponent extends Component
         $this->run(fn () => $onboarding->rejectDocument($this->document($documentId), $this->remarks[$documentId]), 'Document rejected — the student has been notified.', 'warning');
     }
 
+    /**
+     * Re-review: a rejected document is approved after all (wrong rejection).
+     */
+    public function approveRejected($documentId)
+    {
+        $onboarding = app(OnboardingService::class);
+        $this->run(fn () => $onboarding->approveAfterReReview($this->document($documentId), $this->remarks[$documentId] ?? null),
+            'Document approved after re-review — the student has been notified.');
+    }
+
+    /**
+     * Re-review: withdraw the rejection and put the document back in the pending queue.
+     */
+    public function reopen($documentId)
+    {
+        $onboarding = app(OnboardingService::class);
+        $this->run(fn () => $onboarding->reopenDocument($this->document($documentId), $this->remarks[$documentId] ?? null),
+            'Rejection withdrawn — the document is back in review.', 'info');
+    }
+
     public function remind()
     {
         $onboarding = app(OnboardingService::class);

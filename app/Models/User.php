@@ -89,6 +89,14 @@ class User extends Authenticatable
         return $this->belongsTo(Institute::class);
     }
 
+    /**
+     * Admissions portal: the application of a student account.
+     */
+    public function student()
+    {
+        return $this->hasOne(\App\Models\Admin\Student::class);
+    }
+
     public function isSuperAdmin(): bool
     {
         return $this->hasRole('super-admin');
@@ -114,6 +122,9 @@ class User extends Authenticatable
      */
     public function scopeVisibleTo($query, $user)
     {
+        // Student portal accounts are managed under Students, not in the staff user list.
+        $query->whereDoesntHave('roles', fn ($r) => $r->where('name', 'student'));
+
         if ($user && !$user->isSuperAdmin()) {
             $query->where('institute_id', $user->institute_id);
         }

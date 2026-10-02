@@ -13,13 +13,10 @@ use App\Models\Admin\Religion;
 use App\Models\Admin\State;
 use App\Models\Admin\Student;
 use App\Models\Admin\StudentAcademicDetail;
-use App\Models\Admin\StudentDocument;
 use App\Services\OnboardingService;
+use App\Support\StudentRules;
 use App\Traits\RecordsAuditTrail;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\Rule;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
@@ -56,8 +53,6 @@ class StudentOnboardingComponent extends Component
     public $upload_kyc_photo, $upload_medical_certificate, $upload_marksheet_10, $upload_marksheet_12, $upload_other;
 
     public $confirmingDocumentId = null;
-
-    const PHONE_REGEX = 'regex:/^\+?[0-9]{10,15}$/';
 
     public function mount($student = null)
     {
@@ -151,33 +146,18 @@ class StudentOnboardingComponent extends Component
 
     protected function basicRules(): array
     {
-        $original = $this->student();
+        return StudentRules::basic($this->formValues(), $this->student());
+    }
 
-        // A course/master value already saved on the student stays valid even if deactivated later.
-        $keep = fn ($field) => $original && (string) $original->{$field} === (string) $this->{$field};
-
+    /**
+     * Current form values the shared rules depend on.
+     */
+    protected function formValues(): array
+    {
         return [
-            'institute_id' => ['required', Rule::exists('institutes', 'id')->where('status', true)->whereNull('deleted_at')],
-            'course_id' => $keep('course_id') ? ['required'] : [
-                'required',
-                Rule::exists('institute_courses', 'course_id')
-                    ->where('institute_id', $this->institute_id)->where('status', true)->whereNull('deleted_at'),
-                Rule::exists('courses', 'id')->where('status', true)->whereNull('deleted_at'),
-            ],
-            'first_name' => ['required', 'string', 'max:100', "regex:/^[\pL\s.'-]+$/u"],
-            'last_name' => ['required', 'string', 'max:100', "regex:/^[\pL\s.'-]+$/u"],
-            'dob' => ['required', 'date', 'before:today', 'after:1950-01-01'],
-            'gender' => ['required', Rule::in(array_keys(config('camp.genders')))],
-            'qualification_id' => $keep('qualification_id') ? ['required'] : ['required', Rule::exists('qualifications', 'id')->where('status', true)->whereNull('deleted_at')],
-            'email' => ['required', 'email', 'max:255', Rule::unique('students', 'email')->ignore($this->studentId)],
-            'phone' => ['required', self::PHONE_REGEX],
-            'emergency_contact' => ['required', self::PHONE_REGEX, 'different:phone'],
-            'religion_id' => $keep('religion_id') ? ['required'] : ['required', Rule::exists('religions', 'id')->where('status', true)->whereNull('deleted_at')],
-            'category_id' => $keep('category_id') && $keep('religion_id') ? ['required'] : [
-                'required',
-                Rule::exists('categories', 'id')->where('religion_id', $this->religion_id)->where('status', true)->whereNull('deleted_at'),
-            ],
-            'joining_date' => ['required', 'date', 'after:2000-01-01'],
+            'institute_id' => $this->institute_id, 'course_id' => $this->course_id, 'qualification_id' => $this->qualification_id,
+            'religion_id' => $this->religion_id, 'category_id' => $this->category_id, 'country_id' => $this->country_id,
+            'matriculation_mark_type' => $this->matriculation_mark_type, 'higher_secondary_mark_type' => $this->higher_secondary_mark_type,
         ];
     }
 
@@ -216,17 +196,7 @@ class StudentOnboardingComponent extends Component
 
     protected function addressRules(): array
     {
-        return [
-            'address' => ['required', 'string', 'max:500'],
-            'country_id' => ['required', Rule::exists('countries', 'id')->whereNull('deleted_at')],
-            'state_id' => ['required', Rule::exists('states', 'id')->where('country_id', $this->country_id)->whereNull('deleted_at')],
-            'city' => ['required', 'string', 'max:100'],
-            'pincode' => ['required', 'regex:/^[0-9A-Za-z -]{4,10}$/'],
-            'parent_name' => ['required', 'string', 'max:150'],
-            'parent_phone' => ['required', self::PHONE_REGEX],
-            'parent_email' => ['nullable', 'email', 'max:255'],
-            'parent_occupation' => ['nullable', 'string', 'max:100'],
-        ];
+        return StudentRules::address($this->formValues());
     }
 
     public function saveAddress()
@@ -247,17 +217,7 @@ class StudentOnboardingComponent extends Component
 
     protected function academicRules(): array
     {
-        $markRule = fn ($type) => ['required', 'numeric', 'min:0', 'max:' . ($type === 'cgpa' ? 10 : 100)];
-
-        return [
-            'matriculation_board_id' => ['required', Rule::exists('matriculation_boards', 'id')->whereNull('deleted_at')],
-            'matriculation_mark_type' => ['required', Rule::in(array_keys(config('camp.mark_types')))],
-            'matriculation_mark' => $markRule($this->matriculation_mark_type),
-            'higher_secondary_board_id' => ['required', Rule::exists('higher_secondary_boards', 'id')->whereNull('deleted_at')],
-            'higher_secondary_subject' => ['required', Rule::in(array_keys(config('camp.higher_secondary_subjects')))],
-            'higher_secondary_mark_type' => ['required', Rule::in(array_keys(config('camp.mark_types')))],
-            'higher_secondary_mark' => $markRule($this->higher_secondary_mark_type),
-        ];
+        return StudentRules::academic($this->formValues());
     }
 
     public function saveAcademic()
@@ -283,46 +243,16 @@ class StudentOnboardingComponent extends Component
         $student = $this->authorizeChange();
         abort_unless($student && isset(config('camp.student_document_types')[$type]), 404);
 
-        [$label, , $mimes, $maxKb] = config("camp.student_document_types.{$type}");
+        $label = config("camp.student_document_types.{$type}.0");
         $property = "upload_{$type}";
 
         $this->validate(
-            [$property => ['required', 'file', "mimes:{$mimes}", "max:{$maxKb}"]],
+            [$property => StudentRules::document($type)],
             ["{$property}.required" => "Choose a file for {$label}."],
             [$property => $label]
         );
 
-        $file = $this->{$property};
-
-        DB::transaction(function () use ($student, $type, $file, $label) {
-            // One file per required type: a new upload replaces the previous one. "Other" allows several.
-            // A replaced rejected file keeps its reason on the new upload ("Re-uploaded · previously rejected: …").
-            $previousRejection = null;
-            if ($type !== 'other') {
-                $previous = $student->documents()->where('document_type', $type)->get();
-                $previousRejection = optional($previous->firstWhere('verification_status', 'rejected'))->remarks;
-                $previous->each(fn ($old) => $this->removeDocument($old, "Replaced {$label}"));
-            }
-
-            $path = $file->store("students/{$student->id}", 'local');
-
-            $document = StudentDocument::create([
-                'student_id' => $student->id,
-                'institute_id' => $student->institute_id,
-                'document_type' => $type,
-                'file_path' => $path,
-                'original_name' => mb_substr($file->getClientOriginalName(), 0, 255),
-                'mime_type' => $file->getMimeType(),
-                'size' => $file->getSize(),
-                'uploaded_at' => now(),
-                'verification_status' => 'pending',
-                'previous_rejection' => $previousRejection,
-            ]);
-
-            $this->auditCreate($document, 'student_documents', "Uploaded {$label} for {$student->full_name}");
-        });
-
-        app(OnboardingService::class)->documentsChanged($student->fresh());
+        app(OnboardingService::class)->storeDocument($student, $type, $this->{$property});
 
         $this->reset($property);
         $this->toast('success', "{$label} uploaded.");
@@ -340,8 +270,7 @@ class StudentOnboardingComponent extends Component
         $document = $student ? $student->documents()->find($this->confirmingDocumentId) : null;
 
         if ($document) {
-            $this->removeDocument($document, "Deleted {$document->type_label} of {$student->full_name}");
-            app(OnboardingService::class)->documentsChanged($student->fresh());
+            app(OnboardingService::class)->deleteDocument($document);
             $this->toast('danger', "{$document->type_label} removed.");
         }
 
@@ -349,36 +278,11 @@ class StudentOnboardingComponent extends Component
         $this->dispatchBrowserEvent('close-document-delete-modal');
     }
 
-    protected function removeDocument(StudentDocument $document, string $description)
-    {
-        $this->auditDelete($document, 'student_documents', $description);
-        Storage::disk('local')->delete($document->file_path);
-        $document->delete();
-    }
-
     // ---------------------------------------------------------------- tab 5: review & submit
 
-    /**
-     * What is still missing before the student can go for approval: tab => [messages].
-     */
     protected function checklist(?Student $student): array
     {
-        if (!$student) {
-            return ['basic' => ['Basic details not saved yet.']];
-        }
-
-        $missing = [];
-        if (!$student->hasAddressDetails()) {
-            $missing['address'][] = 'Address and parent details are incomplete.';
-        }
-        if (!$student->academicDetail) {
-            $missing['academic'][] = 'Academic details are not saved.';
-        }
-        foreach ($student->missingRequiredDocuments() as $type) {
-            $missing['documents'][] = config("camp.student_document_types.{$type}.0") . ' is not uploaded.';
-        }
-
-        return $missing;
+        return $student ? app(OnboardingService::class)->checklist($student) : ['basic' => ['Basic details not saved yet.']];
     }
 
     public function submit()
@@ -386,31 +290,18 @@ class StudentOnboardingComponent extends Component
         $student = $this->authorizeChange();
         abort_unless($student, 404);
 
-        $missing = $this->checklist($student);
+        $result = app(OnboardingService::class)->submit($student);
 
-        // Details must be complete; missing documents only hold the student at "Pending Documents".
-        $blocking = array_diff_key($missing, ['documents' => true]);
-        if ($blocking) {
-            $this->activeTab = array_key_first($blocking);
-            $this->toast('warning', 'Complete the ' . implode(', ', array_keys($blocking)) . ' details before submitting.');
+        if (!$result['submitted']) {
+            $this->activeTab = array_key_first($result['blocking']);
+            $this->toast('warning', 'Complete the ' . implode(', ', array_keys($result['blocking'])) . ' details before submitting.');
 
             return;
         }
 
-        $old = $student->status;
-        $student->update([
-            'status' => isset($missing['documents']) ? 'pending_docs' : 'pending_approval',
-            'submitted_at' => now(),
-        ]);
-
-        $this->auditUpdate($student, 'students', ['status' => $old], ['status' => $student->status], "Submitted onboarding: {$student->full_name}");
-
-        // Gate 1 (Admin documents) and Gate 2 (Accounts fees) start now; a rejected gate is reopened.
-        app(OnboardingService::class)->openGates($student);
-
         $this->toast(
-            $student->status === 'pending_approval' ? 'success' : 'warning',
-            $student->status === 'pending_approval'
+            $result['status'] === 'pending_approval' ? 'success' : 'warning',
+            $result['status'] === 'pending_approval'
                 ? 'Onboarding submitted for approval (document verification & fee verification).'
                 : 'Saved as Pending Documents — upload the missing documents to send it for approval.'
         );
@@ -420,18 +311,7 @@ class StudentOnboardingComponent extends Component
 
     protected function messages()
     {
-        return [
-            'first_name.regex' => 'Only letters, spaces, dots, apostrophes and hyphens are allowed.',
-            'last_name.regex' => 'Only letters, spaces, dots, apostrophes and hyphens are allowed.',
-            'phone.regex' => 'Enter a valid phone number (10–15 digits, optional +).',
-            'emergency_contact.regex' => 'Enter a valid phone number (10–15 digits, optional +).',
-            'emergency_contact.different' => 'Emergency contact must be different from the student phone.',
-            'parent_phone.regex' => 'Enter a valid phone number (10–15 digits, optional +).',
-            'course_id.exists' => 'This course is not offered (or not active) at the selected institute.',
-            'category_id.exists' => 'Select a category of the chosen religion.',
-            'state_id.exists' => 'Select a state of the chosen country.',
-            'dob.before' => 'Date of birth must be in the past.',
-        ];
+        return StudentRules::messages();
     }
 
     protected function stringify(array $values): array

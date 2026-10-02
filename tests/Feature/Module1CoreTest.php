@@ -206,7 +206,7 @@ class Module1CoreTest extends TestCase
         $groups = collect(MenuService::for($this->makeUser('super-admin')))->keyBy('title');
         $instituteGroup = $groups['Organization']['items'][0];
         $this->assertSame('Institute Management', $instituteGroup['label']);
-        $this->assertSame(['Institutes', 'Institute Courses'], array_column($instituteGroup['children'], 'label'));
+        $this->assertSame(['Institutes', 'Institute Courses', 'Payment Settings'], array_column($instituteGroup['children'], 'label'));
         $group = $groups['User Management']['items'][0];
         $this->assertSame('Users & Permissions', $group['label']);
         $this->assertSame(['Users', 'Roles & Permissions'], array_column($group['children'], 'label'));
@@ -216,7 +216,7 @@ class Module1CoreTest extends TestCase
         $this->assertSame(['Users'], array_column($instGroups['User Management']['items'][0]['children'], 'label'));
 
         // Accounts: only what its permissions allow (Module 2 fees & payments); modules not built yet stay hidden.
-        $this->assertSame(['Dashboard', 'All Students', 'Payment Verification', 'Fee Structure'], $labels($this->makeUser('accounts', $this->instA)));
+        $this->assertSame(['Dashboard', 'Payment Settings', 'All Students', 'Payment Verification', 'Fee Structure'], $labels($this->makeUser('accounts', $this->instA)));
         $this->assertSame(['Dashboard'], $labels($this->makeUser('faculty', $this->instA)));
     }
 

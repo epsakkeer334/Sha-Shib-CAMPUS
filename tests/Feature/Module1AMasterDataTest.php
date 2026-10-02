@@ -287,7 +287,8 @@ class Module1AMasterDataTest extends TestCase
         $instAdminRole->revokePermissionTo('institute_courses.view');
         $this->actingAs($admin->fresh());
         $this->get(route('admin.institute-courses'))->assertForbidden();
-        $this->assertFalse(collect(MenuService::for($admin->fresh()))->pluck('title')->contains('Organization'));
+        $labels = collect(MenuService::flatFor($admin->fresh()))->flatMap(fn ($s) => array_column($s['items'], 'label'));
+        $this->assertFalse($labels->contains('Institute Courses'));
 
         // Roles without the permission (e.g. Accounts) cannot open it
         $this->actingAs($this->makeUser('accounts', $this->institute));
@@ -350,7 +351,7 @@ class Module1AMasterDataTest extends TestCase
         $instAdminSections = collect(MenuService::for($this->makeUser('institute-admin', $this->institute)))->keyBy('title');
         $this->assertFalse($instAdminSections->has('Configuration'));
         // Institute Admin sees Institute Management with only Institute Courses (permission-based).
-        $this->assertSame(['Institute Courses'], array_column($instAdminSections['Organization']['items'][0]['children'], 'label'));
+        $this->assertSame(['Institute Courses', 'Payment Settings'], array_column($instAdminSections['Organization']['items'][0]['children'], 'label'));
 
         // Rendered sidebar contains the nested markup
         $this->actingAs($this->super);

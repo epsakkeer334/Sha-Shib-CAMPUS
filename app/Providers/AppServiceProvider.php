@@ -28,6 +28,8 @@ class AppServiceProvider extends ServiceProvider
         // checks on a page also protect its buttons (save, delete ...).
         Livewire::addPersistentMiddleware([
             \App\Http\Middleware\EnsureUserIsActive::class,
+            \App\Http\Middleware\EnsureStudent::class,
+            \App\Http\Middleware\RedirectStudentsToPortal::class,
             \Spatie\Permission\Middleware\RoleMiddleware::class,
             \Spatie\Permission\Middleware\PermissionMiddleware::class,
         ]);

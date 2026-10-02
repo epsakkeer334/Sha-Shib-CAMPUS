@@ -278,7 +278,7 @@ CONFIGURATION
 | sort_order | int | display order on the payment screen |
 | status | boolean default true | Active / Inactive — inactive rows are hidden from dropdowns but kept on existing records |
 
-`institute_payment_gateways` (which gateways each institute accepts, with its own merchant account) — *to be built with Module 2 payments*
+`institute_payment_gateways` ✅ (which gateways each institute accepts, with its own UPI ID / QR / instructions; merchant credentials stored encrypted for online gateways later)
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -298,16 +298,18 @@ Fixed lists kept in `config/camp.php` (not tables): `higher_secondary_subjects` 
 
 ### Module 2 — Student Onboarding & ER Number
 
-**Status:** ✅ admin side complete (tests: `tests/Feature/Module2StudentOnboardingTest.php`, `tests/Feature/Module2WorkflowTest.php`). Design: canvas “Module 2 — Student Onboarding & ER Number” (admin row implemented in the existing admin theme; student-website row = step 2.6).
+**Status:** ✅ complete — admin side + student portal (tests: `Module2StudentOnboardingTest`, `Module2WorkflowTest`, `Module2PortalTest`). Design: canvas “Module 2 — Student Onboarding & ER Number” (admin row in the existing admin theme; student-website row as the admissions portal).
 
 | Step | Scope | State |
 | --- | --- | --- |
 | 2.1 Admin-side onboarding | Students list + tab-wise onboarding (Basic → Address & Parent → Academic → KYC Documents → Review & Submit); each tab saved separately (draft); Submit → `pending_docs` / `pending_approval` and opens both gates | ✅ |
-| 2.2 Document verification — Gate 1 | Queue Pending / Rejected / Gate approved; document cards with Verify / Reject (remarks required, student emailed); re-uploads keep the previous rejection reason; reminder for missing documents; Approve gate (all required documents verified) / Reject gate (application returned → `rejected`, resubmission reopens it); any document change after approval reopens Gate 1 | ✅ |
+| 2.2 Document verification — Gate 1 | Queue Pending / Rejected / Gate approved; document cards with Verify / Reject (remarks required, student emailed); **re-review of rejected documents: “Approve after re-review” (student emailed “accepted”) or “Move back to pending”** (both audited, until Gate 1 is approved); re-uploads keep the previous rejection reason; reminder for missing documents; Approve gate (all required documents verified) / Reject gate (application returned → `rejected`, resubmission reopens it); any document change after approval reopens Gate 1 | ✅ |
 | 2.3 Fees & payments — Gate 2 | Fee structure per institute course (`course_fees`) → student dues (generate / add / waive with reason / delete if unpaid); record GPay/UPI (UTR + screenshot) or offline payments (cash, bank, cheque); Accounts queue To verify / Approved / Rejected / Fee gate with amount-vs-balance check; approval issues receipt `RCPT/2026/00001` and recalculates the due; Fee gate approves only when every due is cleared/waived and nothing is pending | ✅ (online gateways: see open question 8) |
 | 2.4 Dual gate → ER number | Both gates approved → ER number `ER-2026-00001` (group-wide series, `SerialNumberService`), status `er_issued`, ER request form + pending ID card created, student emailed; ER form lifecycle printed → TM signed → archived | ✅ |
 | 2.5 ID card | Card preview with KYC photo, print (count kept), Mark signed & issued → student `active`; reprint with reason | ✅ |
-| 2.6 Student portal | Student-website screens of the design (register, academic, documents, payment, status) on the same tables/services; needs per-institute UPI ID / QR (`institute_payment_gateways`) and a student login | ⬜ after the front-end design is approved |
+| 2.6 Admissions portal (student website) | `/admissions`: home → **Apply** (Step 1 Your details: creates the student login + draft application; institute → course) → Step 2 Academic (segmented % / CGPA, stream cards) → Step 3 Documents (upload on select, re-upload rejected, submit application → fees generated from the fee structure) → Step 4 Payment (fees list, GPay/UPI: QR / UPI app link / UPI ID, UTR + screenshot → Accounts verification; office payment info; receipts) → Application status (timeline, action-needed banners, documents). Student sign-in at `/admissions/login` (throttled). Details/academic editable while draft or returned. Same rules/services as the admin side (`App\Support\StudentRules`, `OnboardingService`, `FeeService`). Students are kept out of the admin panel and staff out of the portal. | ✅ |
+
+Admin: Institute Management ▸ **Payment Settings** (`admin.institute-payment-settings`, `fees.manage`) — per institute: which methods are accepted, UPI ID, payee name, QR image, office instructions (shown on the portal payment step).
 
 Screens & routes: Student Onboarding ▸ Students (All Students, Add Student), Document Verification (`admin.onboarding.documents`, `onboarding.verify_documents`), Payment Verification (`admin.onboarding.payments`, `payments.verify`), ER & ID Cards (`admin.onboarding.enrollment`, `enrollment.manage`), Fee Structure (`admin.onboarding.fee-structure`, `fees.manage`); per student: Onboarding · Fees & Payments (`admin.students.fees`) · Gates, ER & ID card (`admin.students.enrollment`). Printables (browser print / save as PDF — no PDF package): receipt, ER request form, ID card (85.6 × 54 mm). Workflow rules live in `App\Services\OnboardingService` and `App\Services\FeeService` so the student portal reuses them; every action is in the audit trail; student emails are logged in `notifications_log`.
 
@@ -844,7 +846,7 @@ Export feature: a queued job zips the `document_final_records` of all `documents
 | --- | --- | --- |
 | **Sprint 0 — Foundation (Module 1)** | ✅ Done | Laravel/Livewire setup, auth, roles & permissions (seeder + matrix screen), institutes CRUD with auto code, user management, role-based side menu, audit trail + viewer, notification log, `users.institute_id`, `BelongsToInstitute`, `SerialNumberService`, `config/camp.php` |
 | **Sprint 1a — Master Data (Module 1A)** | ✅ Done (per-institute gateway settings → Sprint 1) | Super Admin CRUD for qualifications, courses (+ institute_courses), countries, states, religions, categories, matriculation & higher secondary boards, payment gateways (+ per-institute gateway settings) |
-| **Sprint 1 — Student Onboarding** | ✅ admin side done (2.1–2.5); 2.6 student portal after design approval | Student registration (+ user account, academic information), document upload wizard, student dues & payments (online gateways, GPay/UPI, offline + Accounts verification, receipts), dual-gate approval (Admin + Accounts), ER generation, ID card issuance |
+| **Sprint 1 — Student Onboarding** | ✅ done (2.1–2.6, admin side + admissions portal) | Student registration (+ user account, academic information), document upload wizard, student dues & payments (online gateways, GPay/UPI, offline + Accounts verification, receipts), dual-gate approval (Admin + Accounts), ER generation, ID card issuance |
 | **Sprint 2 — Exam Application & Approval** | 2 weeks | Subjects per course/syllabus mapping, exam appearance requests, Accounts dues gate + BiC bypass, TM attendance gate, admit card generation |
 | **Sprint 3 — Question Bank & Paper Setup** | 1–2 weeks | Question bank CRUD (Super Admin + Institute), exam paper builder |
 | **Sprint 4 — Grading & Results** | 2 weeks | Marks entry (all three modes), result computation (configurable pass %), Super Admin correction workflow, marksheet + consolidated marksheet generation with unique serials |
