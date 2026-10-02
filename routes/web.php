@@ -29,7 +29,7 @@ Route::prefix('admin')->middleware(['auth', 'active.user'])->group(function () {
 
     // Module 1 — Core / Foundation
     Route::get('/institutes', InstitutesComponent::class)->name('admin.institutes')->middleware('role:super-admin');
-    Route::get('/institutes/{institute_id}/users', UsersComponent::class)->name('admin.institute-users.institute')->middleware('permission:users.view');
+    Route::get('/institutes/{institute}/users', UsersComponent::class)->name('admin.institute-users.institute')->middleware('permission:users.view');
     Route::get('/users', UsersComponent::class)->name('admin.users')->middleware('permission:users.view');
     Route::get('/roles', RolesComponent::class)->name('admin.roles')->middleware('role:super-admin');
     Route::get('/audit-trail', AuditTrailComponent::class)->name('admin.audit-trail')->middleware('permission:audit.view');
@@ -38,7 +38,7 @@ Route::prefix('admin')->middleware(['auth', 'active.user'])->group(function () {
     // Institute Management — courses offered per institute (Super Admin: any institute; others: own institute)
     Route::middleware('permission:institute_courses.view')->group(function () {
         Route::get('/institute-courses', InstituteCoursesComponent::class)->name('admin.institute-courses');
-        Route::get('/institutes/{institute_id}/courses', InstituteCoursesComponent::class)->name('admin.institute-courses.institute');
+        Route::get('/institutes/{institute}/courses', InstituteCoursesComponent::class)->name('admin.institute-courses.institute');
     });
 
     // Module 1A — Master Data (Super Admin only)

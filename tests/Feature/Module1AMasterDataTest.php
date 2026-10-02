@@ -198,7 +198,7 @@ class Module1AMasterDataTest extends TestCase
         $c2 = $this->makeCourse('C2-' . uniqid());
         $inactive = $this->makeCourse('CX-' . uniqid(), false);
 
-        Livewire::test(InstituteCoursesComponent::class, ['institute_id' => $this->institute->id])
+        Livewire::test(InstituteCoursesComponent::class, ['institute' => $this->institute->id])
             ->call('openModal')
             ->assertSet('institute_id', $this->institute->id)
             ->set('course_ids', [$c1->id, $c2->id])
@@ -292,6 +292,47 @@ class Module1AMasterDataTest extends TestCase
         // Roles without the permission (e.g. Accounts) cannot open it
         $this->actingAs($this->makeUser('accounts', $this->institute));
         $this->get(route('admin.institute-courses'))->assertForbidden();
+    }
+
+    /**
+     * Regression: Livewire 2 rebuilds the page URL after every action from public properties
+     * named like the route parameters. A form field with the same name (e.g. $institute_id on
+     * /institutes/{institute_id}/courses) is reset to null after save → "Missing required parameter".
+     */
+    public function test_livewire_route_parameters_do_not_clash_with_public_properties()
+    {
+        foreach (app('router')->getRoutes() as $route) {
+            $class = $route->getActionName();
+            if (!is_string($class) || !is_subclass_of($class, \Livewire\Component::class)) {
+                continue;
+            }
+
+            $publicProps = collect((new \ReflectionClass($class))->getProperties(\ReflectionProperty::IS_PUBLIC))
+                ->map->getName()->all();
+
+            $this->assertEmpty(
+                array_intersect($route->parameterNames(), $publicProps),
+                "Route [{$route->uri()}] parameter clashes with a public property of {$class}."
+            );
+        }
+    }
+
+    public function test_assign_courses_from_institute_page_keeps_working_after_save()
+    {
+        $this->actingAs($this->super);
+        $course = $this->makeCourse('R1-' . uniqid());
+
+        // Same flow as the reported error: open Institutes → Courses, assign, save.
+        $this->get(route('admin.institute-courses.institute', $this->institute->id))->assertOk();
+
+        Livewire::test(InstituteCoursesComponent::class, ['institute' => $this->institute->id])
+            ->call('openModal')
+            ->set('course_ids', [$course->id])
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertSet('scopeInstituteId', $this->institute->id);
+
+        $this->assertTrue($this->institute->offeredCourses()->where('courses.id', $course->id)->exists());
     }
 
     public function test_master_data_menu_is_multi_level_and_super_admin_only()

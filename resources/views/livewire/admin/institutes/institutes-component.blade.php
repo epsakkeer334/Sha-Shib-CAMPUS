@@ -42,7 +42,7 @@
                 ['label' => 'Phone', 'field' => 'phone', 'sortable' => false],
                 ['label' => 'Status', 'field' => 'status', 'type' => 'status', 'sortable' => true],
                 ['label' => 'Created At', 'field' => 'formatted_created_at', 'type' => 'datetime', 'format' => 'd M Y', 'sortable' => true],
-                ['label' => 'Actions', 'field' => 'actions', 'type' => 'actions', 'actions' => ['edit', 'delete', ['route' => 'admin.institute-users.institute', 'parameter' => 'institute_id', 'parameter_value' => 'id', 'icon' => 'ti ti-users', 'class' => 'btn-outline-info', 'label' => 'Users', 'show_label' => false], ['route' => 'admin.institute-courses.institute', 'parameter' => 'institute_id', 'parameter_value' => 'id', 'icon' => 'ti ti-books', 'class' => 'btn-outline-primary', 'label' => 'Courses', 'show_label' => false]]]
+                ['label' => 'Actions', 'field' => 'actions', 'type' => 'actions', 'actions' => ['edit', 'delete', ['route' => 'admin.institute-users.institute', 'parameter' => 'institute', 'parameter_value' => 'id', 'icon' => 'ti ti-users', 'class' => 'btn-outline-info', 'label' => 'Users', 'show_label' => false], ['route' => 'admin.institute-courses.institute', 'parameter' => 'institute', 'parameter_value' => 'id', 'icon' => 'ti ti-books', 'class' => 'btn-outline-primary', 'label' => 'Courses', 'show_label' => false]]]
             ]"
             :filters="['All' => 'All', 'Active' => 'Active', 'Inactive' => 'Inactive']"
             title="Institutes List"

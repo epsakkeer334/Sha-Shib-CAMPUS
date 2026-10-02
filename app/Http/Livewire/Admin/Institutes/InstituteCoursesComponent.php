@@ -42,18 +42,23 @@ class InstituteCoursesComponent extends Component
         'course_ids.required' => 'Select at least one course.',
     ];
 
-    public function mount($institute_id = null)
+    /**
+     * @param  int|null  $institute  route {institute}. Deliberately not named like the
+     *                   $institute_id form field: Livewire 2 rebuilds the page URL from public
+     *                   properties named like route parameters, so a clash breaks every action.
+     */
+    public function mount($institute = null)
     {
         $this->authorizeView();
         $user = Auth::user();
 
         // Institute users always work on their own institute (another institute's id → 404).
         if (!$user->isSuperAdmin()) {
-            $institute_id = $institute_id ?? $user->institute_id;
+            $institute = $institute ?? $user->institute_id;
         }
 
-        if ($institute_id) {
-            $institute = Institute::visibleTo($user)->findOrFail($institute_id);
+        if ($institute) {
+            $institute = Institute::visibleTo($user)->findOrFail($institute);
             $this->scopeInstituteId = $institute->id;
             $this->scopeInstituteName = $institute->name . ' (' . $institute->code . ')';
         }

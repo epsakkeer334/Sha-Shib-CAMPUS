@@ -42,12 +42,17 @@ class UsersComponent extends Component
         'password.min' => 'Password must be at least 8 characters.',
     ];
 
-    public function mount($institute_id = null)
+    /**
+     * @param  int|null  $institute  route {institute}. Deliberately not named like the
+     *                   $institute_id form field: Livewire 2 rebuilds the page URL from public
+     *                   properties named like route parameters, so a clash breaks every action.
+     */
+    public function mount($institute = null)
     {
         abort_unless(Auth::user()->can('users.view'), 403);
 
-        if ($institute_id) {
-            $institute = Institute::visibleTo(Auth::user())->findOrFail($institute_id);
+        if ($institute) {
+            $institute = Institute::visibleTo(Auth::user())->findOrFail($institute);
             $this->scopeInstituteId = $institute->id;
             $this->scopeInstituteName = $institute->name . ' (' . $institute->code . ')';
         }
