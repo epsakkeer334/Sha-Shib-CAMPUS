@@ -36,11 +36,16 @@ class Course extends BaseModel
 
     protected function usageRelations(): array
     {
-        return ['instituteCourses'];
+        return ['instituteCourses', 'students'];
     }
 
     public function getLabelAttribute()
     {
         return "{$this->name} ({$this->code})";
+    }
+
+    public function students()
+    {
+        return $this->hasMany(Student::class);
     }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Livewire\Admin\Institutes;
 use App\Models\Admin\Course;
 use App\Models\Admin\Institute;
 use App\Models\Admin\InstituteCourse;
+use App\Models\Admin\Student;
 use App\Traits\RecordsAuditTrail;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -206,8 +207,13 @@ class InstituteCoursesComponent extends Component
         $this->authorizeManage();
         $link = $this->links()->find($this->confirmingDeleteId);
 
-        if ($link) {
-            // Once students exist (Module 2), links with enrolled students must be set Inactive instead.
+        $enrolled = $link
+            ? Student::where('institute_id', $link->institute_id)->where('course_id', $link->course_id)->count()
+            : 0;
+
+        if ($link && $enrolled) {
+            $this->toast('warning', "{$enrolled} student(s) are enrolled in this course, so it cannot be removed. Set it Inactive instead.");
+        } elseif ($link) {
             $this->auditDelete($link, 'institute_courses', 'Removed course offering: ' . $this->linkLabel($link));
             $link->delete();
             $this->emit('refreshTable');

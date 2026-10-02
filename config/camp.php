@@ -49,6 +49,12 @@ return [
             'institute_courses.view' => 'View courses offered by the institute',
             'institute_courses.manage' => 'Assign / activate / remove institute courses',
         ],
+        'Students' => [
+            'students.view' => 'View students',
+            'students.create' => 'Add students (admin onboarding)',
+            'students.update' => 'Edit students',
+            'students.delete' => 'Delete draft students',
+        ],
         'Users' => [
             'users.view' => 'View users',
             'users.create' => 'Create users',
@@ -74,7 +80,7 @@ return [
 
     // Default permissions per role (super-admin gets everything through Gate::before).
     'default_role_permissions' => [
-        'institute-admin' => ['users.view', 'users.create', 'users.update', 'users.delete', 'audit.view', 'notifications.view', 'institute_courses.view', 'institute_courses.manage'],
+        'institute-admin' => ['users.view', 'users.create', 'users.update', 'users.delete', 'audit.view', 'notifications.view', 'institute_courses.view', 'institute_courses.manage', 'students.view', 'students.create', 'students.update', 'students.delete'],
         'accounts' => [],
         'training-manager' => [],
         'bic' => [],
@@ -101,6 +107,29 @@ return [
     ],
     'higher_secondary_subjects' => ['PCM' => 'PCM', 'PCB' => 'PCB', 'COMMERCE' => 'Commerce', 'ARTS' => 'Arts'],
     'mark_types' => ['percentage' => 'Percentage (%)', 'cgpa' => 'CGPA'],
+
+    // Module 2 — Student onboarding
+    'genders' => ['male' => 'Male', 'female' => 'Female', 'other' => 'Other'],
+
+    // status => [label, badge colour]
+    'student_statuses' => [
+        'draft' => ['Draft', 'secondary'],
+        'pending_docs' => ['Pending Documents', 'warning'],
+        'pending_approval' => ['Pending Approval', 'info'],
+        'er_issued' => ['ER Issued', 'primary'],
+        'active' => ['Active', 'success'],
+        'alumni' => ['Alumni', 'dark'],
+        'rejected' => ['Rejected', 'danger'],
+    ],
+
+    // KYC documents: type => [label, required, mimes, max KB]
+    'student_document_types' => [
+        'kyc_photo' => ['Passport Size Photo', true, 'jpg,jpeg,png', 2048],
+        'medical_certificate' => ['Medical Certificate', true, 'pdf,jpg,jpeg,png', 5120],
+        'marksheet_10' => ['10th Marksheet', true, 'pdf,jpg,jpeg,png', 5120],
+        'marksheet_12' => ['12th Marksheet', true, 'pdf,jpg,jpeg,png', 5120],
+        'other' => ['Other Document', false, 'pdf,jpg,jpeg,png', 5120],
+    ],
 
     // Business rules (see plan.md).
     'pass_percentage' => 75,

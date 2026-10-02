@@ -27,6 +27,11 @@ class Religion extends BaseModel
 
     protected function usageRelations(): array
     {
-        return ['categories'];
+        return ['categories', 'students'];
+    }
+
+    public function students()
+    {
+        return $this->hasMany(Student::class);
     }
 }

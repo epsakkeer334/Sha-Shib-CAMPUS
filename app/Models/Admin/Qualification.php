@@ -19,4 +19,14 @@ class Qualification extends BaseModel
         'created_by',
         'updated_by',
     ];
+
+    public function students()
+    {
+        return $this->hasMany(Student::class);
+    }
+
+    protected function usageRelations(): array
+    {
+        return ['students'];
+    }
 }

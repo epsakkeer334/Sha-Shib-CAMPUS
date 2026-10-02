@@ -11,6 +11,9 @@ use App\Http\Livewire\Admin\AuditTrail\AuditTrailComponent;
 use App\Http\Livewire\Admin\Notifications\NotificationLogComponent;
 use App\Http\Livewire\Admin\Institutes\InstituteCoursesComponent;
 use App\Http\Livewire\Admin\Masters;
+use App\Http\Livewire\Admin\Students\StudentsComponent;
+use App\Http\Livewire\Admin\Students\StudentOnboardingComponent;
+use App\Http\Controllers\Admin\StudentDocumentController;
 
 Route::get('/', fn () => redirect()->route('admin.login'));
 Route::get('/admin/login', Login::class)->name('admin.login')->middleware('guest');
@@ -39,6 +42,14 @@ Route::prefix('admin')->middleware(['auth', 'active.user'])->group(function () {
     Route::middleware('permission:institute_courses.view')->group(function () {
         Route::get('/institute-courses', InstituteCoursesComponent::class)->name('admin.institute-courses');
         Route::get('/institutes/{institute}/courses', InstituteCoursesComponent::class)->name('admin.institute-courses.institute');
+    });
+
+    // Module 2 — Student Onboarding (admin side; the student portal comes later)
+    Route::prefix('students')->name('admin.students')->group(function () {
+        Route::get('/', StudentsComponent::class)->middleware('permission:students.view');
+        Route::get('/create', StudentOnboardingComponent::class)->name('.create')->middleware('permission:students.create');
+        Route::get('/{student}/onboarding', StudentOnboardingComponent::class)->name('.edit')->middleware('permission:students.view');
+        Route::get('/documents/{document}', [StudentDocumentController::class, 'show'])->name('.documents.show')->middleware('permission:students.view');
     });
 
     // Module 1A — Master Data (Super Admin only)

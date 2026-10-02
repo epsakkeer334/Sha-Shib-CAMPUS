@@ -36,6 +36,11 @@ class Country extends Model
 
     protected function usageRelations(): array
     {
-        return ['states', 'institutes'];
+        return ['states', 'institutes', 'students'];
+    }
+
+    public function students()
+    {
+        return $this->hasMany(Student::class);
     }
 }

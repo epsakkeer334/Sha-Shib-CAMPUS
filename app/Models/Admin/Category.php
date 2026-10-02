@@ -25,4 +25,14 @@ class Category extends BaseModel
     {
         return $this->belongsTo(Religion::class);
     }
+
+    public function students()
+    {
+        return $this->hasMany(Student::class);
+    }
+
+    protected function usageRelations(): array
+    {
+        return ['students'];
+    }
 }

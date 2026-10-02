@@ -298,6 +298,19 @@ Fixed lists kept in `config/camp.php` (not tables): `higher_secondary_subjects` 
 
 ### Module 2 — Student Onboarding & ER Number
 
+**Status:** 🟡 in progress (tests: `tests/Feature/Module2StudentOnboardingTest.php`)
+
+| Step | Scope | State |
+| --- | --- | --- |
+| 2.1 Admin-side onboarding | Students list + tab-wise onboarding page for Super Admin / Institute Admin: **Basic Details → Address & Parent → Academic Details → KYC Documents → Review & Submit**; each tab saved separately (draft), Submit → `pending_docs` (documents missing) or `pending_approval`; KYC files on the private disk via an authorised route; draft-only delete; read-only once ER issued | ✅ Done |
+| 2.2 Document verification (Admin gate) | verify / reject each KYC document with remarks | ⬜ Next |
+| 2.3 Dues & payments (Accounts gate) | `student_dues`, `student_payments`, payment gateways per institute, GPay/offline verification, receipts | ⬜ |
+| 2.4 Dual-gate approval → ER number | `enrollment_approvals`, ER via `SerialNumberService`, ER request form PDF | ⬜ |
+| 2.5 ID card | `id_cards`, printable card, TM signature status | ⬜ |
+| 2.6 Student portal onboarding | front-end self-onboarding using the same tables/rules — **after the front-end design is approved** | ⬜ |
+
+Admin onboarding: routes `admin.students`, `admin.students.create`, `admin.students.edit` (`/admin/students/{student}/onboarding?tab=…`), `admin.students.documents.show`; components `Admin\Students\StudentsComponent`, `Admin\Students\StudentOnboardingComponent`; permissions `students.view/create/update/delete` (default: Institute Admin; Super Admin all institutes); side menu "Student Onboarding ▸ Students ▸ All Students, Add Student". KYC document types, sizes and required flags: `config/camp.php` → `student_document_types`. Master rows and institute-course links used by students can no longer be deleted (deactivate instead).
+
 **Purpose:** implements Phase 1 (KYC upload, dual-gate approval, ER generation, ID card).
 
 **Livewire components:** `StudentRegistrationForm` (personal, address, parent details), `StudentAcademicForm` (academic information step), `DocumentUploadWizard`, `AdminDocumentVerification`, `AccountsFeeVerification`, `StudentPaymentForm` (student / Accounts: pay a due via online gateway, GPay/UPI or record offline payment), `PaymentVerificationQueue` (Accounts: verify GPay/UPI & offline payments), `PaymentHistory` (receipts per student), `ERRequestGenerator`, `IDCardIssuance`
@@ -816,7 +829,7 @@ Export feature: a queued job zips the `document_final_records` of all `documents
 | --- | --- | --- |
 | **Sprint 0 — Foundation (Module 1)** | ✅ Done | Laravel/Livewire setup, auth, roles & permissions (seeder + matrix screen), institutes CRUD with auto code, user management, role-based side menu, audit trail + viewer, notification log, `users.institute_id`, `BelongsToInstitute`, `SerialNumberService`, `config/camp.php` |
 | **Sprint 1a — Master Data (Module 1A)** | ✅ Done (per-institute gateway settings → Sprint 1) | Super Admin CRUD for qualifications, courses (+ institute_courses), countries, states, religions, categories, matriculation & higher secondary boards, payment gateways (+ per-institute gateway settings) |
-| **Sprint 1 — Student Onboarding** | 2 weeks | Student registration (+ user account, academic information), document upload wizard, student dues & payments (online gateways, GPay/UPI, offline + Accounts verification, receipts), dual-gate approval (Admin + Accounts), ER generation, ID card issuance |
+| **Sprint 1 — Student Onboarding** | 🟡 2.1 admin onboarding done; 2.2–2.5 remaining (2.6 portal after design approval) | Student registration (+ user account, academic information), document upload wizard, student dues & payments (online gateways, GPay/UPI, offline + Accounts verification, receipts), dual-gate approval (Admin + Accounts), ER generation, ID card issuance |
 | **Sprint 2 — Exam Application & Approval** | 2 weeks | Subjects per course/syllabus mapping, exam appearance requests, Accounts dues gate + BiC bypass, TM attendance gate, admit card generation |
 | **Sprint 3 — Question Bank & Paper Setup** | 1–2 weeks | Question bank CRUD (Super Admin + Institute), exam paper builder |
 | **Sprint 4 — Grading & Results** | 2 weeks | Marks entry (all three modes), result computation (configurable pass %), Super Admin correction workflow, marksheet + consolidated marksheet generation with unique serials |

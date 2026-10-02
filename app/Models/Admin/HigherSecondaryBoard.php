@@ -19,4 +19,14 @@ class HigherSecondaryBoard extends BaseModel
         'created_by',
         'updated_by',
     ];
+
+    public function academicDetails()
+    {
+        return $this->hasMany(StudentAcademicDetail::class);
+    }
+
+    protected function usageRelations(): array
+    {
+        return ['academicDetails'];
+    }
 }

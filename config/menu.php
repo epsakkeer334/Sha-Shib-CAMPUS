@@ -109,7 +109,14 @@ return [
     [
         'title' => 'Student Onboarding',
         'items' => [
-            ['label' => 'Students', 'icon' => 'ti ti-school', 'route' => 'admin.students', 'roles' => ['super-admin', 'institute-admin', 'accounts', 'training-manager']],
+            [
+                'label' => 'Students',
+                'icon' => 'ti ti-school',
+                'children' => [
+                    ['label' => 'All Students', 'icon' => 'ti ti-list', 'route' => 'admin.students', 'permission' => 'students.view', 'active' => ['admin.students', 'admin.students.edit']],
+                    ['label' => 'Add Student', 'icon' => 'ti ti-user-plus', 'route' => 'admin.students.create', 'permission' => 'students.create'],
+                ],
+            ],
             ['label' => 'Document Verification', 'icon' => 'ti ti-file-check', 'route' => 'admin.onboarding.documents', 'roles' => ['institute-admin']],
             ['label' => 'Fee Verification', 'icon' => 'ti ti-cash', 'route' => 'admin.onboarding.fees', 'roles' => ['accounts']],
             ['label' => 'ER Requests', 'icon' => 'ti ti-id', 'route' => 'admin.er-requests', 'roles' => ['super-admin', 'training-manager']],
