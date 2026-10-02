@@ -3,6 +3,7 @@
 namespace App\Http\Livewire\Portal;
 
 use App\Http\Middleware\EnsureUserIsActive;
+use App\Support\PortalProgress;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
@@ -21,7 +22,11 @@ class LoginPage extends Component
     public function mount()
     {
         if (Auth::check()) {
-            return redirect()->route(Auth::user()->hasRole('student') ? 'portal.status' : 'admin.dashboard');
+            $user = Auth::user();
+
+            return $user->hasRole('student') && $user->student
+                ? redirect()->route(PortalProgress::resumeRoute($user->student))
+                : redirect()->route('admin.dashboard');
         }
 
         $this->errorMessage = session('error', '');
@@ -65,7 +70,8 @@ class LoginPage extends Component
         session()->regenerate();
         $user->update(['last_login_at' => now(), 'last_login_ip' => request()->ip()]);
 
-        return redirect()->intended(route('portal.status'));
+        // Continue where the student left off (or the page they were trying to open).
+        return redirect()->intended(route(PortalProgress::resumeRoute($user->student)));
     }
 
     public function render()

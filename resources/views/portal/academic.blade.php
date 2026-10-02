@@ -8,8 +8,12 @@
     @include('portal.partials.steps', ['current' => 'academic', 'student' => $student])
 
     @if($readOnly)
-        <div class="notice info" role="status"><span>Your application is being reviewed, so academic details can no longer be changed here.</span></div>
+        <div class="notice info" role="status"><span>Your fee payment is confirmed, so academic details can no longer be changed online.</span></div>
+    @elseif($draftRestored)
+        <div class="notice info" role="status"><span>We restored the changes you had not saved yet. Review them and choose “Save and continue”.</span></div>
     @endif
+
+    @include('portal.partials.fee-summary', ['student' => $student])
 
     <form wire:submit.prevent="save" style="display: flex; flex-direction: column; gap: 28px;">
         <fieldset @if($readOnly) disabled @endif style="border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 28px;">
@@ -68,11 +72,16 @@
 
         <div class="row-between">
             <a href="{{ route('portal.details') }}" class="btn btn-secondary">Back</a>
-            @if($readOnly)
-                <a href="{{ route('portal.documents') }}" class="btn btn-primary">Next</a>
-            @else
-                <button type="submit" class="btn btn-primary" wire:loading.attr="disabled">Save and continue</button>
-            @endif
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                @if($readOnly)
+                    <a href="{{ route('portal.documents') }}" class="btn btn-primary">Next</a>
+                @else
+                    @if($student->dues()->exists())
+                        <button type="button" class="btn btn-secondary" wire:click="saveAndPay" wire:loading.attr="disabled">Save and pay now</button>
+                    @endif
+                    <button type="submit" class="btn btn-primary" wire:loading.attr="disabled">Save and continue</button>
+                @endif
+            </div>
         </div>
     </form>
 </main>

@@ -18,10 +18,10 @@
 
     @if($student->status === 'draft')
         <div class="notice info" role="status">
-            <span>Submit your application first (Documents step). Your fees appear here after that.</span>
+            <span>You can pay now. Remember to also finish your details and documents and <b>submit your application</b>.</span>
             <a href="{{ route('portal.documents') }}" class="btn btn-secondary btn-sm">Go to documents</a>
         </div>
-    @else
+    @endif
         <section class="card flush">
             <div class="row-between" style="padding: 22px 28px; border-bottom: 1px solid var(--line-2);">
                 <h2>Your fees</h2>
@@ -148,7 +148,6 @@
                 @endforeach
             </section>
         @endif
-    @endif
 
     <div class="row-between">
         <a href="{{ route('portal.documents') }}" class="btn btn-secondary">Back</a>

@@ -53,6 +53,34 @@ class FeeService
         return $fees->count();
     }
 
+    /**
+     * Keep the course fees of a student in step with their course and joining date while
+     * they register (portal). Fees that already have a payment (pending or confirmed) are left
+     * alone; others are replaced when the course changes and re-dated when the joining date changes.
+     */
+    public function syncCourseDues(Student $student): void
+    {
+        $dues = $student->dues()->whereNotNull('course_fee_id')->with(['courseFee', 'payments'])->get();
+
+        foreach ($dues as $due) {
+            if ($due->payments->whereIn('status', ['pending_verification', 'success'])->isNotEmpty() || $due->status === 'waived') {
+                continue;
+            }
+
+            if (!$due->courseFee || (int) $due->courseFee->course_id !== (int) $student->course_id) {
+                $this->deleteDue($due); // fee of the previous course
+                continue;
+            }
+
+            $dueDate = $student->joining_date->copy()->addDays($due->courseFee->due_days)->toDateString();
+            if ($due->due_date->toDateString() !== $dueDate) {
+                $due->update(['due_date' => $dueDate]);
+            }
+        }
+
+        $this->generateDues($student->fresh());
+    }
+
     public function addDue(Student $student, string $feeHead, float $amount, $dueDate): StudentDue
     {
         return $this->createDue($student, $feeHead, $amount, Carbon::parse($dueDate));

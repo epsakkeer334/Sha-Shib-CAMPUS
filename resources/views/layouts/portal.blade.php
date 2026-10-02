@@ -147,7 +147,7 @@
                     <a href="{{ route('portal.status') }}" class="hide-sm" style="text-decoration: none; font-weight: 500;">My application</a>
                     <span class="avatar" aria-hidden="true">{{ $portalStudent->initials }}</span>
                     <span class="hide-sm" style="font-weight: 500;">{{ $portalStudent->first_name }}</span>
-                    <a href="{{ route('portal.logout') }}" style="font-size: 14px;">Sign out</a>
+                    <a href="{{ route('portal.logout') }}" style="font-size: 14px;" data-signout>Sign out</a>
                 </div>
             @else
                 <span style="font-size: 14px;" class="muted">Already applied? <a href="{{ route('portal.login') }}" style="font-weight: 600;">Sign in</a></span>
@@ -187,6 +187,14 @@
             window.dispatchEvent(new CustomEvent('show-toast', { detail: @json(session('toast')) }));
         });
     @endif
+    // Sign out: let the field being edited send its value (draft autosave) before leaving.
+    document.addEventListener('click', function (e) {
+        var link = e.target.closest('[data-signout]');
+        if (!link || !document.activeElement || !document.activeElement.matches('input, select, textarea')) return;
+        e.preventDefault();
+        document.activeElement.blur();
+        setTimeout(function () { window.location = link.href; }, 700);
+    });
     // Copy buttons: <button data-copy="text">
     document.addEventListener('click', function (e) {
         var btn = e.target.closest('[data-copy]');

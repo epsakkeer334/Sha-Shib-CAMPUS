@@ -2,16 +2,22 @@
     <div style="display: flex; flex-direction: column; gap: 8px;">
         <span class="eyebrow">Admission application {{ now()->year }}</span>
         <h1 class="title">Your details</h1>
-        <p class="lead">Fields marked * are required. Your progress is saved as a draft when you continue.</p>
+        <p class="lead">Fields marked * are required. Your progress is saved as you go — you can sign out and continue later.</p>
     </div>
 
     @include('portal.partials.steps', ['current' => 'details', 'student' => $student])
 
     @if($readOnly)
         <div class="notice info" role="status">
-            <span>Your application has been submitted and is being reviewed, so these details can no longer be changed here. Contact the admissions office for corrections.</span>
+            <span>Your fee payment is confirmed, so these details can no longer be changed online. Contact the admissions office for corrections.</span>
             <a href="{{ route('portal.status') }}" class="btn btn-secondary btn-sm">Application status</a>
         </div>
+    @elseif($draftRestored)
+        <div class="notice info" role="status"><span>We restored the changes you had not saved yet. Review them and choose “Save and continue”.</span></div>
+    @endif
+
+    @if($student)
+        @include('portal.partials.fee-summary', ['student' => $student])
     @endif
 
     <form wire:submit.prevent="save" style="display: flex; flex-direction: column; gap: 28px;">
@@ -20,7 +26,7 @@
         <section class="card">
             <div style="display: flex; flex-direction: column; gap: 4px;">
                 <h2>{{ $registering ? 'Create your login' : 'Your login' }}</h2>
-                <p class="muted" style="margin: 0; font-size: 14px;">Use this to come back, upload documents and track your application.</p>
+                <p class="muted" style="margin: 0; font-size: 14px;">Use this to come back, upload documents, pay and track your application.</p>
             </div>
             <div class="grid">
                 @include('portal.partials.field', ['name' => 'email', 'label' => 'Email', 'type' => 'email', 'required' => true, 'autocomplete' => 'email'])
@@ -40,11 +46,28 @@
                 @else
                     <label class="field"><span class="label">Institute</span><input class="input" disabled value="{{ optional($student->institute)->name }}"></label>
                 @endif
-                @include('portal.partials.field', ['name' => 'course_id', 'label' => 'Course you are applying for', 'type' => 'select', 'required' => true, 'options' => $courses,
+                @include('portal.partials.field', ['name' => 'course_id', 'label' => 'Course you are applying for', 'type' => 'select', 'required' => true, 'live' => true, 'options' => $courses,
                     'placeholder' => $institute_id ? 'Select course' : 'Choose the institute first', 'disabled' => !$institute_id])
                 @include('portal.partials.field', ['name' => 'joining_date', 'label' => 'Joining date', 'type' => 'date', 'required' => true,
                     'hint' => 'Complete all steps within ' . config('camp.onboarding_days') . ' days of this date'])
             </div>
+
+            {{-- Fees of the chosen course --}}
+            @if($registering && $courseFees->isNotEmpty())
+                <div style="border-radius: 12px; background: var(--bg); padding: 16px 20px; display: flex; flex-direction: column; gap: 10px;">
+                    <div class="row-between">
+                        <span style="font-weight: 600;">Fees for this course</span>
+                        <span class="mono" style="font-weight: 600;">{{ money_inr($courseFees->sum('amount'), false) }}</span>
+                    </div>
+                    @foreach($courseFees as $fee)
+                        <div class="row-between" style="font-size: 14px;">
+                            <span>{{ $fee->fee_head }} <span class="muted">· {{ $fee->due_days ? 'due ' . $fee->due_days . ' days after joining' : 'due on joining' }}</span></span>
+                            <span class="mono">{{ money_inr($fee->amount, false) }}</span>
+                        </div>
+                    @endforeach
+                    <span class="hint">You can pay right after creating your login (“Save and pay now”), or later from the Payment step.</span>
+                </div>
+            @endif
         </section>
 
         <section class="card">
@@ -87,15 +110,20 @@
         </fieldset>
 
         <div class="row-between">
-            <a href="{{ $registering ? route('portal.home') : route('portal.status') }}" style="font-weight: 500; color: var(--ink-2);">Cancel</a>
-            @if($readOnly)
-                <a href="{{ route('portal.academic') }}" class="btn btn-primary">Next</a>
-            @else
-                <button type="submit" class="btn btn-primary" wire:loading.attr="disabled">
-                    <span wire:loading.remove wire:target="save">Save and continue</span>
-                    <span wire:loading wire:target="save">Saving…</span>
-                </button>
-            @endif
+            <a href="{{ $registering ? route('portal.home') : route('portal.status') }}" style="font-weight: 500; color: var(--ink-2);">{{ $registering ? 'Cancel' : 'Application status' }}</a>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                @if($readOnly)
+                    <a href="{{ route('portal.academic') }}" class="btn btn-primary">Next</a>
+                @else
+                    @if(($registering && $courseFees->isNotEmpty()) || ($student && $student->dues()->exists()))
+                        <button type="button" class="btn btn-secondary" wire:click="saveAndPay" wire:loading.attr="disabled">Save and pay now</button>
+                    @endif
+                    <button type="submit" class="btn btn-primary" wire:loading.attr="disabled">
+                        <span wire:loading.remove wire:target="save">Save and continue</span>
+                        <span wire:loading wire:target="save">Saving…</span>
+                    </button>
+                @endif
+            </div>
         </div>
     </form>
 </main>

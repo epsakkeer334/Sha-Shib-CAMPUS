@@ -6,12 +6,14 @@ use App\Http\Livewire\Portal\Concerns\StudentPortalPage;
 use App\Models\Admin\HigherSecondaryBoard;
 use App\Models\Admin\MatriculationBoard;
 use App\Models\Admin\StudentAcademicDetail;
+use App\Services\OnboardingService;
+use App\Support\PortalProgress;
 use App\Support\StudentRules;
 use App\Traits\RecordsAuditTrail;
 use Livewire\Component;
 
 /**
- * Step 2 — "Academic" (design: "Website · Step 2 — Academic").
+ * Step 2 — "Academic" (design: "Website · Step 2 — Academic"). Editable until a fee payment is confirmed.
  */
 class AcademicPage extends Component
 {
@@ -19,15 +21,26 @@ class AcademicPage extends Component
 
     public $matriculation_board_id, $matriculation_mark_type = 'percentage', $matriculation_mark;
     public $higher_secondary_board_id, $higher_secondary_subject, $higher_secondary_mark_type = 'percentage', $higher_secondary_mark;
+    public $draftRestored = false;
+
+    protected $step = 'academic';
+    protected $draftFields = [
+        'matriculation_board_id', 'matriculation_mark_type', 'matriculation_mark',
+        'higher_secondary_board_id', 'higher_secondary_subject', 'higher_secondary_mark_type', 'higher_secondary_mark',
+    ];
 
     public function mount()
     {
-        if ($academic = $this->student()->academicDetail) {
-            $this->fill($academic->only([
-                'matriculation_board_id', 'matriculation_mark_type', 'matriculation_mark',
-                'higher_secondary_board_id', 'higher_secondary_subject', 'higher_secondary_mark_type', 'higher_secondary_mark',
-            ]));
+        $student = $this->student();
+
+        if ($academic = $student->academicDetail) {
+            $this->fill($academic->only($this->draftFields));
         }
+
+        if ($this->canEditDetails($student)) {
+            $this->draftRestored = $this->restoreDraft($student);
+        }
+        PortalProgress::remember($student, 'academic');
     }
 
     /**
@@ -44,15 +57,26 @@ class AcademicPage extends Component
         if (isset($allowed[$field]) && in_array($value, $allowed[$field], true)) {
             $this->{$field} = $value;
             $this->resetValidation($field);
+            $this->updated($field, $value); // keep the draft
         }
     }
 
     public function save()
     {
+        return $this->store('portal.documents');
+    }
+
+    public function saveAndPay()
+    {
+        return $this->store('portal.payment');
+    }
+
+    protected function store(string $next)
+    {
         $student = $this->student();
 
         if (!$this->canEditDetails($student)) {
-            return redirect()->route('portal.documents');
+            return redirect()->route($next);
         }
 
         $data = $this->validate(StudentRules::academic([
@@ -65,9 +89,14 @@ class AcademicPage extends Component
         $academic->fill($data)->save();
         $this->auditUpdate($student, 'students', $old, $data, "Student updated academic details on the portal: {$student->full_name}");
 
-        session()->flash('toast', ['type' => 'success', 'message' => 'Academic details saved. Next: documents.']);
+        if ($student->submitted_at) {
+            app(OnboardingService::class)->detailsChanged($student);
+        }
 
-        return redirect()->route('portal.documents');
+        PortalProgress::clearDraft($student, 'academic');
+        session()->flash('toast', ['type' => 'success', 'message' => $next === 'portal.payment' ? 'Academic details saved.' : 'Academic details saved. Next: documents.']);
+
+        return redirect()->route($next);
     }
 
     public function render()

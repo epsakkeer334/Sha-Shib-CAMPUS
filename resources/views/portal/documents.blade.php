@@ -16,6 +16,8 @@
 
     @include('portal.partials.steps', ['current' => 'documents', 'student' => $student])
 
+    @include('portal.partials.fee-summary', ['student' => $student])
+
     <section class="card flush">
         @foreach($types as $type => [$label, $required, $mimes, $maxKb])
             @php
@@ -102,12 +104,17 @@
 
     <div class="row-between">
         <a href="{{ route('portal.academic') }}" class="btn btn-secondary">Back</a>
-        @if($canSubmit)
-            <button type="button" class="btn btn-primary" wire:click="submit" wire:loading.attr="disabled">
-                {{ $student->status === 'rejected' ? 'Submit corrected application' : 'Submit application' }}
-            </button>
-        @else
-            <a href="{{ route('portal.payment') }}" class="btn btn-primary">Continue to payment</a>
-        @endif
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            @if($canSubmit)
+                @if($student->dues()->exists())
+                    <a href="{{ route('portal.payment') }}" class="btn btn-secondary">Go to payment</a>
+                @endif
+                <button type="button" class="btn btn-primary" wire:click="submit" wire:loading.attr="disabled">
+                    {{ $student->status === 'rejected' ? 'Submit corrected application' : 'Submit application' }}
+                </button>
+            @else
+                <a href="{{ route('portal.payment') }}" class="btn btn-primary">Continue to payment</a>
+            @endif
+        </div>
     </div>
 </main>

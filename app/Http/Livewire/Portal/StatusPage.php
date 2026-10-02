@@ -4,6 +4,7 @@ namespace App\Http\Livewire\Portal;
 
 use App\Http\Livewire\Portal\Concerns\StudentPortalPage;
 use App\Models\Admin\EnrollmentApproval;
+use App\Support\PortalProgress;
 use Livewire\Component;
 
 /**
@@ -27,12 +28,12 @@ class StatusPage extends Component
         $pendingPayments = $student->payments->where('status', 'pending_verification');
         $outstanding = $student->outstandingAmount();
 
-        // Next step for a draft application
-        $nextStep = match (true) {
-            !$student->hasAddressDetails() => ['portal.details', 'your details'],
-            !$student->academicDetail()->exists() => ['portal.academic', 'academic details'],
-            default => ['portal.documents', 'documents and submit'],
-        };
+        // Where "Continue" leads: the step the student was on (or the first incomplete one)
+        $resume = PortalProgress::resumeRoute($student);
+        $nextStep = [$resume === 'portal.status' ? 'portal.documents' : $resume, [
+            'portal.details' => 'your details', 'portal.academic' => 'academic details',
+            'portal.documents' => 'documents and submit', 'portal.payment' => 'payment',
+        ][$resume] ?? 'documents and submit'];
 
         return view('portal.status', compact(
             'student', 'docGate', 'feeGate', 'required', 'latestDocs', 'rejectedDocs', 'verifiedCount', 'pendingPayments', 'outstanding', 'nextStep'

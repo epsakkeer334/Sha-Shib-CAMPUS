@@ -1,7 +1,9 @@
-{{-- Portal form field. Params: name, label, type=text, required=false, options (select), placeholder, hint, live=false, disabled=false, attrs='' --}}
+{{-- Portal form field. Params: name, label, type=text, required=false, options (select), placeholder, hint, live=false, disabled=false --}}
 @php
     $type = $type ?? 'text';
-    $model = !empty($live) ? 'wire:model' : 'wire:model.defer';
+    // "lazy": the value reaches the server when the student leaves the field, so unsaved
+    // entries are kept as a draft (restored after signing in again). Passwords stay deferred.
+    $model = !empty($live) ? 'wire:model' : ($type === 'password' ? 'wire:model.defer' : 'wire:model.lazy');
     $id = 'f_' . $name;
 @endphp
 <label class="field" for="{{ $id }}">

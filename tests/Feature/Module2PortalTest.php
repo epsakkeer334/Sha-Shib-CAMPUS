@@ -74,7 +74,17 @@ class Module2PortalTest extends TestCase
 
     protected function register(array $override = [])
     {
-        $values = array_merge([
+        $component = Livewire::test(DetailsPage::class);
+        foreach ($this->registrationValues($override) as $field => $value) {
+            $component->set($field, $value);
+        }
+
+        return $component->call('save');
+    }
+
+    protected function registrationValues(array $override = []): array
+    {
+        return array_merge([
             'email' => uniqid('ananya') . '@mail.test', 'phone' => '+9198' . random_int(10000000, 99999999),
             'password' => 'secret123', 'password_confirmation' => 'secret123',
             'institute_id' => $this->inst->id, 'course_id' => $this->course->id, 'joining_date' => now()->toDateString(),
@@ -84,13 +94,6 @@ class Module2PortalTest extends TestCase
             'address' => 'TC 14/221', 'country_id' => $this->country->id, 'state_id' => $this->state->id,
             'city' => 'Thiruvananthapuram', 'pincode' => '695010', 'parent_name' => 'Suresh Menon', 'parent_phone' => '+919447055211',
         ], $override);
-
-        $component = Livewire::test(DetailsPage::class);
-        foreach ($values as $field => $value) {
-            $component->set($field, $value);
-        }
-
-        return $component->call('save');
     }
 
     protected function completeApplication(): Student
@@ -146,11 +149,11 @@ class Module2PortalTest extends TestCase
         $student->refresh();
         $this->assertSame('pending_approval', $student->status);
         $this->assertNotNull($student->gate(EnrollmentApproval::DOCUMENTS));
-        $this->assertSame(1, $student->dues()->count()); // generated from the fee structure on submit
+        $this->assertSame(1, $student->dues()->count()); // generated from the fee structure at registration (not duplicated on submit)
 
-        // Details & academic are locked while under review
-        Livewire::test(DetailsPage::class)->set('city', 'Kochi')->call('save')->assertDispatchedBrowserEvent('show-toast');
-        $this->assertSame('Thiruvananthapuram', $student->fresh()->city);
+        // Details stay editable after submission while no payment is confirmed
+        Livewire::test(DetailsPage::class)->set('city', 'Kochi')->call('save')->assertHasNoErrors()->assertRedirect(route('portal.academic'));
+        $this->assertSame('Kochi', $student->fresh()->city);
 
         // Every portal page renders for the signed-in student
         foreach (['portal.status', 'portal.details', 'portal.academic', 'portal.documents', 'portal.payment'] as $route) {
@@ -217,16 +220,141 @@ class Module2PortalTest extends TestCase
         Livewire::test(PaymentPage::class)->assertSet('due_id', null)->assertSee('Being confirmed');
     }
 
-    public function test_draft_student_cannot_pay_and_disabled_methods_are_hidden()
+    public function test_fees_are_shown_at_registration_and_pay_now_works_before_submitting()
+    {
+        $this->enableGpay();
+
+        // Step 1 shows the fees of the chosen course
+        Livewire::test(DetailsPage::class)
+            ->set('institute_id', $this->inst->id)->set('course_id', $this->course->id)
+            ->assertSee('Fees for this course')->assertSee('Admission fee')->assertSee('₹15,000')->assertSee('Save and pay now');
+
+        // "Save and pay now" registers and opens the payment step; fees exist already
+        $this->register()->assertRedirect(route('portal.academic'));
+        Auth::logout();
+        $component = Livewire::test(DetailsPage::class);
+        foreach ($this->registrationValues(['email' => uniqid('pay') . '@mail.test', 'phone' => '+9197' . random_int(10000000, 99999999)]) as $field => $value) {
+            $component->set($field, $value);
+        }
+        $component->call('saveAndPay')->assertHasNoErrors()->assertRedirect(route('portal.payment'));
+
+        $student = Auth::user()->student;
+        $this->assertSame('draft', $student->status);
+        $this->assertSame(1, $student->dues()->count());
+
+        // Draft application can pay; the fee summary on other steps offers "Pay now"
+        Livewire::test(AcademicPage::class)->assertSee('Pay now');
+        $due = $student->dues()->first();
+        Livewire::test(PaymentPage::class)->assertSet('due_id', $due->id)->assertSee('You can pay now')
+            ->set('utr', '627514903318')->set('proof', UploadedFile::fake()->image('gpay.png'))
+            ->call('pay')->assertHasNoErrors();
+        $this->assertSame('pending_verification', $student->payments()->first()->status);
+    }
+
+    public function test_office_only_institute_shows_no_online_transfer()
     {
         $this->register()->assertHasNoErrors();
-        Livewire::test(PaymentPage::class)->assertSee('Submit your application first')->call('pay')->assertForbidden();
-
-        // UPI not enabled for the institute → only the office option
-        $student = Auth::user()->student;
-        $student->update(['status' => 'pending_approval']);
-        app(\App\Services\FeeService::class)->generateDues($student);
         Livewire::test(PaymentPage::class)->assertSet('setting_id', null)->assertSee('Online transfer is not set up for your institute yet');
+    }
+
+    public function test_details_are_editable_until_a_payment_is_confirmed()
+    {
+        $this->enableGpay();
+        $student = $this->completeApplication();
+        Livewire::test(DocumentsPage::class)->call('submit');
+
+        // Course change is refused once a payment is submitted
+        $otherCourse = Course::create(['name' => 'Other course', 'code' => 'OC-' . uniqid(), 'duration_months' => 12, 'total_semesters' => 2, 'status' => true]);
+        InstituteCourse::create(['institute_id' => $this->inst->id, 'course_id' => $otherCourse->id, 'status' => true]);
+
+        Livewire::test(PaymentPage::class)->set('utr', '627514903318')->set('proof', UploadedFile::fake()->image('gpay.png'))->call('pay');
+        Livewire::test(DetailsPage::class)->set('course_id', $otherCourse->id)->call('save')->assertHasErrors(['course_id']);
+
+        // Accounts confirms the payment → details are locked
+        $payment = $student->payments()->first();
+        $accounts = User::create(['name' => 'Acc', 'email' => uniqid() . '@staff.test', 'password' => bcrypt('x'), 'institute_id' => $this->inst->id, 'status' => true]);
+        $accounts->assignRole('accounts');
+        $studentUser = Auth::user();
+        $this->actingAs($accounts);
+        app(\App\Services\FeeService::class)->approvePayment($payment);
+
+        $this->actingAs($studentUser);
+        Livewire::test(DetailsPage::class)->assertSee('Your fee payment is confirmed')->set('city', 'Kochi')->call('save');
+        $this->assertSame('Thiruvananthapuram', $student->fresh()->city);
+        Livewire::test(AcademicPage::class)->assertSee('Your fee payment is confirmed');
+    }
+
+    public function test_changing_course_before_paying_replaces_the_fees()
+    {
+        $this->register()->assertHasNoErrors();
+        $student = Auth::user()->student;
+        $this->assertSame(['Admission fee'], $student->dues()->pluck('fee_head')->all());
+
+        $otherCourse = Course::create(['name' => 'Other course', 'code' => 'OC-' . uniqid(), 'duration_months' => 12, 'total_semesters' => 2, 'status' => true]);
+        InstituteCourse::create(['institute_id' => $this->inst->id, 'course_id' => $otherCourse->id, 'status' => true]);
+        CourseFee::create(['institute_id' => $this->inst->id, 'course_id' => $otherCourse->id, 'fee_head' => 'Course fee', 'amount' => 9000, 'due_days' => 10, 'status' => true]);
+
+        Livewire::test(DetailsPage::class)->set('course_id', $otherCourse->id)->call('save')->assertHasNoErrors();
+        $this->assertSame(['Course fee'], $student->dues()->pluck('fee_head')->all());
+    }
+
+    public function test_unsaved_entries_are_kept_and_login_resumes_where_the_student_left_off()
+    {
+        $this->register(['email' => 'resume@mail.test'])->assertHasNoErrors();
+        $student = Auth::user()->student;
+
+        // On the academic step the student types a mark but signs out without saving
+        Livewire::test(AcademicPage::class)
+            ->set('matriculation_mark', '88.5')
+            ->call('choose', 'higher_secondary_subject', 'PCM');
+        $this->assertSame('academic', $student->fresh()->portal_last_step);
+
+        $this->get(route('portal.logout'));
+        $this->assertFalse(Auth::check());
+
+        // Signing in again goes back to the academic step, with the typed values restored
+        Livewire::test(LoginPage::class)->set('email', 'resume@mail.test')->set('password', 'secret123')->call('login')
+            ->assertRedirect(route('portal.academic'));
+
+        Livewire::test(AcademicPage::class)
+            ->assertSet('matriculation_mark', '88.5')
+            ->assertSet('higher_secondary_subject', 'PCM')
+            ->assertSet('draftRestored', true)
+            ->assertSee('We restored the changes you had not saved yet');
+
+        // Saving clears the draft
+        Livewire::test(AcademicPage::class)
+            ->set('matriculation_board_id', MatriculationBoard::first()->id)
+            ->set('higher_secondary_board_id', HigherSecondaryBoard::first()->id)->set('higher_secondary_mark', '90')
+            ->call('save')->assertHasNoErrors();
+        $this->assertSame([], \App\Support\PortalProgress::draft($student->fresh(), 'academic'));
+
+        // Every step can be opened directly, back and forward
+        foreach (['portal.details', 'portal.academic', 'portal.documents', 'portal.payment', 'portal.details'] as $route) {
+            $this->get(route($route))->assertOk();
+        }
+        $this->assertSame('details', $student->fresh()->portal_last_step);
+    }
+
+    public function test_detail_change_after_gate_one_approval_reopens_it()
+    {
+        $student = $this->completeApplication();
+        Livewire::test(DocumentsPage::class)->call('submit');
+        $studentUser = Auth::user();
+
+        $admin = User::create(['name' => 'Admin', 'email' => uniqid() . '@staff.test', 'password' => bcrypt('x'), 'institute_id' => $this->inst->id, 'status' => true]);
+        $admin->assignRole('institute-admin');
+        $this->actingAs($admin);
+        $verify = Livewire::test(DocumentVerificationComponent::class)->call('select', $student->id);
+        foreach ($student->documents as $doc) {
+            $verify->call('verify', $doc->id);
+        }
+        $verify->call('approveGate');
+        $this->assertTrue($student->fresh()->gateApproved(EnrollmentApproval::DOCUMENTS));
+
+        $this->actingAs($studentUser);
+        Livewire::test(DetailsPage::class)->set('last_name', 'Menon Nair')->call('save')->assertHasNoErrors();
+        $this->assertFalse($student->fresh()->gateApproved(EnrollmentApproval::DOCUMENTS));
     }
 
     // ------------------------------------------------------------------ access
@@ -264,8 +392,9 @@ class Module2PortalTest extends TestCase
             ->assertSet('errorMessage', 'The email or password is not correct.');
         $this->assertFalse(Auth::check());
 
+        // Registered but academic details not saved yet → resumes at the academic step
         Livewire::test(LoginPage::class)->set('email', 'login-test@mail.test')->set('password', 'secret123')->call('login')
-            ->assertRedirect(route('portal.status'));
+            ->assertRedirect(route('portal.academic'));
         $this->assertTrue(Auth::check());
         Auth::logout();
 

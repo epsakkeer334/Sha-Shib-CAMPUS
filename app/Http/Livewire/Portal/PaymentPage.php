@@ -6,6 +6,7 @@ use App\Http\Livewire\Portal\Concerns\StudentPortalPage;
 use App\Models\Admin\InstitutePaymentGateway;
 use App\Models\Admin\StudentDue;
 use App\Services\FeeService;
+use App\Support\PortalProgress;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -13,6 +14,7 @@ use RuntimeException;
 
 /**
  * Step 4 — "Payment" (design: "Website · Step 4 — Payment").
+ * Open from registration onwards (fees are added when the student registers) until everything is paid.
  * Students pay by GPay / UPI transfer (UTR + screenshot → Accounts confirms) or at the office.
  * Online gateways appear here once one is integrated.
  */
@@ -24,7 +26,11 @@ class PaymentPage extends Component
 
     public function mount()
     {
-        $first = $this->payableDues()->first();
+        PortalProgress::remember($this->student(), 'payment');
+
+        // "Pay now" links pass the fee to pay (?due=); otherwise the first payable fee.
+        $payable = $this->payableDues();
+        $first = $payable->firstWhere('id', (int) request()->query('due')) ?? $payable->first();
         $this->due_id = optional($first)->id;
         $this->amount = $first ? $first->payableBalance() : null;
         $this->setting_id = optional($this->upiSettings()->first())->id;
@@ -66,7 +72,7 @@ class PaymentPage extends Component
     public function pay()
     {
         $student = $this->student();
-        abort_if($student->status === 'draft', 403);
+        abort_unless(in_array($student->status, ['draft', 'pending_docs', 'pending_approval', 'rejected', 'er_issued', 'active'], true), 403);
 
         $due = $this->due_id ? StudentDue::where('student_id', $student->id)->find($this->due_id) : null;
         $setting = $this->upiSettings()->firstWhere('id', (int) $this->setting_id);

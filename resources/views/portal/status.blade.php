@@ -56,6 +56,8 @@
         </section>
     @endforeach
 
+    @include('portal.partials.fee-summary', ['student' => $student])
+
     {{-- Progress --}}
     <section class="card" style="gap: 4px;">
         <div class="row-between" style="margin-bottom: 16px; align-items: baseline;">

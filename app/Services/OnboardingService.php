@@ -189,6 +189,20 @@ class OnboardingService
         $this->refreshStatus($student);
     }
 
+    /**
+     * The student changed personal / academic details after submission: if Gate 1 was already
+     * approved, the admin must look again.
+     */
+    public function detailsChanged(Student $student): void
+    {
+        $gate = $student->gate(EnrollmentApproval::DOCUMENTS);
+
+        if ($gate && $gate->status === 'approved' && !$student->er_number) {
+            $gate->update(['status' => 'pending', 'approved_by' => null, 'approved_at' => null]);
+            $this->audit('reopen_gate', 'enrollment', $student, ['description' => 'Gate 1 reopened: the student changed their details after approval']);
+        }
+    }
+
     // ------------------------------------------------------------------ 2.2 document verification
 
     public function verifyDocument(StudentDocument $document, ?string $remarks = null): void

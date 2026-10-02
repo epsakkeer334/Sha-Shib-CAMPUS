@@ -6,6 +6,7 @@ use App\Http\Livewire\Portal\Concerns\StudentPortalPage;
 use App\Models\Admin\EnrollmentApproval;
 use App\Models\Admin\Student;
 use App\Services\OnboardingService;
+use App\Support\PortalProgress;
 use App\Support\StudentRules;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -19,6 +20,11 @@ class DocumentsPage extends Component
     use StudentPortalPage, WithFileUploads;
 
     public $upload_kyc_photo, $upload_medical_certificate, $upload_marksheet_10, $upload_marksheet_12, $upload_other;
+
+    public function mount()
+    {
+        PortalProgress::remember($this->student(), 'documents');
+    }
 
     /**
      * Uploads are allowed until Gate 1 (document check) is approved; a verified file stays as it is.
