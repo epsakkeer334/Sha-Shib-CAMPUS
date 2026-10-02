@@ -77,7 +77,7 @@ Only Super Admin adds/edits institutes. Students are created by Module 2 (onboar
 
 **Side menu** ✅ — role × menu matrix in `config/menu.php`, rendered by `App\Services\MenuService`. An item shows when its route exists and the user has the listed role/permission, so menu items for Modules 2–8 appear automatically as each module is built. Non-Super-Admin dashboards show the same items as quick links.
 
-**Permissions** ✅ — defined in `config/camp.php` → `permissions` (Module 1: `institutes.manage`, `users.view/create/update/delete`, `roles.manage`, `audit.view`, `notifications.view`, `serials.manage`; planned: `masters.manage` — Super Admin only, for Module 1A; `payments.collect`, `payments.verify`, `payments.refund` — Accounts, for Module 2); editable per role on the Roles & Permissions screen. Super Admin passes every check (`Gate::before`).
+**Permissions** ✅ — defined in `config/camp.php` → `permissions` (Module 1: `institutes.manage`, `users.view/create/update/delete`, `roles.manage`, `audit.view`, `notifications.view`, `serials.manage`; Module 1A: `masters.manage` ✅ — Super Admin only, hidden from the matrix; `institute_courses.view` / `institute_courses.manage` ✅ — default for Institute Admin, own institute only (Super Admin: all institutes); planned: `payments.collect`, `payments.verify`, `payments.refund` — Accounts, for Module 2); editable per role on the Roles & Permissions screen. Super Admin passes every check (`Gate::before`).
 
 ---
 

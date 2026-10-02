@@ -45,6 +45,10 @@ return [
         'Master Data' => [
             'masters.manage' => 'Manage master data (Super Admin only)',
         ],
+        'Institute Courses' => [
+            'institute_courses.view' => 'View courses offered by the institute',
+            'institute_courses.manage' => 'Assign / activate / remove institute courses',
+        ],
         'Users' => [
             'users.view' => 'View users',
             'users.create' => 'Create users',
@@ -70,7 +74,7 @@ return [
 
     // Default permissions per role (super-admin gets everything through Gate::before).
     'default_role_permissions' => [
-        'institute-admin' => ['users.view', 'users.create', 'users.update', 'users.delete', 'audit.view', 'notifications.view'],
+        'institute-admin' => ['users.view', 'users.create', 'users.update', 'users.delete', 'audit.view', 'notifications.view', 'institute_courses.view', 'institute_courses.manage'],
         'accounts' => [],
         'training-manager' => [],
         'bic' => [],

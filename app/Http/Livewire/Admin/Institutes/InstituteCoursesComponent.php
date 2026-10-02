@@ -12,8 +12,11 @@ use Illuminate\Validation\Rule;
 use Livewire\Component;
 
 /**
- * Institute Management → Institute Courses (Super Admin only):
- * which master-data courses each institute offers. Inactive = not offered to new students.
+ * Institute Management → Institute Courses: which master-data courses each institute offers.
+ * Inactive = not offered to new students.
+ *  - institute_courses.view   → see the list
+ *  - institute_courses.manage → assign / activate / remove
+ * Super Admin works on any institute; everyone else only on their own institute.
  */
 class InstituteCoursesComponent extends Component
 {
@@ -41,10 +44,16 @@ class InstituteCoursesComponent extends Component
 
     public function mount($institute_id = null)
     {
-        $this->authorizeSuperAdmin();
+        $this->authorizeView();
+        $user = Auth::user();
+
+        // Institute users always work on their own institute (another institute's id → 404).
+        if (!$user->isSuperAdmin()) {
+            $institute_id = $institute_id ?? $user->institute_id;
+        }
 
         if ($institute_id) {
-            $institute = Institute::findOrFail($institute_id);
+            $institute = Institute::visibleTo($user)->findOrFail($institute_id);
             $this->scopeInstituteId = $institute->id;
             $this->scopeInstituteName = $institute->name . ' (' . $institute->code . ')';
         }
@@ -52,12 +61,30 @@ class InstituteCoursesComponent extends Component
 
     public function hydrate()
     {
-        $this->authorizeSuperAdmin();
+        $this->authorizeView();
+
+        // Cannot be changed from the browser by institute users.
+        if (!Auth::user()->isSuperAdmin()) {
+            $this->scopeInstituteId = Auth::user()->institute_id;
+        }
     }
 
-    protected function authorizeSuperAdmin()
+    protected function authorizeView()
     {
-        abort_unless(Auth::user() && Auth::user()->isSuperAdmin(), 403);
+        abort_unless(Auth::user() && Auth::user()->can('institute_courses.view'), 403);
+    }
+
+    protected function authorizeManage()
+    {
+        abort_unless(Auth::user()->can('institute_courses.manage'), 403);
+    }
+
+    /**
+     * Course links the user may change: all for Super Admin, own institute for others.
+     */
+    protected function links()
+    {
+        return InstituteCourse::visibleTo(Auth::user());
     }
 
     protected function rules()
@@ -81,6 +108,7 @@ class InstituteCoursesComponent extends Component
 
     public function openModal()
     {
+        $this->authorizeManage();
         $this->resetValidation();
         $this->resetFields();
         $this->institute_id = $this->scopeInstituteId;
@@ -89,7 +117,8 @@ class InstituteCoursesComponent extends Component
 
     public function edit($id)
     {
-        $link = InstituteCourse::with(['institute', 'course'])->findOrFail($id);
+        $this->authorizeManage();
+        $link = $this->links()->with(['institute', 'course'])->findOrFail($id);
 
         $this->resetValidation();
         $this->resetFields();
@@ -104,10 +133,17 @@ class InstituteCoursesComponent extends Component
 
     public function save()
     {
+        $this->authorizeManage();
+
+        // Institute users can only assign courses to their own institute, whatever the browser sends.
+        if (!Auth::user()->isSuperAdmin()) {
+            $this->institute_id = Auth::user()->institute_id;
+        }
+
         $this->validate();
 
         if ($this->isEdit) {
-            $link = InstituteCourse::findOrFail($this->recordId);
+            $link = $this->links()->findOrFail($this->recordId);
             $old = ['status' => $link->status];
             $link->update(['status' => (bool) $this->status]);
             $this->auditUpdate($link, 'institute_courses', $old, ['status' => $link->status], 'Updated course offering: ' . $this->linkLabel($link));
@@ -155,13 +191,15 @@ class InstituteCoursesComponent extends Component
 
     public function confirmDelete($id)
     {
+        $this->authorizeManage();
         $this->confirmingDeleteId = $id;
         $this->dispatchBrowserEvent('open-institute-course-delete-modal');
     }
 
     public function delete()
     {
-        $link = InstituteCourse::find($this->confirmingDeleteId);
+        $this->authorizeManage();
+        $link = $this->links()->find($this->confirmingDeleteId);
 
         if ($link) {
             // Once students exist (Module 2), links with enrolled students must be set Inactive instead.
@@ -202,9 +240,10 @@ class InstituteCoursesComponent extends Component
         }
 
         return view('livewire.admin.institutes.institute-courses-component', [
-            'institutes' => Institute::orderBy('name')->get(['id', 'name', 'code']),
+            'institutes' => Institute::visibleTo(Auth::user())->orderBy('name')->get(['id', 'name', 'code']),
             'availableCourses' => $availableCourses,
-            'editing' => $this->isEdit ? InstituteCourse::with(['institute', 'course'])->find($this->recordId) : null,
+            'editing' => $this->isEdit ? $this->links()->with(['institute', 'course'])->find($this->recordId) : null,
+            'canManage' => Auth::user()->can('institute_courses.manage'),
         ])->layout('layouts.admin.master');
     }
 }

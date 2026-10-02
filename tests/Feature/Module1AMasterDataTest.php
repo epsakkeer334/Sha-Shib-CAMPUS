@@ -172,16 +172,17 @@ class Module1AMasterDataTest extends TestCase
             ->assertHasNoErrors();
     }
 
-    public function test_only_super_admin_can_open_master_data_and_institute_courses()
+    public function test_only_super_admin_can_open_master_data()
     {
         $routes = ['admin.masters.qualifications', 'admin.masters.courses', 'admin.masters.matriculation-boards',
             'admin.masters.higher-secondary-boards', 'admin.masters.religions', 'admin.masters.categories',
-            'admin.masters.countries', 'admin.masters.states', 'admin.masters.payment-gateways', 'admin.institute-courses'];
+            'admin.masters.countries', 'admin.masters.states', 'admin.masters.payment-gateways'];
 
         $this->actingAs($this->super);
         foreach ($routes as $route) {
             $this->get(route($route))->assertOk();
         }
+        $this->get(route('admin.institute-courses'))->assertOk();
         $this->get(route('admin.institute-courses.institute', $this->institute->id))->assertOk();
 
         $this->actingAs($this->makeUser('institute-admin', $this->institute));
@@ -234,6 +235,65 @@ class Module1AMasterDataTest extends TestCase
         $this->assertNotSoftDeleted($c1);
     }
 
+    public function test_institute_admin_manages_only_own_institute_courses()
+    {
+        $other = Institute::create([
+            'name' => 'Delta Aero ' . uniqid(),
+            'established_year' => 2012,
+            'code' => Institute::generateCode('Delta Aero', 2012),
+            'email' => uniqid() . '@inst.test',
+            'phone' => (string) random_int(1000000000, 9999999999),
+            'status' => true,
+        ]);
+        $c1 = $this->makeCourse('D1-' . uniqid());
+        $otherLink = InstituteCourse::create(['institute_id' => $other->id, 'course_id' => $c1->id, 'status' => true]);
+
+        $admin = $this->makeUser('institute-admin', $this->institute);
+        $this->actingAs($admin);
+
+        $this->get(route('admin.institute-courses'))->assertOk();
+        $this->get(route('admin.institute-courses.institute', $this->institute->id))->assertOk();
+        $this->get(route('admin.institute-courses.institute', $other->id))->assertNotFound();
+
+        // Page is locked to own institute; a forged institute_id is ignored on save.
+        Livewire::test(InstituteCoursesComponent::class)
+            ->assertSet('scopeInstituteId', $this->institute->id)
+            ->call('openModal')
+            ->set('institute_id', $other->id)
+            ->set('course_ids', [$c1->id])
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertTrue(InstituteCourse::where('institute_id', $this->institute->id)->where('course_id', $c1->id)->exists());
+        $this->assertSame(1, InstituteCourse::where('institute_id', $other->id)->count());
+
+        // Cannot edit or delete another institute's course link.
+        $this->expectException(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
+        Livewire::test(InstituteCoursesComponent::class)->call('edit', $otherLink->id);
+    }
+
+    public function test_institute_courses_permissions_view_and_manage()
+    {
+        $admin = $this->makeUser('institute-admin', $this->institute);
+        $instAdminRole = \Spatie\Permission\Models\Role::findByName('institute-admin');
+
+        // View only: page opens, but no assign / edit
+        $instAdminRole->revokePermissionTo('institute_courses.manage');
+        $this->actingAs($admin->fresh());
+        $this->get(route('admin.institute-courses'))->assertOk()->assertDontSee('Assign Courses');
+        Livewire::test(InstituteCoursesComponent::class)->call('openModal')->assertForbidden();
+
+        // No view permission: page forbidden, menu item hidden
+        $instAdminRole->revokePermissionTo('institute_courses.view');
+        $this->actingAs($admin->fresh());
+        $this->get(route('admin.institute-courses'))->assertForbidden();
+        $this->assertFalse(collect(MenuService::for($admin->fresh()))->pluck('title')->contains('Organization'));
+
+        // Roles without the permission (e.g. Accounts) cannot open it
+        $this->actingAs($this->makeUser('accounts', $this->institute));
+        $this->get(route('admin.institute-courses'))->assertForbidden();
+    }
+
     public function test_master_data_menu_is_multi_level_and_super_admin_only()
     {
         $sections = collect(MenuService::for($this->super))->keyBy('title');
@@ -246,9 +306,10 @@ class Module1AMasterDataTest extends TestCase
             array_column($master['children'][0]['children'], 'label')
         );
 
-        $instAdminSections = array_column(MenuService::for($this->makeUser('institute-admin', $this->institute)), 'title');
-        $this->assertNotContains('Configuration', $instAdminSections);
-        $this->assertNotContains('Organization', $instAdminSections);
+        $instAdminSections = collect(MenuService::for($this->makeUser('institute-admin', $this->institute)))->keyBy('title');
+        $this->assertFalse($instAdminSections->has('Configuration'));
+        // Institute Admin sees Institute Management with only Institute Courses (permission-based).
+        $this->assertSame(['Institute Courses'], array_column($instAdminSections['Organization']['items'][0]['children'], 'label'));
 
         // Rendered sidebar contains the nested markup
         $this->actingAs($this->super);

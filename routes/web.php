@@ -35,8 +35,8 @@ Route::prefix('admin')->middleware(['auth', 'active.user'])->group(function () {
     Route::get('/audit-trail', AuditTrailComponent::class)->name('admin.audit-trail')->middleware('permission:audit.view');
     Route::get('/notifications', NotificationLogComponent::class)->name('admin.notifications')->middleware('permission:notifications.view');
 
-    // Institute Management — courses offered per institute (Super Admin)
-    Route::middleware('role:super-admin')->group(function () {
+    // Institute Management — courses offered per institute (Super Admin: any institute; others: own institute)
+    Route::middleware('permission:institute_courses.view')->group(function () {
         Route::get('/institute-courses', InstituteCoursesComponent::class)->name('admin.institute-courses');
         Route::get('/institutes/{institute_id}/courses', InstituteCoursesComponent::class)->name('admin.institute-courses.institute');
     });

@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\Hash;
 
 /**
  * Roles & permissions from config/camp.php. Safe to re-run: existing roles keep
- * the permissions edited on the Roles & Permissions page; only new roles get defaults.
+ * the permissions edited on the Roles & Permissions page. Defaults are applied only
+ * to new roles, and a newly added permission is given once to its default roles.
  */
 class RoleSeeder extends Seeder
 {
@@ -19,17 +20,28 @@ class RoleSeeder extends Seeder
     {
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
+        $newPermissions = [];
         foreach (config('camp.permissions') as $group) {
             foreach (array_keys($group) as $permission) {
-                Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+                if (Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web'])->wasRecentlyCreated) {
+                    $newPermissions[] = $permission;
+                }
             }
         }
 
         foreach (array_keys(config('camp.roles')) as $roleName) {
             $role = Role::firstOrCreate(['name' => $roleName, 'guard_name' => 'web']);
 
-            if ($role->wasRecentlyCreated && $roleName !== 'super-admin') {
-                $role->syncPermissions(config("camp.default_role_permissions.{$roleName}", []));
+            if ($roleName === 'super-admin') {
+                continue;
+            }
+
+            $defaults = config("camp.default_role_permissions.{$roleName}", []);
+
+            if ($role->wasRecentlyCreated) {
+                $role->syncPermissions($defaults);
+            } elseif ($added = array_intersect($defaults, $newPermissions)) {
+                $role->givePermissionTo($added);
             }
         }
 

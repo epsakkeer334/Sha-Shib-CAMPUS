@@ -17,30 +17,32 @@
             </nav>
         </div>
 
-        <button type="button" wire:click="openModal" class="btn btn-primary d-flex align-items-center shadow-sm">
-            <i class="ti ti-circle-plus me-2"></i> Assign Courses
-        </button>
+        @if($canManage)
+            <button type="button" wire:click="openModal" class="btn btn-primary d-flex align-items-center shadow-sm">
+                <i class="ti ti-circle-plus me-2"></i> Assign Courses
+            </button>
+        @endif
     </div>
 
     <div class="card shadow-sm border-0">
         <livewire:admin.components.table.data-table
             :model-class="\App\Models\Admin\InstituteCourse::class"
-            :columns="[
+            :columns="array_merge([
                 ['label' => '#', 'field' => 'id', 'sortable' => true],
                 ['label' => 'Institute', 'field' => 'institute.name', 'sortable' => false],
                 ['label' => 'Institute Code', 'field' => 'institute.code', 'sortable' => false],
                 ['label' => 'Course', 'field' => 'course.name', 'sortable' => false],
                 ['label' => 'Course Code', 'field' => 'course.code', 'sortable' => false],
                 ['label' => 'Status', 'field' => 'status', 'type' => 'status', 'sortable' => true],
-                ['label' => 'Actions', 'field' => 'actions', 'type' => 'actions', 'actions' => ['edit', 'delete']],
-            ]"
+            ], $canManage ? [['label' => 'Actions', 'field' => 'actions', 'type' => 'actions', 'actions' => ['edit', 'delete']]] : [])"
             :filters="['All' => 'All', 'Active' => 'Active', 'Inactive' => 'Inactive']"
             :extra-filters="$scopeInstituteId ? [['field' => 'institute_id', 'value' => $scopeInstituteId]] : []"
             title="{{ $scopeInstituteName ? 'Courses of ' . $scopeInstituteName : 'Courses Offered by Institutes' }}"
         />
     </div>
 
-    <!-- Assign / Edit Modal -->
+    @if($canManage)
+    <!-- Assign / Edit Modal (only for users who may manage) -->
     <div class="modal fade" id="instituteCourseModal" tabindex="-1" aria-hidden="true" wire:ignore.self>
         <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
             <div class="modal-content border-0 shadow-lg rounded-3">
@@ -156,6 +158,7 @@
             </div>
         </div>
     </div>
+    @endif
 </div>
 
 <script>
