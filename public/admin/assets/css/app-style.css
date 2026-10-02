@@ -96,3 +96,14 @@
 .chosen-select.is-valid + .chosen-container .chosen-choices {
     border-color: #198754;
 }
+
+/* Sidebar: active state for plain (non-collapsible) menu links, e.g. Dashboard, Fee Structure,
+   Document Verification. The theme only styles active collapsible groups, so a plain active link
+   looked unselected. Same look as an active group (Institute Management, Master Data). */
+.sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active {
+    background: #E8E9EA;
+    border-radius: 5px;
+}
+.sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active i {
+    color: #374151;
+}
