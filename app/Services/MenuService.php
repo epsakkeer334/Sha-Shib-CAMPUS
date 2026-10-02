@@ -35,14 +35,23 @@ class MenuService
      */
     public static function flatFor(?User $user): array
     {
-        return array_map(function ($section) {
-            $links = [];
-            foreach ($section['items'] as $item) {
-                array_push($links, ...($item['children'] ?? [$item]));
-            }
+        return array_map(fn ($section) => [
+            'title' => $section['title'],
+            'items' => static::flattenItems($section['items']),
+        ], static::for($user));
+    }
 
-            return ['title' => $section['title'], 'items' => $links];
-        }, static::for($user));
+    /**
+     * Leaf links of a (possibly multi-level) item list.
+     */
+    protected static function flattenItems(array $items): array
+    {
+        $links = [];
+        foreach ($items as $item) {
+            array_push($links, ...(isset($item['children']) ? static::flattenItems($item['children']) : [$item]));
+        }
+
+        return $links;
     }
 
     /**

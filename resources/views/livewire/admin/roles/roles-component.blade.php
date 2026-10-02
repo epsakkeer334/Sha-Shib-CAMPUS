@@ -34,7 +34,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach(config('camp.permissions') as $group => $permissions)
+                        @foreach(\App\Http\Livewire\Admin\Roles\RolesComponent::matrixPermissions() as $group => $permissions)
                             <tr class="table-light">
                                 <td colspan="{{ $roles->count() + 1 }}" class="fw-semibold small text-uppercase">{{ $group }}</td>
                             </tr>

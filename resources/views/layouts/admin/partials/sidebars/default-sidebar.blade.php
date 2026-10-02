@@ -27,35 +27,7 @@
                     <li>
                         <ul>
                             @foreach($section['items'] as $item)
-                                @php $isActive = isActiveMenu(\App\Services\MenuService::activePatterns($item)); @endphp
-
-                                @if(!empty($item['children']))
-                                    {{-- Collapsible group --}}
-                                    <li class="submenu">
-                                        <a href="javascript:void(0);" class="{{ $isActive ? 'active subdrop' : '' }}">
-                                            <i class="{{ $item['icon'] }}"></i>
-                                            <span>{{ $item['label'] }}</span>
-                                            <span class="menu-arrow"></span>
-                                        </a>
-                                        <ul style="{{ $isActive ? 'display: block;' : '' }}">
-                                            @foreach($item['children'] as $child)
-                                                <li>
-                                                    <a href="{{ route($child['route']) }}"
-                                                       class="menu-item {{ isActiveMenu(\App\Services\MenuService::activePatterns($child)) ? 'active' : '' }}">
-                                                        <i class="{{ $child['icon'] }}"></i> {{ $child['label'] }}
-                                                    </a>
-                                                </li>
-                                            @endforeach
-                                        </ul>
-                                    </li>
-                                @else
-                                    <li>
-                                        <a href="{{ route($item['route']) }}" class="{{ $isActive ? 'active' : '' }}">
-                                            <i class="{{ $item['icon'] }}"></i>
-                                            <span>{{ $item['label'] }}</span>
-                                        </a>
-                                    </li>
-                                @endif
+                                @include('layouts.admin.partials.sidebars.menu-item', ['item' => $item, 'level' => 0])
                             @endforeach
                         </ul>
                     </li>

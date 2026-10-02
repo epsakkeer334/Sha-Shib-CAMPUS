@@ -169,6 +169,22 @@ class Institute extends BaseModel
         return $this->hasMany(\App\Models\User::class);
     }
 
+    public function instituteCourses()
+    {
+        return $this->hasMany(InstituteCourse::class);
+    }
+
+    /**
+     * Courses the institute currently offers (active link + active course).
+     */
+    public function offeredCourses()
+    {
+        return $this->belongsToMany(Course::class, 'institute_courses')
+            ->wherePivot('status', true)
+            ->wherePivotNull('deleted_at')
+            ->where('courses.status', true);
+    }
+
     /**
      * Scope to get active institutes only
      */

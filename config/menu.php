@@ -26,9 +26,62 @@ return [
 
     // Module 1 — Core / Foundation
     [
-        'title' => 'Institute Management',
+        'title' => 'Organization',
         'items' => [
-            ['label' => 'Institutes', 'icon' => 'ti ti-building-community', 'route' => 'admin.institutes', 'permission' => 'institutes.manage', 'roles' => ['super-admin'], 'active' => ['admin.institutes*', 'admin.institute-users*']],
+            [
+                'label' => 'Institute Management',
+                'icon' => 'ti ti-building',
+                'children' => [
+                    ['label' => 'Institutes', 'icon' => 'ti ti-building-community', 'route' => 'admin.institutes', 'permission' => 'institutes.manage', 'roles' => ['super-admin'], 'active' => ['admin.institutes', 'admin.institute-users*']],
+                    ['label' => 'Institute Courses', 'icon' => 'ti ti-books', 'route' => 'admin.institute-courses', 'roles' => ['super-admin'], 'active' => ['admin.institute-courses*']],
+                ],
+            ],
+        ],
+    ],
+
+    // Module 1A — Master Data (multi-level: Master Data ▸ group ▸ list)
+    [
+        'title' => 'Configuration',
+        'items' => [
+            [
+                'label' => 'Master Data',
+                'icon' => 'ti ti-database',
+                'children' => [
+                    [
+                        'label' => 'Academic',
+                        'icon' => 'ti ti-school',
+                        'children' => [
+                            ['label' => 'Courses', 'icon' => 'ti ti-books', 'route' => 'admin.masters.courses', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
+                            ['label' => 'Qualifications', 'icon' => 'ti ti-certificate-2', 'route' => 'admin.masters.qualifications', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
+                            ['label' => 'Matriculation Boards', 'icon' => 'ti ti-building-bank', 'route' => 'admin.masters.matriculation-boards', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
+                            ['label' => 'Higher Secondary Boards', 'icon' => 'ti ti-building-bank', 'route' => 'admin.masters.higher-secondary-boards', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
+                        ],
+                    ],
+                    [
+                        'label' => 'Personal',
+                        'icon' => 'ti ti-user-heart',
+                        'children' => [
+                            ['label' => 'Religions', 'icon' => 'ti ti-users', 'route' => 'admin.masters.religions', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
+                            ['label' => 'Categories', 'icon' => 'ti ti-category', 'route' => 'admin.masters.categories', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
+                        ],
+                    ],
+                    [
+                        'label' => 'Location',
+                        'icon' => 'ti ti-map-2',
+                        'children' => [
+                            ['label' => 'Countries', 'icon' => 'ti ti-world', 'route' => 'admin.masters.countries', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
+                            ['label' => 'States', 'icon' => 'ti ti-map-pin', 'route' => 'admin.masters.states', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
+                        ],
+                    ],
+                    [
+                        'label' => 'Finance',
+                        'icon' => 'ti ti-cash',
+                        'children' => [
+                            ['label' => 'Payment Gateways', 'icon' => 'ti ti-credit-card', 'route' => 'admin.masters.payment-gateways', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
+                        ],
+                    ],
+                ],
+            ],
         ],
     ],
     [

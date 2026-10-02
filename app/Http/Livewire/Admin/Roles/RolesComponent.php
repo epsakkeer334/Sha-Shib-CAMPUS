@@ -33,9 +33,22 @@ class RolesComponent extends Component
             ->sortBy(fn ($role) => array_search($role->name, array_keys(config('camp.roles'))));
     }
 
+    /**
+     * Permission groups shown in the matrix (Super-Admin-only permissions are left out).
+     */
+    public static function matrixPermissions(): array
+    {
+        $hidden = config('camp.super_admin_only_permissions', []);
+
+        return collect(config('camp.permissions'))
+            ->map(fn ($group) => array_diff_key($group, array_flip($hidden)))
+            ->filter()
+            ->all();
+    }
+
     protected function permissionNames(): array
     {
-        return collect(config('camp.permissions'))->flatMap(fn ($group) => array_keys($group))->all();
+        return collect(static::matrixPermissions())->flatMap(fn ($group) => array_keys($group))->all();
     }
 
     protected function loadMatrix()

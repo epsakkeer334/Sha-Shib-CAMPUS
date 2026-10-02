@@ -42,6 +42,9 @@ return [
         'Institutes' => [
             'institutes.manage' => 'Manage institutes',
         ],
+        'Master Data' => [
+            'masters.manage' => 'Manage master data (Super Admin only)',
+        ],
         'Users' => [
             'users.view' => 'View users',
             'users.create' => 'Create users',
@@ -61,6 +64,9 @@ return [
             'serials.manage' => 'Manage serial number series',
         ],
     ],
+
+    // Never granted to other roles; hidden from the Roles & Permissions matrix.
+    'super_admin_only_permissions' => ['masters.manage'],
 
     // Default permissions per role (super-admin gets everything through Gate::before).
     'default_role_permissions' => [
@@ -82,6 +88,15 @@ return [
         'MARKSHEET' => ['format' => 'MS-{year}-', 'pad' => 6, 'per_institute' => false],
         'CONSOLIDATED_MARKSHEET' => ['format' => 'CMS-{year}-', 'pad' => 6, 'per_institute' => false],
     ],
+
+    // Master Data fixed lists (not database tables) — see plan.md Module 1A.
+    'payment_gateway_types' => [
+        'online' => 'Online gateway (card / netbanking)',
+        'upi' => 'UPI (GPay / QR)',
+        'offline' => 'Offline (cash / bank / cheque)',
+    ],
+    'higher_secondary_subjects' => ['PCM' => 'PCM', 'PCB' => 'PCB', 'COMMERCE' => 'Commerce', 'ARTS' => 'Arts'],
+    'mark_types' => ['percentage' => 'Percentage (%)', 'cgpa' => 'CGPA'],
 
     // Business rules (see plan.md).
     'pass_percentage' => 75,

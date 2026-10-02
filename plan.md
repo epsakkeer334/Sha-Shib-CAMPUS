@@ -77,7 +77,7 @@ Only Super Admin adds/edits institutes. Students are created by Module 2 (onboar
 
 **Side menu** ✅ — role × menu matrix in `config/menu.php`, rendered by `App\Services\MenuService`. An item shows when its route exists and the user has the listed role/permission, so menu items for Modules 2–8 appear automatically as each module is built. Non-Super-Admin dashboards show the same items as quick links.
 
-**Permissions** ✅ — defined in `config/camp.php` → `permissions` (Module 1: `institutes.manage`, `users.view/create/update/delete`, `roles.manage`, `audit.view`, `notifications.view`, `serials.manage`); editable per role on the Roles & Permissions screen. Super Admin passes every check (`Gate::before`).
+**Permissions** ✅ — defined in `config/camp.php` → `permissions` (Module 1: `institutes.manage`, `users.view/create/update/delete`, `roles.manage`, `audit.view`, `notifications.view`, `serials.manage`; planned: `masters.manage` — Super Admin only, for Module 1A; `payments.collect`, `payments.verify`, `payments.refund` — Accounts, for Module 2); editable per role on the Roles & Permissions screen. Super Admin passes every check (`Gate::before`).
 
 ---
 
@@ -176,11 +176,131 @@ Roles via spatie tables (`2025_11_26_064444_create_permission_tables`).
 
 ---
 
+### Module 1A — Master Data (Super Admin only)
+
+**Status:** ✅ implemented (tests: `tests/Feature/Module1AMasterDataTest.php`), except `institute_payment_gateways` (per-institute merchant settings) — moved to Module 2 with student payments.
+
+**Purpose:** central lookup lists used by student forms and other modules. Not institute-scoped: only Super Admin can create/edit/deactivate; every other role only sees them as dropdown options. A master row already used by students is **deactivated** (status off), never deleted.
+
+**Livewire components:** `Admin\Masters\QualificationsManager`, `CoursesManager`, `ReligionsManager`, `CategoriesManager`, `MatriculationBoardsManager`, `HigherSecondaryBoardsManager`, `CountriesManager`, `StatesManager`, `PaymentGatewaysManager` ✅ — all subclasses of one shared `MasterCrudComponent` (list, modal, status switch at the bottom, audit trail, "in use" delete protection via the `IsMasterData` trait). Institute Management → **Institute Courses** (`Admin\Institutes\InstituteCoursesComponent`) ✅ manages `institute_courses`; each institute row also has a Courses button.
+
+**Permission:** `masters.manage` (Super Admin only — hidden from the Roles & Permissions matrix). **Side menu** ✅ (multi-level, `config/menu.php`):
+
+```
+ORGANIZATION
+  Institute Management ▸ Institutes, Institute Courses
+CONFIGURATION
+  Master Data ▸
+     Academic ▸ Courses, Qualifications, Matriculation Boards, Higher Secondary Boards
+     Personal ▸ Religions, Categories
+     Location ▸ Countries, States
+     Finance  ▸ Payment Gateways
+```
+
+**Tables** (each also has the `BaseModel` columns). Every master table has a **`status`** field (Active / Inactive, default Active), toggled from its screen like Institutes.
+
+`qualifications`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| name | string unique | e.g. SSLC, Plus Two, Diploma, Degree |
+| status | boolean default true | Active / Inactive — inactive rows are hidden from dropdowns but kept on existing records |
+
+
+`courses` (the course a student joins — replaces the former `programs` table)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| name | string |  |
+| code | string unique | e.g. B1.1, B2 |
+| duration_months | int |  |
+| total_semesters | int |  |
+| description | text nullable |  |
+| status | boolean default true | Active / Inactive — inactive rows are hidden from dropdowns but kept on existing records |
+
+`institute_courses` (pivot — which courses each institute offers)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| institute_id | bigint FK |  |
+| course_id | bigint FK |  |
+| status | boolean default true | Active / Inactive — inactive = institute no longer offers the course for new students |
+| unique | (institute_id, course_id) | student course dropdown lists only the institute's active courses |
+
+`countries` ✅ / `states` ✅ (exist — `name`, `code`, **`status`** boolean; states have `country_id`). Only Super Admin CRUD screens are new.
+
+`religions`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| name | string unique |  |
+| status | boolean default true | Active / Inactive — inactive rows are hidden from dropdowns but kept on existing records |
+
+`categories` (category based on religion)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| religion_id | bigint FK |  |
+| name | string |  |
+| status | boolean default true | Active / Inactive — inactive rows are hidden from dropdowns but kept on existing records |
+| unique | (religion_id, name) | dependent dropdown: filtered by selected religion |
+
+`matriculation_boards`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| name | string unique | e.g. CBSE, ICSE, State Board |
+| status | boolean default true | Active / Inactive — inactive rows are hidden from dropdowns but kept on existing records |
+
+`higher_secondary_boards`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| name | string unique |  |
+| status | boolean default true | Active / Inactive — inactive rows are hidden from dropdowns but kept on existing records |
+
+`payment_gateways` (payment methods offered — Razorpay, PayU, PhonePe, Stripe, **GPay (UPI)**, Cash, Bank Transfer, Cheque ...)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| name | string unique | e.g. Razorpay, GPay (UPI), Cash |
+| code | string unique | e.g. `razorpay`, `gpay`, `cash` — selects the driver class in code |
+| type | enum(online,upi,offline) | online = card/netbanking gateway with webhook; upi = GPay/UPI (QR or UPI ID, verified by UTR); offline = cash/bank/cheque entered by Accounts |
+| logo | string nullable |  |
+| sort_order | int | display order on the payment screen |
+| status | boolean default true | Active / Inactive — inactive rows are hidden from dropdowns but kept on existing records |
+
+`institute_payment_gateways` (which gateways each institute accepts, with its own merchant account) — *to be built with Module 2 payments*
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| institute_id | bigint FK |  |
+| payment_gateway_id | bigint FK |  |
+| merchant_id | string nullable | gateway merchant / account id |
+| upi_id | string nullable | for GPay/UPI, e.g. `institute@okaxis` (shown with a QR code) |
+| credentials | text nullable | API key/secret, stored **encrypted** (Laravel `encrypted:array` cast), never shown after saving |
+| is_test_mode | boolean default true | sandbox vs live |
+| status | boolean default true | Active / Inactive |
+| unique | (institute_id, payment_gateway_id) |  |
+
+Fixed lists kept in `config/camp.php` (not tables): `higher_secondary_subjects` = PCM, PCB, COMMERCE, ARTS; `mark_types` = percentage, cgpa.
+
+---
+
 ### Module 2 — Student Onboarding & ER Number
 
 **Purpose:** implements Phase 1 (KYC upload, dual-gate approval, ER generation, ID card).
 
-**Livewire components:** `StudentRegistrationForm`, `DocumentUploadWizard`, `AdminDocumentVerification`, `AccountsFeeVerification`, `ERRequestGenerator`, `IDCardIssuance`
+**Livewire components:** `StudentRegistrationForm` (personal, address, parent details), `StudentAcademicForm` (academic information step), `DocumentUploadWizard`, `AdminDocumentVerification`, `AccountsFeeVerification`, `StudentPaymentForm` (student / Accounts: pay a due via online gateway, GPay/UPI or record offline payment), `PaymentVerificationQueue` (Accounts: verify GPay/UPI & offline payments), `PaymentHistory` (receipts per student), `ERRequestGenerator`, `IDCardIssuance`
 
 **Tables**
 
@@ -191,17 +311,39 @@ Roles via spatie tables (`2025_11_26_064444_create_permission_tables`).
 | id | bigint PK |  |
 | institute_id | bigint FK |  |
 | user_id | bigint FK nullable unique | student login account (Student role) |
-| program_id | bigint FK |  |
+| course_id | bigint FK → `courses` | must be a course the institute offers (`institute_courses`) |
 | er_number | string nullable unique | **single source of the ER number** — populated after dual approval |
 | first_name, last_name | string |  |
 | dob | date |  |
 | gender | string |  |
+| qualification_id | bigint FK → `qualifications` |  |
 | email, phone | string |  |
-| address | text |  |
-| parent_name, parent_phone, parent_email | string |  |
+| emergency_contact | string |  |
+| religion_id | bigint FK → `religions` |  |
+| category_id | bigint FK → `categories` | must belong to the selected religion |
+| address | text | street address |
+| country_id | bigint FK → `countries` |  |
+| state_id | bigint FK → `states` | must belong to the selected country |
+| city | string |  |
+| pincode | string |  |
+| parent_name, parent_phone, parent_email, parent_occupation | string |  |
 | joining_date | date | 30-day onboarding window starts here |
 | onboarding_deadline | date | computed = joining_date + 30 |
 | status | enum(draft,pending_docs,pending_approval,er_issued,active,alumni,rejected) |  |
+
+`student_academic_details` (Student Academic Information — one row per student)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| student_id | bigint FK unique |  |
+| matriculation_board_id | bigint FK → `matriculation_boards` |  |
+| matriculation_mark_type | enum(percentage,cgpa) |  |
+| matriculation_mark | decimal(5,2) | 0–100 for percentage, 0–10 for CGPA |
+| higher_secondary_board_id | bigint FK → `higher_secondary_boards` |  |
+| higher_secondary_subject | enum(PCM,PCB,COMMERCE,ARTS) | fixed list from `config/camp.php`, not a table |
+| higher_secondary_mark_type | enum(percentage,cgpa) |  |
+| higher_secondary_mark | decimal(5,2) | same range rule |
 
 `student_documents`
 
@@ -228,7 +370,39 @@ Roles via spatie tables (`2025_11_26_064444_create_permission_tables`).
 | fee_head | string | e.g. admission, semester fee |
 | amount_due, amount_paid | decimal |  |
 | due_date | date |  |
-| status | enum(pending,partial,cleared) | "no dues" = all rows cleared |
+| status | enum(pending,partial,cleared) | "no dues" = all rows cleared; recalculated from successful `student_payments` |
+
+`student_payments` (every payment attempt — online gateway, GPay/UPI or offline)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| institute_id | bigint FK |  |
+| student_id | bigint FK |  |
+| student_due_id | bigint FK nullable | the fee row being paid (null = advance / general payment) |
+| payment_gateway_id | bigint FK → `payment_gateways` |  |
+| amount | decimal(10,2) |  |
+| currency | string(3) default INR |  |
+| gateway_order_id | string nullable | order created at the gateway before payment |
+| gateway_payment_id | string nullable unique | payment id returned by the gateway (prevents double-recording) |
+| transaction_reference | string nullable | **UTR / UPI reference** for GPay, cheque no. or bank ref for offline |
+| payer_upi_id | string nullable | GPay/UPI payer VPA, if available |
+| proof_file_path | string nullable | screenshot / receipt upload for GPay or bank transfer (private disk) |
+| status | enum(initiated,pending_verification,success,failed,refunded) | online: set by gateway callback/webhook (signature verified); GPay/UPI & offline: `pending_verification` until Accounts confirms |
+| paid_at | timestamp nullable |  |
+| verified_by | bigint FK nullable (users, Accounts) | for GPay/UPI & offline payments |
+| verified_at | timestamp nullable |  |
+| receipt_number | string nullable unique | issued on success via `SerialNumberService` (series `RECEIPT`, per institute per year) |
+| gateway_response | json nullable | raw callback/webhook payload for reconciliation |
+| refund_amount | decimal(10,2) nullable |  |
+| refunded_at | timestamp nullable |  |
+| remarks | text nullable |  |
+
+Payment rules:
+- Gateway code lives behind one interface (`PaymentGatewayInterface`: `createOrder`, `verifyCallback`, `refund`) with one driver per `payment_gateways.code` (`RazorpayGateway`, `GPayUpiGateway`, `OfflineGateway` ...) resolved by `PaymentService`, so new gateways are added without touching screens.
+- On `success`: receipt number issued, `student_dues.amount_paid` / `status` recalculated, receipt PDF generated, student notified (`payment_received` via `NotificationService`), entry written to `audit_trail`.
+- Webhooks are idempotent (same `gateway_payment_id` is recorded once) and verified by signature before trusting the status.
+- Accounts verifies GPay/UPI and offline payments (approve / reject with reason) — both audited.
 
 `enrollment_approvals`
 
@@ -279,15 +453,7 @@ Roles via spatie tables (`2025_11_26_064444_create_permission_tables`).
 
 **Tables**
 
-`programs`
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| id | bigint PK |  |
-| institute_id | bigint FK |  |
-| name, code | string |  |
-| duration_months | int |  |
-| total_semesters | int |  |
+Courses come from the Master Data module (`courses` + `institute_courses`); there is no separate `programs` table. (When this module is built, the planned menu item "Programs & Subjects" / `admin.programs` in `config/menu.php` becomes "Courses & Subjects".)
 
 `subjects`
 
@@ -295,7 +461,7 @@ Roles via spatie tables (`2025_11_26_064444_create_permission_tables`).
 | --- | --- | --- |
 | id | bigint PK |  |
 | institute_id | bigint FK nullable | null = central/master subject (used by master question bank) |
-| program_id | bigint FK nullable | null for central subjects |
+| course_id | bigint FK nullable | null for central subjects |
 | name, code | string |  |
 | semester_no | int |  |
 | syllabus_topics | json | list of topics used for % mapping |
@@ -318,7 +484,7 @@ Roles via spatie tables (`2025_11_26_064444_create_permission_tables`).
 | --- | --- | --- |
 | id | bigint PK |  |
 | institute_id | bigint FK |  |
-| program_id | bigint FK |  |
+| course_id | bigint FK |  |
 | exam_type | enum(mid_sem,semester) |  |
 | semester_no | int |  |
 | scheduled_date | date |  |
@@ -505,11 +671,11 @@ Roles via spatie tables (`2025_11_26_064444_create_permission_tables`).
 | --- | --- | --- |
 | id | bigint PK |  |
 | student_id | bigint FK |  |
-| program_id | bigint FK |  |
+| course_id | bigint FK |  |
 | institute_id | bigint FK |  |
 | serial_number | string unique |  |
 | file_path | string |  |
-| generated_at | timestamp | end-of-program aggregate |
+| generated_at | timestamp | end-of-course aggregate |
 
 ---
 
@@ -649,8 +815,9 @@ Export feature: a queued job zips the `document_final_records` of all `documents
 | Phase | Duration (suggested) | Scope |
 | --- | --- | --- |
 | **Sprint 0 — Foundation (Module 1)** | ✅ Done | Laravel/Livewire setup, auth, roles & permissions (seeder + matrix screen), institutes CRUD with auto code, user management, role-based side menu, audit trail + viewer, notification log, `users.institute_id`, `BelongsToInstitute`, `SerialNumberService`, `config/camp.php` |
-| **Sprint 1 — Student Onboarding** | 2 weeks | Student registration (+ user account), document upload wizard, student dues, dual-gate approval (Admin + Accounts), ER generation, ID card issuance |
-| **Sprint 2 — Exam Application & Approval** | 2 weeks | Programs/subjects/syllabus mapping, exam appearance requests, Accounts dues gate + BiC bypass, TM attendance gate, admit card generation |
+| **Sprint 1a — Master Data (Module 1A)** | ✅ Done (per-institute gateway settings → Sprint 1) | Super Admin CRUD for qualifications, courses (+ institute_courses), countries, states, religions, categories, matriculation & higher secondary boards, payment gateways (+ per-institute gateway settings) |
+| **Sprint 1 — Student Onboarding** | 2 weeks | Student registration (+ user account, academic information), document upload wizard, student dues & payments (online gateways, GPay/UPI, offline + Accounts verification, receipts), dual-gate approval (Admin + Accounts), ER generation, ID card issuance |
+| **Sprint 2 — Exam Application & Approval** | 2 weeks | Subjects per course/syllabus mapping, exam appearance requests, Accounts dues gate + BiC bypass, TM attendance gate, admit card generation |
 | **Sprint 3 — Question Bank & Paper Setup** | 1–2 weeks | Question bank CRUD (Super Admin + Institute), exam paper builder |
 | **Sprint 4 — Grading & Results** | 2 weeks | Marks entry (all three modes), result computation (configurable pass %), Super Admin correction workflow, marksheet + consolidated marksheet generation with unique serials |
 | **Sprint 5 — Document Management System** | 2 weeks | Document upload → HoT review → external submission tracking → final repository, 7-day rule scheduled job |
@@ -672,8 +839,12 @@ app/
       Components/          SoftDeleteManager ✅, Table/DataTable ✅
       Dashboard/           Dashboard ✅
       Institutes/          InstitutesComponent ✅
-      Core/                UserManager, RoleAssignment, AuditLogViewer, NotificationCenter
-      Onboarding/          StudentRegistrationForm, DocumentUploadWizard, AdminDocumentVerification, AccountsFeeVerification, ERRequestGenerator, IDCardIssuance
+      Users/               UsersComponent ✅
+      Roles/               RolesComponent ✅
+      AuditTrail/          AuditTrailComponent ✅
+      Notifications/       NotificationLogComponent ✅
+      Masters/             QualificationsManager, CoursesManager, ReligionsManager, CategoriesManager, MatriculationBoardsManager, HigherSecondaryBoardsManager, CountriesManager, StatesManager
+      Onboarding/          StudentRegistrationForm, StudentAcademicForm, DocumentUploadWizard, AdminDocumentVerification, AccountsFeeVerification, ERRequestGenerator, IDCardIssuance
       Exams/               ExamAppearanceApplication, AccountsDuesApproval, BiCOverridePanel, TMAttendanceApproval, AdmitCardGenerator, ExamScheduleManager, SyllabusMappingManager
       QuestionBank/        QuestionBankManager, QuestionUploadBulk, ExamPaperBuilder
       Grading/             MarksEntryGrid, ResultPublisher, MarkCorrectionPanel, MarksheetGenerator, ConsolidatedMarksheetGenerator
@@ -684,11 +855,14 @@ app/
     User.php ✅
     Admin/                 BaseModel ✅, Institute ✅, AuditTrail ✅, Country ✅, State ✅, (one model per new table, extending BaseModel)
   Traits/                  RecordsAuditTrail ✅, BelongsToInstitute
-  Services/                SerialNumberService, NotificationService, PdfGenerationService, ComplianceAggregationService
+  Services/                SerialNumberService ✅, NotificationService ✅, MenuService ✅, PaymentService, PdfGenerationService, ComplianceAggregationService
+    Payments/              PaymentGatewayInterface, RazorpayGateway, GPayUpiGateway, OfflineGateway ... (one driver per payment_gateways.code)
+  Http/Controllers/        PaymentWebhookController (signature-verified, idempotent gateway callbacks)
   Policies/                StudentPolicy, ExamApprovalPolicy, DocumentPolicy, MoUPolicy ...
   Console/Commands/        CheckSevenDayRule, SendMoUExpiryAlerts, RefreshMoUStatus, RefreshComplianceSnapshots
 config/
-  camp.php                 pass_percentage, attendance_threshold, onboarding_days, mou_alert_days, seven_day_rule_days
+  camp.php                 roles, permissions, serial_series, pass_percentage, attendance_threshold, onboarding_days, mou_alert_days, seven_day_rule_days; planned: higher_secondary_subjects, mark_types, `RECEIPT` serial series (payment receipts, per institute per year)
+  menu.php                 side menu role matrix ✅
 database/
   migrations/              one per new table listed in Section 5
   seeders/                 RolesAndPermissionsSeeder, DemoInstituteSeeder
@@ -699,12 +873,13 @@ database/
 ## 9. Open Questions to Resolve Before Sprint 1
 
 1. Digital signatures: are TM/EM/HoT signatures purely a "physically signed, then scanned" status flag (as modeled above), or do you eventually want e-signature capture in-app?
-2. Multi-institute hierarchy: do any institutes share students/programs, or is every student strictly single-institute?
+2. Multi-institute hierarchy: do any institutes share students/courses, or is every student strictly single-institute?
 3. SMS gateway preference (for the notification engine) — affects which Laravel notification channel driver to install.
 4. Should Institute Admins be able to see other institutes' anonymized compliance stats, or is visibility strictly siloed except for Super Admin?
 5. Dues source: will Accounts maintain fee rows in CAMP (`student_dues`), or just set a manual "no dues" flag / import from an external accounts system?
 6. Attendance threshold for the TM gate — what % counts as green (e.g. 75% / 80%), and is it per subject or overall?
 7. Serial numbering: should ER/marksheet/admit card counters run per institute per year, or one global running series?
+8. Payment gateways: which online gateway(s) to integrate first (Razorpay / PayU / PhonePe ...)? For GPay — UPI QR + manual UTR verification by Accounts (as planned), or GPay through a gateway's UPI intent so it is confirmed automatically? Does each institute have its own merchant account?
 
 ---
 

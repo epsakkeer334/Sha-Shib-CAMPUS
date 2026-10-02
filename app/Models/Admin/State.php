@@ -4,10 +4,11 @@ namespace App\Models\Admin;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Traits\IsMasterData;
 
 class State extends Model
 {
-    use SoftDeletes;
+    use SoftDeletes, IsMasterData;
 
     protected $fillable = [
         'country_id',
@@ -26,5 +27,15 @@ class State extends Model
     public function country()
     {
         return $this->belongsTo(Country::class);
+    }
+
+    public function institutes()
+    {
+        return $this->hasMany(Institute::class, 'state_id');
+    }
+
+    protected function usageRelations(): array
+    {
+        return ['institutes'];
     }
 }

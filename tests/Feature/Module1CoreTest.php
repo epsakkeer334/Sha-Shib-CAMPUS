@@ -204,7 +204,9 @@ class Module1CoreTest extends TestCase
 
         // Users + Roles & Permissions sit in one collapsible group; Institutes in its own section.
         $groups = collect(MenuService::for($this->makeUser('super-admin')))->keyBy('title');
-        $this->assertSame(['Institutes'], array_column($groups['Institute Management']['items'], 'label'));
+        $instituteGroup = $groups['Organization']['items'][0];
+        $this->assertSame('Institute Management', $instituteGroup['label']);
+        $this->assertSame(['Institutes', 'Institute Courses'], array_column($instituteGroup['children'], 'label'));
         $group = $groups['User Management']['items'][0];
         $this->assertSame('Users & Permissions', $group['label']);
         $this->assertSame(['Users', 'Roles & Permissions'], array_column($group['children'], 'label'));
