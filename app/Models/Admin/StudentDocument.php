@@ -14,7 +14,7 @@ class StudentDocument extends BaseModel
 
     protected $fillable = [
         'student_id', 'institute_id', 'document_type', 'file_path', 'original_name', 'mime_type', 'size',
-        'uploaded_at', 'verified_by', 'verified_at', 'verification_status', 'remarks', 'created_by', 'updated_by',
+        'uploaded_at', 'verified_by', 'verified_at', 'verification_status', 'remarks', 'previous_rejection', 'created_by', 'updated_by',
     ];
 
     protected $casts = [
@@ -26,6 +26,11 @@ class StudentDocument extends BaseModel
     public function student()
     {
         return $this->belongsTo(Student::class);
+    }
+
+    public function verifier()
+    {
+        return $this->belongsTo(\App\Models\User::class, 'verified_by');
     }
 
     public function getTypeLabelAttribute()

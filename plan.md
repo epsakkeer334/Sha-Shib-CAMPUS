@@ -298,20 +298,20 @@ Fixed lists kept in `config/camp.php` (not tables): `higher_secondary_subjects` 
 
 ### Module 2 — Student Onboarding & ER Number
 
-**Status:** 🟡 in progress (tests: `tests/Feature/Module2StudentOnboardingTest.php`)
+**Status:** ✅ admin side complete (tests: `tests/Feature/Module2StudentOnboardingTest.php`, `tests/Feature/Module2WorkflowTest.php`). Design: canvas “Module 2 — Student Onboarding & ER Number” (admin row implemented in the existing admin theme; student-website row = step 2.6).
 
 | Step | Scope | State |
 | --- | --- | --- |
-| 2.1 Admin-side onboarding | Students list + tab-wise onboarding page for Super Admin / Institute Admin: **Basic Details → Address & Parent → Academic Details → KYC Documents → Review & Submit**; each tab saved separately (draft), Submit → `pending_docs` (documents missing) or `pending_approval`; KYC files on the private disk via an authorised route; draft-only delete; read-only once ER issued | ✅ Done |
-| 2.2 Document verification (Admin gate) | verify / reject each KYC document with remarks | ⬜ Next |
-| 2.3 Dues & payments (Accounts gate) | `student_dues`, `student_payments`, payment gateways per institute, GPay/offline verification, receipts | ⬜ |
-| 2.4 Dual-gate approval → ER number | `enrollment_approvals`, ER via `SerialNumberService`, ER request form PDF | ⬜ |
-| 2.5 ID card | `id_cards`, printable card, TM signature status | ⬜ |
-| 2.6 Student portal onboarding | front-end self-onboarding using the same tables/rules — **after the front-end design is approved** | ⬜ |
+| 2.1 Admin-side onboarding | Students list + tab-wise onboarding (Basic → Address & Parent → Academic → KYC Documents → Review & Submit); each tab saved separately (draft); Submit → `pending_docs` / `pending_approval` and opens both gates | ✅ |
+| 2.2 Document verification — Gate 1 | Queue Pending / Rejected / Gate approved; document cards with Verify / Reject (remarks required, student emailed); re-uploads keep the previous rejection reason; reminder for missing documents; Approve gate (all required documents verified) / Reject gate (application returned → `rejected`, resubmission reopens it); any document change after approval reopens Gate 1 | ✅ |
+| 2.3 Fees & payments — Gate 2 | Fee structure per institute course (`course_fees`) → student dues (generate / add / waive with reason / delete if unpaid); record GPay/UPI (UTR + screenshot) or offline payments (cash, bank, cheque); Accounts queue To verify / Approved / Rejected / Fee gate with amount-vs-balance check; approval issues receipt `RCPT/2026/00001` and recalculates the due; Fee gate approves only when every due is cleared/waived and nothing is pending | ✅ (online gateways: see open question 8) |
+| 2.4 Dual gate → ER number | Both gates approved → ER number `ER-2026-00001` (group-wide series, `SerialNumberService`), status `er_issued`, ER request form + pending ID card created, student emailed; ER form lifecycle printed → TM signed → archived | ✅ |
+| 2.5 ID card | Card preview with KYC photo, print (count kept), Mark signed & issued → student `active`; reprint with reason | ✅ |
+| 2.6 Student portal | Student-website screens of the design (register, academic, documents, payment, status) on the same tables/services; needs per-institute UPI ID / QR (`institute_payment_gateways`) and a student login | ⬜ after the front-end design is approved |
 
-Admin onboarding: routes `admin.students`, `admin.students.create`, `admin.students.edit` (`/admin/students/{student}/onboarding?tab=…`), `admin.students.documents.show`; components `Admin\Students\StudentsComponent`, `Admin\Students\StudentOnboardingComponent`; permissions `students.view/create/update/delete` (default: Institute Admin; Super Admin all institutes); side menu "Student Onboarding ▸ Students ▸ All Students, Add Student". KYC document types, sizes and required flags: `config/camp.php` → `student_document_types`. Master rows and institute-course links used by students can no longer be deleted (deactivate instead).
+Screens & routes: Student Onboarding ▸ Students (All Students, Add Student), Document Verification (`admin.onboarding.documents`, `onboarding.verify_documents`), Payment Verification (`admin.onboarding.payments`, `payments.verify`), ER & ID Cards (`admin.onboarding.enrollment`, `enrollment.manage`), Fee Structure (`admin.onboarding.fee-structure`, `fees.manage`); per student: Onboarding · Fees & Payments (`admin.students.fees`) · Gates, ER & ID card (`admin.students.enrollment`). Printables (browser print / save as PDF — no PDF package): receipt, ER request form, ID card (85.6 × 54 mm). Workflow rules live in `App\Services\OnboardingService` and `App\Services\FeeService` so the student portal reuses them; every action is in the audit trail; student emails are logged in `notifications_log`.
 
-**Purpose:** implements Phase 1 (KYC upload, dual-gate approval, ER generation, ID card).
+Default permissions (editable on Roles & Permissions): Institute Admin — students.*, onboarding.verify_documents, enrollment.manage, fees.manage, payments.collect; Accounts — students.view, fees.manage, payments.collect, payments.verify; Training Manager — students.view, enrollment.manage.
 
 **Livewire components:** `StudentRegistrationForm` (personal, address, parent details), `StudentAcademicForm` (academic information step), `DocumentUploadWizard`, `AdminDocumentVerification`, `AccountsFeeVerification`, `StudentPaymentForm` (student / Accounts: pay a due via online gateway, GPay/UPI or record offline payment), `PaymentVerificationQueue` (Accounts: verify GPay/UPI & offline payments), `PaymentHistory` (receipts per student), `ERRequestGenerator`, `IDCardIssuance`
 
@@ -373,7 +373,19 @@ Admin onboarding: routes `admin.students`, `admin.students.create`, `admin.stude
 | verification_status | enum(pending,verified,rejected) |  |
 | remarks | text nullable |  |
 
-`student_dues` (new — data source for the Accounts gate)
+`course_fees` ✅ (fee structure per institute course — dues are generated from it)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| institute_id, course_id | bigint FK |  |
+| fee_head | string | unique per institute + course |
+| amount | decimal(10,2) |  |
+| due_days | int | due date = joining date + due_days |
+| sort_order | int |  |
+| status | boolean |  |
+
+`student_dues` ✅ (data source for the Accounts gate)
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -383,9 +395,11 @@ Admin onboarding: routes `admin.students`, `admin.students.create`, `admin.stude
 | fee_head | string | e.g. admission, semester fee |
 | amount_due, amount_paid | decimal |  |
 | due_date | date |  |
-| status | enum(pending,partial,cleared) | "no dues" = all rows cleared; recalculated from successful `student_payments` |
+| course_fee_id | bigint FK nullable | null = added by hand |
+| status | enum(pending,partial,cleared,waived) | "no dues" = all rows cleared or waived; recalculated from successful `student_payments` |
+| remarks | text nullable | waiver reason |
 
-`student_payments` (every payment attempt — online gateway, GPay/UPI or offline)
+`student_payments` ✅ (every payment attempt — online gateway, GPay/UPI or offline)
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -410,6 +424,7 @@ Admin onboarding: routes `admin.students`, `admin.students.create`, `admin.stude
 | refund_amount | decimal(10,2) nullable |  |
 | refunded_at | timestamp nullable |  |
 | remarks | text nullable |  |
+| rejection_reason | text nullable | why Accounts rejected it |
 
 Payment rules:
 - Gateway code lives behind one interface (`PaymentGatewayInterface`: `createOrder`, `verifyCallback`, `refund`) with one driver per `payment_gateways.code` (`RazorpayGateway`, `GPayUpiGateway`, `OfflineGateway` ...) resolved by `PaymentService`, so new gateways are added without touching screens.
@@ -417,7 +432,7 @@ Payment rules:
 - Webhooks are idempotent (same `gateway_payment_id` is recorded once) and verified by signature before trusting the status.
 - Accounts verifies GPay/UPI and offline payments (approve / reject with reason) — both audited.
 
-`enrollment_approvals`
+`enrollment_approvals` ✅
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -431,7 +446,7 @@ Payment rules:
 | approved_at | timestamp nullable |  |
 | unique | (student_id, gate) |  |
 
-`er_requests`
+`er_requests` ✅ (+ generated_at, printed_at, tm_signed_at, archived_by; status generated → printed → signed → archived)
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -444,7 +459,7 @@ Payment rules:
 | archived_at | timestamp nullable | physical file archive confirmation |
 | status | enum(generated,printed,archived) |  |
 
-`id_cards`
+`id_cards` ✅ (+ signed_by, print_count; issuing it makes the student `active`)
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -829,7 +844,7 @@ Export feature: a queued job zips the `document_final_records` of all `documents
 | --- | --- | --- |
 | **Sprint 0 — Foundation (Module 1)** | ✅ Done | Laravel/Livewire setup, auth, roles & permissions (seeder + matrix screen), institutes CRUD with auto code, user management, role-based side menu, audit trail + viewer, notification log, `users.institute_id`, `BelongsToInstitute`, `SerialNumberService`, `config/camp.php` |
 | **Sprint 1a — Master Data (Module 1A)** | ✅ Done (per-institute gateway settings → Sprint 1) | Super Admin CRUD for qualifications, courses (+ institute_courses), countries, states, religions, categories, matriculation & higher secondary boards, payment gateways (+ per-institute gateway settings) |
-| **Sprint 1 — Student Onboarding** | 🟡 2.1 admin onboarding done; 2.2–2.5 remaining (2.6 portal after design approval) | Student registration (+ user account, academic information), document upload wizard, student dues & payments (online gateways, GPay/UPI, offline + Accounts verification, receipts), dual-gate approval (Admin + Accounts), ER generation, ID card issuance |
+| **Sprint 1 — Student Onboarding** | ✅ admin side done (2.1–2.5); 2.6 student portal after design approval | Student registration (+ user account, academic information), document upload wizard, student dues & payments (online gateways, GPay/UPI, offline + Accounts verification, receipts), dual-gate approval (Admin + Accounts), ER generation, ID card issuance |
 | **Sprint 2 — Exam Application & Approval** | 2 weeks | Subjects per course/syllabus mapping, exam appearance requests, Accounts dues gate + BiC bypass, TM attendance gate, admit card generation |
 | **Sprint 3 — Question Bank & Paper Setup** | 1–2 weeks | Question bank CRUD (Super Admin + Institute), exam paper builder |
 | **Sprint 4 — Grading & Results** | 2 weeks | Marks entry (all three modes), result computation (configurable pass %), Super Admin correction workflow, marksheet + consolidated marksheet generation with unique serials |

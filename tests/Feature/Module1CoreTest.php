@@ -215,8 +215,9 @@ class Module1CoreTest extends TestCase
         $instGroups = collect(MenuService::for($this->makeUser('institute-admin', $this->instA)))->keyBy('title');
         $this->assertSame(['Users'], array_column($instGroups['User Management']['items'][0]['children'], 'label'));
 
-        // Modules 2–8 are not built yet, so staff roles only see the dashboard for now.
-        $this->assertSame(['Dashboard'], $labels($this->makeUser('accounts', $this->instA)));
+        // Accounts: only what its permissions allow (Module 2 fees & payments); modules not built yet stay hidden.
+        $this->assertSame(['Dashboard', 'All Students', 'Payment Verification', 'Fee Structure'], $labels($this->makeUser('accounts', $this->instA)));
+        $this->assertSame(['Dashboard'], $labels($this->makeUser('faculty', $this->instA)));
     }
 
     public function test_inactive_user_or_inactive_institute_is_logged_out()
@@ -254,17 +255,23 @@ class Module1CoreTest extends TestCase
         $this->assertTrue(AuditTrail::where('module', 'roles')->exists());
     }
 
-    public function test_serial_numbers_are_sequential_per_institute_and_year()
+    public function test_serial_numbers_are_sequential_per_series_and_year()
     {
         $service = app(SerialNumberService::class);
+        $year = 2099; // a year no real data uses
 
-        $a1 = $service->next('ER', $this->instA, 2026);
-        $a2 = $service->next('ER', $this->instA, 2026);
-        $b1 = $service->next('ER', $this->instB, 2026);
+        // Group-wide series (ER, receipts): one running number across institutes
+        $this->assertSame("ER-{$year}-00001", $service->next('ER', $this->instA, $year));
+        $this->assertSame("ER-{$year}-00002", $service->next('ER', $this->instB, $year));
+        $this->assertSame("RCPT/{$year}/00001", $service->next('RECEIPT', $this->instA, $year));
+        $this->assertSame("MS-{$year}-000001", $service->next('MARKSHEET', null, $year));
 
-        $this->assertSame("SSG-{$this->instA->code}-2026-00001", $a1);
-        $this->assertSame("SSG-{$this->instA->code}-2026-00002", $a2);
-        $this->assertSame("SSG-{$this->instB->code}-2026-00001", $b1);
-        $this->assertSame('MS-2026-000001', $service->next('MARKSHEET', null, 2026));
+        // Per-institute series: separate counters
+        $this->assertSame("AC-{$this->instA->code}-{$year}-00001", $service->next('ADMIT_CARD', $this->instA, $year));
+        $this->assertSame("AC-{$this->instA->code}-{$year}-00002", $service->next('ADMIT_CARD', $this->instA, $year));
+        $this->assertSame("AC-{$this->instB->code}-{$year}-00001", $service->next('ADMIT_CARD', $this->instB, $year));
+
+        // A new year starts again at 1
+        $this->assertSame('ER-' . ($year - 1) . '-00001', $service->next('ER', $this->instA, $year - 1));
     }
 }

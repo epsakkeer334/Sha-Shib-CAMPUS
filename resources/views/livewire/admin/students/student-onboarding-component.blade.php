@@ -43,6 +43,19 @@
         </div>
     </div>
 
+    @if($student)
+        @include('livewire.admin.students.partials.student-nav', ['student' => $student, 'active' => 'onboarding'])
+    @endif
+
+    @if($student && $student->status === 'rejected')
+        @php $rejectedGate = $student->approvals()->where('status', 'rejected')->latest('approved_at')->first(); @endphp
+        <div class="alert alert-danger small">
+            <i class="ti ti-alert-triangle me-1"></i> <strong>Returned for corrections.</strong>
+            @if($rejectedGate) “{{ $rejectedGate->remarks }}” @endif
+            Update the details or documents, then submit again from Review &amp; Submit.
+        </div>
+    @endif
+
     @if($student && !$editable)
         <div class="alert alert-info small"><i class="ti ti-lock me-1"></i> Onboarding is closed for this student ({{ $student->status_label }}). Details are read-only.</div>
     @endif
@@ -210,6 +223,9 @@
                                                     <a href="{{ route('admin.students.documents.show', $doc->id) }}" target="_blank">{{ $doc->original_name }}</a>
                                                     <div class="text-muted">{{ $doc->size_label }} · {{ $doc->uploaded_at->format('d M Y') }} ·
                                                         <span class="badge badge-soft-{{ ['verified' => 'success', 'rejected' => 'danger'][$doc->verification_status] ?? 'warning' }}">{{ ucfirst($doc->verification_status) }}</span>
+                                                        @if($doc->verification_status === 'rejected' && $doc->remarks)
+                                                            <div class="text-danger">Rejected: {{ $doc->remarks }} — upload a new copy.</div>
+                                                        @endif
                                                     </div>
                                                 </div>
                                                 @unless($readOnly)

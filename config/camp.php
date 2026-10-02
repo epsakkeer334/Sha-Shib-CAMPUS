@@ -55,6 +55,15 @@ return [
             'students.update' => 'Edit students',
             'students.delete' => 'Delete draft students',
         ],
+        'Onboarding' => [
+            'onboarding.verify_documents' => 'Verify KYC documents & approve Gate 1 (Admin)',
+            'enrollment.manage' => 'ER request form & ID card (print, TM signed, archive, issue)',
+        ],
+        'Fees & Payments' => [
+            'fees.manage' => 'Fee structure & student dues (add, generate, waive)',
+            'payments.collect' => 'Record student payments',
+            'payments.verify' => 'Verify payments, issue receipts & approve Gate 2 (Accounts)',
+        ],
         'Users' => [
             'users.view' => 'View users',
             'users.create' => 'Create users',
@@ -80,9 +89,9 @@ return [
 
     // Default permissions per role (super-admin gets everything through Gate::before).
     'default_role_permissions' => [
-        'institute-admin' => ['users.view', 'users.create', 'users.update', 'users.delete', 'audit.view', 'notifications.view', 'institute_courses.view', 'institute_courses.manage', 'students.view', 'students.create', 'students.update', 'students.delete'],
-        'accounts' => [],
-        'training-manager' => [],
+        'institute-admin' => ['users.view', 'users.create', 'users.update', 'users.delete', 'audit.view', 'notifications.view', 'institute_courses.view', 'institute_courses.manage', 'students.view', 'students.create', 'students.update', 'students.delete', 'onboarding.verify_documents', 'enrollment.manage', 'fees.manage', 'payments.collect'],
+        'accounts' => ['students.view', 'fees.manage', 'payments.collect', 'payments.verify'],
+        'training-manager' => ['students.view', 'enrollment.manage'],
         'bic' => [],
         'examination-manager' => [],
         'hot' => [],
@@ -93,7 +102,9 @@ return [
     // Serial number series used by SerialNumberService.
     // Placeholders: {institute_code}, {year}. 'per_institute' = separate counter per institute.
     'serial_series' => [
-        'ER' => ['format' => 'SSG-{institute_code}-{year}-', 'pad' => 5, 'per_institute' => true],
+        // One group-wide running series (as in the Module 2 design): ER-2026-00142, RCPT/2026/00318.
+        'ER' => ['format' => 'ER-{year}-', 'pad' => 5, 'per_institute' => false],
+        'RECEIPT' => ['format' => 'RCPT/{year}/', 'pad' => 5, 'per_institute' => false],
         'ADMIT_CARD' => ['format' => 'AC-{institute_code}-{year}-', 'pad' => 5, 'per_institute' => true],
         'MARKSHEET' => ['format' => 'MS-{year}-', 'pad' => 6, 'per_institute' => false],
         'CONSOLIDATED_MARKSHEET' => ['format' => 'CMS-{year}-', 'pad' => 6, 'per_institute' => false],
@@ -130,6 +141,30 @@ return [
         'marksheet_12' => ['12th Marksheet', true, 'pdf,jpg,jpeg,png', 5120],
         'other' => ['Other Document', false, 'pdf,jpg,jpeg,png', 5120],
     ],
+
+    // Dual gate — gate => [label, short label]
+    'enrollment_gates' => [
+        'admin_doc_verification' => ['Admin document verification', 'Gate 1'],
+        'accounts_fee_verification' => ['Accounts fee verification', 'Gate 2'],
+    ],
+
+    // Fees & payments — status => [label, badge colour]
+    'due_statuses' => [
+        'pending' => ['Pending', 'warning'],
+        'partial' => ['Part paid', 'info'],
+        'cleared' => ['Paid', 'success'],
+        'waived' => ['Waived', 'secondary'],
+    ],
+    'payment_statuses' => [
+        'initiated' => ['Initiated', 'secondary'],
+        'pending_verification' => ['Pending verification', 'info'],
+        'success' => ['Approved', 'success'],
+        'failed' => ['Rejected', 'danger'],
+        'refunded' => ['Refunded', 'dark'],
+    ],
+    // Payment proof upload (GPay screenshot, bank slip)
+    'payment_proof_mimes' => 'jpg,jpeg,png,pdf',
+    'payment_proof_max_kb' => 5120,
 
     // Business rules (see plan.md).
     'pass_percentage' => 75,

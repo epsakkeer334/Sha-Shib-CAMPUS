@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Admin\Institute;
 use App\Models\Admin\SerialCounter;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -29,24 +30,16 @@ class SerialNumberService
         $year = $year ?? (int) date('Y');
         $instituteId = $series['per_institute'] ? $institute->id : null;
 
-        return DB::transaction(function () use ($seriesKey, $series, $institute, $instituteId, $year) {
-            $counter = SerialCounter::where('series_key', $seriesKey)
-                ->where('institute_id', $instituteId)
-                ->where('year', $year)
-                ->lockForUpdate()
-                ->first();
+        // Create the counter row once, under a lock: for group-wide series institute_id is NULL,
+        // which the unique index does not protect, so two first requests could both insert.
+        $counterId = Cache::lock("serial-counter:{$seriesKey}:" . ($instituteId ?? 'all') . ":{$year}", 10)
+            ->block(10, fn () => SerialCounter::firstOrCreate(
+                ['series_key' => $seriesKey, 'institute_id' => $instituteId, 'year' => $year],
+                ['last_value' => 0, 'prefix_format' => $series['format'], 'pad_length' => $series['pad']]
+            )->id);
 
-            if (!$counter) {
-                $counter = SerialCounter::create([
-                    'series_key' => $seriesKey,
-                    'institute_id' => $instituteId,
-                    'year' => $year,
-                    'last_value' => 0,
-                    'prefix_format' => $series['format'],
-                    'pad_length' => $series['pad'],
-                ]);
-                $counter = SerialCounter::whereKey($counter->id)->lockForUpdate()->first();
-            }
+        return DB::transaction(function () use ($counterId, $institute, $year) {
+            $counter = SerialCounter::whereKey($counterId)->lockForUpdate()->firstOrFail();
 
             $counter->increment('last_value');
 

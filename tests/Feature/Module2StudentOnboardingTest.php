@@ -260,7 +260,12 @@ class Module2StudentOnboardingTest extends TestCase
         $this->actingAs($this->makeUser('institute-admin', $this->instB));
         $this->get(route('admin.students.documents.show', $doc->id))->assertNotFound();
 
-        $this->actingAs($this->makeUser('accounts', $this->instA)); // no student permissions yet
+        // Accounts may view students (fees work) but not add them
+        $this->actingAs($this->makeUser('accounts', $this->instA));
+        $this->get(route('admin.students'))->assertOk()->assertDontSee('Add Student');
+        $this->get(route('admin.students.create'))->assertForbidden();
+
+        $this->actingAs($this->makeUser('faculty', $this->instA)); // no student permissions
         $this->get(route('admin.students'))->assertForbidden();
         $this->get(route('admin.students.create'))->assertForbidden();
         $this->get(route('admin.students.documents.show', $doc->id))->assertForbidden();

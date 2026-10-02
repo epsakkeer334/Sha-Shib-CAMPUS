@@ -14,6 +14,13 @@ use App\Http\Livewire\Admin\Masters;
 use App\Http\Livewire\Admin\Students\StudentsComponent;
 use App\Http\Livewire\Admin\Students\StudentOnboardingComponent;
 use App\Http\Controllers\Admin\StudentDocumentController;
+use App\Http\Controllers\Admin\OnboardingPrintController;
+use App\Http\Livewire\Admin\Students\StudentFeesComponent;
+use App\Http\Livewire\Admin\Students\StudentEnrollmentComponent;
+use App\Http\Livewire\Admin\Onboarding\DocumentVerificationComponent;
+use App\Http\Livewire\Admin\Onboarding\PaymentVerificationComponent;
+use App\Http\Livewire\Admin\Onboarding\EnrollmentQueueComponent;
+use App\Http\Livewire\Admin\Onboarding\FeeStructureComponent;
 
 Route::get('/', fn () => redirect()->route('admin.login'));
 Route::get('/admin/login', Login::class)->name('admin.login')->middleware('guest');
@@ -50,6 +57,24 @@ Route::prefix('admin')->middleware(['auth', 'active.user'])->group(function () {
         Route::get('/create', StudentOnboardingComponent::class)->name('.create')->middleware('permission:students.create');
         Route::get('/{student}/onboarding', StudentOnboardingComponent::class)->name('.edit')->middleware('permission:students.view');
         Route::get('/documents/{document}', [StudentDocumentController::class, 'show'])->name('.documents.show')->middleware('permission:students.view');
+
+        // 2.3 fees & payments, 2.4/2.5 gates, ER & ID card (per student)
+        Route::middleware('permission:students.view')->group(function () {
+            Route::get('/{student}/fees', StudentFeesComponent::class)->name('.fees');
+            Route::get('/{student}/enrollment', StudentEnrollmentComponent::class)->name('.enrollment');
+            Route::get('/{student}/er-form', [OnboardingPrintController::class, 'erForm'])->name('.er-form');
+            Route::get('/{student}/id-card', [OnboardingPrintController::class, 'idCard'])->name('.id-card');
+            Route::get('/payments/{payment}/receipt', [OnboardingPrintController::class, 'receipt'])->name('.payments.receipt');
+            Route::get('/payments/{payment}/proof', [OnboardingPrintController::class, 'paymentProof'])->name('.payments.proof');
+        });
+    });
+
+    // Module 2 — onboarding queues (design: Admin document verification, Accounts payment queue, ER & ID cards)
+    Route::prefix('onboarding')->name('admin.onboarding.')->group(function () {
+        Route::get('/documents', DocumentVerificationComponent::class)->name('documents')->middleware('permission:onboarding.verify_documents');
+        Route::get('/payments', PaymentVerificationComponent::class)->name('payments')->middleware('permission:payments.verify');
+        Route::get('/enrollment', EnrollmentQueueComponent::class)->name('enrollment')->middleware('permission:enrollment.manage');
+        Route::get('/fee-structure', FeeStructureComponent::class)->name('fee-structure')->middleware('permission:fees.manage');
     });
 
     // Module 1A — Master Data (Super Admin only)

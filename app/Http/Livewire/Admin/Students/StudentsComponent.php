@@ -71,6 +71,10 @@ class StudentsComponent extends Component
         $user = Auth::user();
 
         $actions = [['route' => 'admin.students.edit', 'parameter' => 'student', 'parameter_value' => 'id', 'icon' => 'ti ti-edit', 'class' => 'btn-outline-warning', 'label' => 'Open onboarding']];
+        if ($user->can('fees.manage') || $user->can('payments.collect') || $user->can('payments.verify')) {
+            $actions[] = ['route' => 'admin.students.fees', 'parameter' => 'student', 'parameter_value' => 'id', 'icon' => 'ti ti-cash', 'class' => 'btn-outline-success', 'label' => 'Fees & payments'];
+        }
+        $actions[] = ['route' => 'admin.students.enrollment', 'parameter' => 'student', 'parameter_value' => 'id', 'icon' => 'ti ti-id', 'class' => 'btn-outline-info', 'label' => 'Gates, ER & ID card'];
         if ($user->can('students.delete')) {
             $actions[] = 'delete';
         }

@@ -113,14 +113,16 @@ return [
                 'label' => 'Students',
                 'icon' => 'ti ti-school',
                 'children' => [
-                    ['label' => 'All Students', 'icon' => 'ti ti-list', 'route' => 'admin.students', 'permission' => 'students.view', 'active' => ['admin.students', 'admin.students.edit']],
+                    ['label' => 'All Students', 'icon' => 'ti ti-list', 'route' => 'admin.students', 'permission' => 'students.view',
+                        'active' => ['admin.students', 'admin.students.edit', 'admin.students.fees', 'admin.students.enrollment']],
                     ['label' => 'Add Student', 'icon' => 'ti ti-user-plus', 'route' => 'admin.students.create', 'permission' => 'students.create'],
                 ],
             ],
-            ['label' => 'Document Verification', 'icon' => 'ti ti-file-check', 'route' => 'admin.onboarding.documents', 'roles' => ['institute-admin']],
-            ['label' => 'Fee Verification', 'icon' => 'ti ti-cash', 'route' => 'admin.onboarding.fees', 'roles' => ['accounts']],
-            ['label' => 'ER Requests', 'icon' => 'ti ti-id', 'route' => 'admin.er-requests', 'roles' => ['super-admin', 'training-manager']],
-            ['label' => 'ID Cards', 'icon' => 'ti ti-id-badge-2', 'route' => 'admin.id-cards', 'roles' => ['institute-admin', 'training-manager']],
+            // Gate 1 (Admin) → Gate 2 (Accounts) → ER & ID card (TM / Admin)
+            ['label' => 'Document Verification', 'icon' => 'ti ti-file-check', 'route' => 'admin.onboarding.documents', 'permission' => 'onboarding.verify_documents'],
+            ['label' => 'Payment Verification', 'icon' => 'ti ti-cash', 'route' => 'admin.onboarding.payments', 'permission' => 'payments.verify'],
+            ['label' => 'ER & ID Cards', 'icon' => 'ti ti-id-badge-2', 'route' => 'admin.onboarding.enrollment', 'permission' => 'enrollment.manage'],
+            ['label' => 'Fee Structure', 'icon' => 'ti ti-receipt-2', 'route' => 'admin.onboarding.fee-structure', 'permission' => 'fees.manage'],
         ],
     ],
 

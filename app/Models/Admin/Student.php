@@ -79,6 +79,75 @@ class Student extends BaseModel
         return $this->hasMany(StudentDocument::class);
     }
 
+    public function dues()
+    {
+        return $this->hasMany(StudentDue::class);
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(StudentPayment::class);
+    }
+
+    public function approvals()
+    {
+        return $this->hasMany(EnrollmentApproval::class);
+    }
+
+    public function erRequest()
+    {
+        return $this->hasOne(ErRequest::class);
+    }
+
+    public function idCard()
+    {
+        return $this->hasOne(IdCard::class);
+    }
+
+    /**
+     * One gate of the dual gate (EnrollmentApproval::DOCUMENTS / ::FEES), or null before submission.
+     */
+    public function gate(string $gate): ?EnrollmentApproval
+    {
+        return $this->relationLoaded('approvals')
+            ? $this->approvals->firstWhere('gate', $gate)
+            : $this->approvals()->where('gate', $gate)->first();
+    }
+
+    public function gateApproved(string $gate): bool
+    {
+        return optional($this->gate($gate))->status === 'approved';
+    }
+
+    /**
+     * Every required KYC document type has a verified file.
+     */
+    public function requiredDocumentsVerified(): bool
+    {
+        $verified = $this->documents()->where('verification_status', 'verified')->pluck('document_type')->unique();
+
+        return collect(config('camp.student_document_types'))
+            ->filter(fn ($type) => $type[1])
+            ->keys()
+            ->diff($verified)
+            ->isEmpty();
+    }
+
+    public function outstandingAmount(): float
+    {
+        return round($this->dues()->whereNotIn('status', ['cleared', 'waived'])->get()->sum(fn ($due) => $due->balance), 2);
+    }
+
+    public function getDaysToDeadlineAttribute(): ?int
+    {
+        return $this->onboarding_deadline ? (int) now()->startOfDay()->diffInDays($this->onboarding_deadline, false) : null;
+    }
+
+    public function getInitialsAttribute(): string
+    {
+        return strtoupper(mb_substr($this->first_name, 0, 1) . mb_substr($this->last_name, 0, 1));
+    }
+
     // Onboarding progress
 
     public function isEditable(): bool

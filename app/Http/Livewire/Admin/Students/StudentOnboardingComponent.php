@@ -14,6 +14,7 @@ use App\Models\Admin\State;
 use App\Models\Admin\Student;
 use App\Models\Admin\StudentAcademicDetail;
 use App\Models\Admin\StudentDocument;
+use App\Services\OnboardingService;
 use App\Traits\RecordsAuditTrail;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -295,8 +296,12 @@ class StudentOnboardingComponent extends Component
 
         DB::transaction(function () use ($student, $type, $file, $label) {
             // One file per required type: a new upload replaces the previous one. "Other" allows several.
+            // A replaced rejected file keeps its reason on the new upload ("Re-uploaded · previously rejected: …").
+            $previousRejection = null;
             if ($type !== 'other') {
-                $student->documents()->where('document_type', $type)->get()->each(fn ($old) => $this->removeDocument($old, "Replaced {$label}"));
+                $previous = $student->documents()->where('document_type', $type)->get();
+                $previousRejection = optional($previous->firstWhere('verification_status', 'rejected'))->remarks;
+                $previous->each(fn ($old) => $this->removeDocument($old, "Replaced {$label}"));
             }
 
             $path = $file->store("students/{$student->id}", 'local');
@@ -311,10 +316,13 @@ class StudentOnboardingComponent extends Component
                 'size' => $file->getSize(),
                 'uploaded_at' => now(),
                 'verification_status' => 'pending',
+                'previous_rejection' => $previousRejection,
             ]);
 
             $this->auditCreate($document, 'student_documents', "Uploaded {$label} for {$student->full_name}");
         });
+
+        app(OnboardingService::class)->documentsChanged($student->fresh());
 
         $this->reset($property);
         $this->toast('success', "{$label} uploaded.");
@@ -333,6 +341,7 @@ class StudentOnboardingComponent extends Component
 
         if ($document) {
             $this->removeDocument($document, "Deleted {$document->type_label} of {$student->full_name}");
+            app(OnboardingService::class)->documentsChanged($student->fresh());
             $this->toast('danger', "{$document->type_label} removed.");
         }
 
@@ -395,6 +404,10 @@ class StudentOnboardingComponent extends Component
         ]);
 
         $this->auditUpdate($student, 'students', ['status' => $old], ['status' => $student->status], "Submitted onboarding: {$student->full_name}");
+
+        // Gate 1 (Admin documents) and Gate 2 (Accounts fees) start now; a rejected gate is reopened.
+        app(OnboardingService::class)->openGates($student);
+
         $this->toast(
             $student->status === 'pending_approval' ? 'success' : 'warning',
             $student->status === 'pending_approval'
