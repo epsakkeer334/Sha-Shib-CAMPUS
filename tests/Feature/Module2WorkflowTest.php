@@ -633,6 +633,61 @@ class Module2WorkflowTest extends TestCase
         $this->get(route('admin.students.er-form', $student->id))->assertNotFound();
     }
 
+    protected function erIssuedStudent(string $firstName): Student
+    {
+        $student = $this->submittedStudent();
+        $student->update(['first_name' => $firstName]);
+        $this->verifyAllDocuments($student);
+        Livewire::test(DocumentVerificationComponent::class)->call('select', $student->id)->call('approveGate');
+        app(\App\Services\FeeService::class)->addDue($student->fresh(), 'Admission fee', 1000, '2026-10-05');
+        $this->approvedPayment($student->fresh(), 1000);
+        Livewire::test(PaymentVerificationComponent::class)->call('approveGate', $student->id);
+
+        $student = $student->fresh();
+        $this->assertNotNull($student->er_number);
+
+        return $student;
+    }
+
+    public function test_er_queue_filters_highlight_and_open_under_its_own_menu()
+    {
+        $pending = $this->erIssuedStudent('Pendingform');
+        $done = $this->erIssuedStudent('Finished');
+        $done->update(['phone' => '+919000011111']);
+
+        // Finish everything for one student
+        $this->actingAs($this->tm);
+        Livewire::test(StudentEnrollmentComponent::class, ['student' => $done->id])
+            ->call('formPrinted')->call('formSigned')->call('formArchived')->call('cardPrinted')->call('cardIssued');
+
+        // Default "all": both listed, the one still needing work highlighted and first
+        $html = Livewire::test(EnrollmentQueueComponent::class)
+            ->assertSet('tab', 'all')
+            ->assertSeeInOrder(['Pendingform Menon', 'Finished Menon'])
+            ->assertSee(route('admin.onboarding.enrollment.student', $pending->id))
+            ->payload['effects']['html'];
+        $this->assertStringContainsString('er-row-needs', $html);
+
+        // Tabs and filters
+        Livewire::test(EnrollmentQueueComponent::class)->set('tab', 'done')->assertSee('Finished Menon')->assertDontSee('Pendingform Menon');
+        Livewire::test(EnrollmentQueueComponent::class)->set('formStage', 'generated')->assertSee('Pendingform Menon')->assertDontSee('Finished Menon');
+        Livewire::test(EnrollmentQueueComponent::class)->set('cardStage', 'issued')->assertSee('Finished Menon')->assertDontSee('Pendingform Menon');
+        Livewire::test(EnrollmentQueueComponent::class)->set('search', '9000011111')->assertSee('Finished Menon')->assertDontSee('Pendingform Menon');
+        Livewire::test(EnrollmentQueueComponent::class)->set('course', $this->course->id)->set('issuedFrom', now()->toDateString())
+            ->assertSee('Pendingform Menon')->call('clearFilters')->assertSet('course', '')->assertSet('issuedFrom', '');
+        Livewire::test(EnrollmentQueueComponent::class)->set('issuedTo', now()->subYear()->toDateString())->assertSee('No students match these filters.');
+
+        // Detail page opened from the queue: back to the queue, "ER & ID Cards" menu item is the active one
+        $this->get(route('admin.onboarding.enrollment.student', $pending->id))
+            ->assertOk()->assertSee('Enrollment progress')->assertSee($pending->er_number)
+            ->assertSee(route('admin.onboarding.enrollment'));
+        $erItem = collect(\App\Services\MenuService::flatFor($this->tm))->flatMap(fn ($s) => $s['items'])->firstWhere('label', 'ER & ID Cards');
+        $this->assertContains('admin.onboarding.enrollment.student', \App\Services\MenuService::activePatterns($erItem));
+
+        // Opened from the students list it stays under Students
+        $this->get(route('admin.students.enrollment', $pending->id))->assertOk()->assertSee('All students');
+    }
+
     public function test_queue_pages_render_with_data()
     {
         $student = $this->submittedStudent();

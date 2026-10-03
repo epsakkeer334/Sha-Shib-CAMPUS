@@ -18,11 +18,14 @@ class StudentEnrollmentComponent extends Component
     // NOT named $student: the route parameter is {student}.
     public $studentId;
     public $reprintReason = '';
+    // Opened from the ER & ID cards queue (admin.onboarding.enrollment.student): back link + menu stay on the queue
+    public $fromQueue = false;
 
     public function mount($student)
     {
         abort_unless(Auth::user()->can('students.view'), 403);
         $this->studentId = Student::findOrFail($student)->id; // institute scope → 404 for others
+        $this->fromQueue = request()->routeIs('admin.onboarding.enrollment.student');
     }
 
     public function hydrate()
@@ -32,7 +35,7 @@ class StudentEnrollmentComponent extends Component
 
     protected function student(): Student
     {
-        return Student::with(['course', 'institute', 'approvals.approver', 'erRequest.signer', 'erRequest.archiver', 'idCard.signer', 'documents'])
+        return Student::with(['course', 'institute', 'state', 'country', 'approvals.approver', 'erRequest.signer', 'erRequest.archiver', 'idCard.signer', 'documents', 'dues'])
             ->findOrFail($this->studentId);
     }
 
@@ -109,6 +112,11 @@ class StudentEnrollmentComponent extends Component
             'card' => $student->idCard,
             'photo' => $student->documents->where('document_type', 'kyc_photo')->sortByDesc('uploaded_at')->first(),
             'canManage' => Auth::user()->can('enrollment.manage'),
+            'fees' => [
+                'total' => (float) $student->dues->where('status', '!=', 'waived')->sum('amount_due'),
+                'paid' => (float) $student->dues->sum('amount_paid'),
+                'outstanding' => $student->outstandingAmount(),
+            ],
         ])->layout('layouts.admin.master');
     }
 }

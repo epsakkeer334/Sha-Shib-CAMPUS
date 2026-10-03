@@ -102,6 +102,8 @@ Route::prefix('admin')->middleware(['auth', 'staff', 'active.user'])->group(func
         Route::get('/documents', DocumentVerificationComponent::class)->name('documents')->middleware('permission:onboarding.verify_documents');
         Route::get('/payments', PaymentVerificationComponent::class)->name('payments')->middleware('permission:payments.verify');
         Route::get('/enrollment', EnrollmentQueueComponent::class)->name('enrollment')->middleware('permission:enrollment.manage');
+        // Same per-student ER & ID page, opened from the queue (keeps the "ER & ID Cards" menu active)
+        Route::get('/enrollment/{student}', StudentEnrollmentComponent::class)->name('enrollment.student')->middleware('permission:enrollment.manage|students.view');
         Route::get('/fee-structure', FeeStructureComponent::class)->name('fee-structure')->middleware('permission:fees.manage');
     });
 

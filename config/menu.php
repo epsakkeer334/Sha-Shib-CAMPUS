@@ -122,7 +122,8 @@ return [
             // Gate 1 (Admin) → Gate 2 (Accounts) → ER & ID card (TM / Admin)
             ['label' => 'Document Verification', 'icon' => 'ti ti-file-check', 'route' => 'admin.onboarding.documents', 'permission' => 'onboarding.verify_documents'],
             ['label' => 'Payment Verification', 'icon' => 'ti ti-cash', 'route' => 'admin.onboarding.payments', 'permission' => 'payments.verify'],
-            ['label' => 'ER & ID Cards', 'icon' => 'ti ti-id-badge-2', 'route' => 'admin.onboarding.enrollment', 'permission' => 'enrollment.manage'],
+            ['label' => 'ER & ID Cards', 'icon' => 'ti ti-id-badge-2', 'route' => 'admin.onboarding.enrollment', 'permission' => 'enrollment.manage',
+                'active' => ['admin.onboarding.enrollment', 'admin.onboarding.enrollment.student']],
             ['label' => 'Fee Structure', 'icon' => 'ti ti-receipt-2', 'route' => 'admin.onboarding.fee-structure', 'permission' => 'fees.manage'],
         ],
     ],

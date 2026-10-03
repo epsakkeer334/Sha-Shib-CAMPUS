@@ -1,4 +1,4 @@
-{{-- Student sub-navigation: Onboarding · Fees & Payments · ER & ID card. Params: $student, $active --}}
+{{-- Student sub-navigation: Onboarding · Fees & Payments · ER & ID card. Params: $student, $active, optional $fromQueue (ER tab stays under the ER & ID cards menu) --}}
 @php $user = auth()->user(); @endphp
 <ul class="nav nav-pills gap-1 mb-3">
     <li class="nav-item">
@@ -14,7 +14,7 @@
         </li>
     @endif
     <li class="nav-item">
-        <a class="nav-link {{ $active === 'enrollment' ? 'active' : 'bg-light text-dark' }}" href="{{ route('admin.students.enrollment', $student->id) }}">
+        <a class="nav-link {{ $active === 'enrollment' ? 'active' : 'bg-light text-dark' }}" href="{{ route(!empty($fromQueue) ? 'admin.onboarding.enrollment.student' : 'admin.students.enrollment', $student->id) }}">
             <i class="ti ti-id me-1"></i> Gates, ER &amp; ID card
         </a>
     </li>
