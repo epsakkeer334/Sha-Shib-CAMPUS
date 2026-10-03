@@ -52,9 +52,10 @@
                             @endphp
 
                             @if($isSortable)
-                                <th wire:click="sortBy('{{ $column['field'] }}')" style="cursor: pointer;">
+                                @php $sortKey = $column['sort'] ?? $column['field']; @endphp
+                                <th wire:click="sortBy('{{ $sortKey }}')" style="cursor: pointer;">
                                     {{ $column['label'] }}
-                                    @if($sortField === $column['field'])
+                                    @if($sortField === $sortKey)
                                         <i class="ti {{ $sortDirection === 'asc' ? 'ti-arrow-up' : 'ti-arrow-down' }}"></i>
                                     @endif
                                 </th>

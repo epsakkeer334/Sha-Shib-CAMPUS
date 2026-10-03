@@ -128,6 +128,11 @@ class DataTable extends Component
                 $relation = explode('.', $column['field'])[0];
                 $relations[] = $relation;
             }
+
+            // Combined cells: relations their accessor reads ('with' => ['course', 'approvals'])
+            foreach ($column['with'] ?? [] as $relation) {
+                $relations[] = $relation;
+            }
         }
 
         // Check extra filters for relation fields
@@ -155,21 +160,22 @@ class DataTable extends Component
             foreach ($this->columns as $column) {
                 if ($column['field'] === 'actions' || !isset($column['field'])) continue;
 
-                $field = $column['field'];
-
                 // Skip if the column is not searchable (you can add a 'searchable' flag to columns if needed)
                 if (isset($column['searchable']) && $column['searchable'] === false) continue;
 
-                if (Str::contains($field, '.')) {
-                    // Handle relationship search (e.g., 'user.name')
-                    $this->applyRelationshipSearch($q, $field);
-                } else {
-                    // Handle regular field search
-                    $table = (new $this->modelClass)->getTable();
+                // Combined cells name the fields they search: 'search' => ['first_name', 'course.code']
+                foreach ($column['search'] ?? [$column['field']] as $field) {
+                    if (Str::contains($field, '.')) {
+                        // Handle relationship search (e.g., 'user.name')
+                        $this->applyRelationshipSearch($q, $field);
+                    } else {
+                        // Handle regular field search
+                        $table = (new $this->modelClass)->getTable();
 
-                    // Check if column exists in table
-                    if (Schema::hasColumn($table, $field)) {
-                        $q->orWhere("{$table}.{$field}", 'like', '%' . $this->search . '%');
+                        // Check if column exists in table
+                        if (Schema::hasColumn($table, $field)) {
+                            $q->orWhere("{$table}.{$field}", 'like', '%' . $this->search . '%');
+                        }
                     }
                 }
             }

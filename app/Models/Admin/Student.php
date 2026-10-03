@@ -206,7 +206,9 @@ class Student extends BaseModel
         }
 
         $outstanding = $dues->whereNotIn('status', ['cleared', 'waived'])->sum(fn ($d) => $d->balance);
-        $pending = $this->payments()->where('status', 'pending_verification')->sum('amount');
+        $pending = $this->relationLoaded('payments')
+            ? $this->payments->where('status', 'pending_verification')->sum('amount')
+            : $this->payments()->where('status', 'pending_verification')->sum('amount');
 
         if ($outstanding <= 0) {
             return "<span class='badge badge-soft-success'>Paid</span>";
@@ -222,6 +224,64 @@ class Student extends BaseModel
         }
 
         return $html;
+    }
+
+    // ------------------------------------------------------------------ students list (compact cells)
+
+    public function getStudentCellHtmlAttribute(): string
+    {
+        return "<div class='fw-semibold text-dark'>" . e($this->full_name) . '</div>'
+            . "<div class='small text-muted'>" . e($this->email) . '</div>'
+            . "<div class='small text-muted'>" . e($this->phone) . '</div>';
+    }
+
+    public function getCourseCellHtmlAttribute(): string
+    {
+        $course = $this->relationLoaded('course') ? $this->course : $this->course()->first();
+        $html = "<div class='fw-medium' title='" . e(optional($course)->name) . "'>" . e(optional($course)->code ?? '—') . '</div>';
+
+        $user = auth()->user();
+        if ($user && $user->isSuperAdmin()) {
+            $institute = $this->relationLoaded('institute') ? $this->institute : $this->institute()->first();
+            $html .= "<div class='small text-muted'>" . e(optional($institute)->name) . '</div>';
+        }
+
+        return $html;
+    }
+
+    public function getErCellHtmlAttribute(): string
+    {
+        $er = $this->er_number
+            ? "<div class='fw-medium' style=\"font-family: 'IBM Plex Mono', ui-monospace, monospace;\">" . e($this->er_number) . '</div>'
+            : "<div class='text-muted'>—</div>";
+
+        // Onboarding deadline colour (until the ER number is issued):
+        // past → red, within config('camp.deadline_warning_days') → dark yellow, otherwise grey.
+        $due = 'Due ' . e($this->formatted_onboarding_deadline);
+        $days = $this->days_to_deadline;
+        $style = 'color: #6B7280;';
+
+        if (!$this->er_number && !is_null($days)) {
+            if ($days < 0) {
+                $style = 'color: #DC2626; font-weight: 600;';
+                $due .= ' · ' . abs($days) . ' ' . (abs($days) === 1 ? 'day' : 'days') . ' overdue';
+            } elseif ($days <= config('camp.deadline_warning_days', 7)) {
+                $style = 'color: #B45309; font-weight: 600;';
+                $due .= ' · ' . ($days === 0 ? 'today' : $days . ' ' . ($days === 1 ? 'day' : 'days') . ' left');
+            }
+        }
+
+        return $er
+            . "<div class='small text-muted text-nowrap'>Joined " . e($this->formatted_joining_date) . '</div>'
+            . "<div class='small text-nowrap' style='{$style}'>{$due}</div>";
+    }
+
+    public function getApprovalsHtmlAttribute(): string
+    {
+        $row = fn ($label, $badge) => "<div class='d-flex align-items-center gap-2 mb-1 text-nowrap'><span class='small text-muted' style='width: 34px;'>{$label}</span>{$badge}</div>";
+
+        return $row('Docs', $this->gateBadge(EnrollmentApproval::DOCUMENTS))
+            . $row('Fees', $this->gateBadge(EnrollmentApproval::FEES));
     }
 
     public function getDocumentsGateHtmlAttribute()

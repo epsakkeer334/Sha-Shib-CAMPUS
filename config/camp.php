@@ -170,6 +170,7 @@ return [
     'pass_percentage' => 75,
     'attendance_threshold' => 75,
     'onboarding_days' => 30,
+    'deadline_warning_days' => 7, // students list: deadline shown in dark yellow this many days before it
     'mou_alert_days' => 60,
     'seven_day_rule_days' => 7,
 ];

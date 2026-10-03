@@ -268,7 +268,9 @@ class Module2WorkflowTest extends TestCase
             ->assertSee('627514903318')->assertSee('Pending verification');
 
         // Students list: fee status + both gates
-        $html = $this->get(route('admin.students'))->assertOk()->assertSee('Gate 1 · Docs')->assertSee('Gate 2 · Fees')->getContent();
+        $html = $this->get(route('admin.students'))->assertOk()
+            ->assertSee('Student')->assertSee('ER / Dates')->assertSee('Approvals')->assertDontSee('First Name')
+            ->assertSee($student->email)->assertSee('Docs')->getContent();
         $this->assertStringContainsString('Unpaid', $html);
         $this->assertStringContainsString('to verify', $html);
         $this->assertStringContainsString('Pending', $html);
@@ -278,6 +280,68 @@ class Module2WorkflowTest extends TestCase
         $this->verifyAllDocuments($student);
         Livewire::test(DocumentVerificationComponent::class)->call('select', $student->id)->call('approveGate');
         $this->assertStringContainsString('Approved', $student->fresh()->documents_gate_html);
+    }
+
+    public function test_students_list_filters_search_and_sort()
+    {
+        $fees = app(\App\Services\FeeService::class);
+        $onboarding = app(OnboardingService::class);
+
+        $a = $this->submittedStudent();                     // Kappa institute, docs gate approved, fees paid
+        $a->update(['first_name' => 'Aadhya', 'er_number' => 'ER-2099-00042']);
+        $b = $this->submittedStudent();                     // Kappa institute, unpaid
+        $b->update(['first_name' => 'Bala', 'status' => 'pending_docs']);
+        $c = $this->submittedStudent($this->otherInst);     // other institute, no fees
+        $c->update(['first_name' => 'Chitra']);
+
+        $this->actingAs($this->accounts);
+        $fees->addDue($a, 'Admission fee', 1000, '2026-10-05');
+        $fees->addDue($b, 'Admission fee', 1000, '2026-10-05');
+        $fees->approvePayment($fees->recordPayment($a->dues()->first(), $this->cash, 1000, now(), null, null, null, null));
+
+        $this->actingAs($this->admin);
+        foreach ($a->documents as $doc) {
+            $onboarding->verifyDocument($doc);
+        }
+        $onboarding->approveGate($a->fresh(), EnrollmentApproval::DOCUMENTS);
+
+        $super = User::create(['name' => 'Super', 'email' => uniqid() . '@staff.test', 'password' => bcrypt('x'), 'status' => true]);
+        $super->assignRole('super-admin');
+        $this->actingAs($super);
+
+        $list = fn () => Livewire::test(\App\Http\Livewire\Admin\Students\StudentsComponent::class);
+        $sees = function ($component, array $in, array $out) {
+            foreach ($in as $s) { $component->assertSee($s->email); }
+            foreach ($out as $s) { $component->assertDontSee($s->email); }
+        };
+
+        // Institute column + filter
+        $sees($list()->assertSee('Institute')->set('institute', $this->otherInst->id), [$c], [$a, $b]);
+        // Course, status
+        $sees($list()->set('course', $this->course->id), [$a, $b, $c], []);
+        $sees($list()->set('status', 'pending_docs'), [$b], [$a, $c]);
+        // Approvals
+        $sees($list()->set('docsGate', 'approved'), [$a], [$b, $c]);
+        $sees($list()->set('docsGate', 'pending'), [$b, $c], [$a]);
+        $sees($list()->set('feesGate', 'not_submitted'), [], [$a, $b, $c]);
+        // Payment
+        $sees($list()->set('payment', 'paid'), [$a], [$b, $c]);
+        $sees($list()->set('payment', 'unpaid'), [$b], [$a, $c]);
+        $sees($list()->set('payment', 'none'), [$c], [$a, $b]);
+        // Search (name, ER, course) + chips + clear all
+        $sees($list()->set('search', '00042')->assertSee('Search: “00042”'), [$a], [$b, $c]);
+        $sees($list()->set('search', 'Chitra')->set('status', 'pending_docs')->call('clearAll'), [$a, $b, $c], []);
+        // Summary card filter
+        $sees($list()->call('quickFilter', 'unpaid'), [$b], [$a, $c]);
+        // Sort by name
+        $list()->call('sortBy', 'first_name')->assertSeeInOrder([$a->email, $b->email, $c->email]);
+        $list()->call('sortBy', 'not_a_column')->assertSet('sortField', 'id');
+
+        // Institute users: no institute column/filter, only their own students
+        $this->actingAs($this->admin);
+        $own = $list();
+        $sees($own, [$a, $b], [$c]);
+        $own->assertDontSee('All institutes');
     }
 
     public function test_admin_created_student_gets_course_fees_automatically()
