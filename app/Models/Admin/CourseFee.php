@@ -27,6 +27,11 @@ class CourseFee extends BaseModel
         return $this->belongsTo(Course::class);
     }
 
+    public function institute()
+    {
+        return $this->belongsTo(Institute::class);
+    }
+
     public function dues()
     {
         return $this->hasMany(StudentDue::class);

@@ -2,6 +2,7 @@
 
 namespace App\Http\Livewire\Admin\Onboarding;
 
+use App\Models\Admin\Course;
 use App\Models\Admin\CourseFee;
 use App\Models\Admin\Institute;
 use App\Models\Admin\InstituteCourse;
@@ -9,20 +10,38 @@ use App\Traits\RecordsAuditTrail;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
+use Livewire\WithPagination;
 
 /**
  * Module 2.3 — fee structure per institute course (e.g. Admission fee ₹15,000 due on joining,
  * Semester 1 fee due 14 days after joining). Student dues are generated from it.
+ * Every fee line is listed in one table, grouped by institute course, with a filter bar and summary
+ * cards; courses offered without any fee yet are listed so they can be set up.
  * Super Admin: any institute; others: own institute.
  */
 class FeeStructureComponent extends Component
 {
-    use RecordsAuditTrail;
+    use RecordsAuditTrail, WithPagination;
 
+    protected $paginationTheme = 'bootstrap';
+
+    const PER_PAGE = 25;
+
+    // filters
+    public $search = '';
+    public $filterInstitute = '';
+    public $filterCourse = '';
+    public $filterStatus = '';
+    public $filterDue = '';
+
+    protected $queryString = [
+        'search' => ['except' => ''], 'filterInstitute' => ['except' => '', 'as' => 'institute'], 'filterCourse' => ['except' => '', 'as' => 'course'],
+        'filterStatus' => ['except' => '', 'as' => 'status'], 'filterDue' => ['except' => '', 'as' => 'due'],
+    ];
+
+    // form (modal): target institute course + fee line
     public $instituteId = null;
     public $courseId = null;
-
-    // form
     public $editingId = null, $fee_head, $amount, $due_days = 0, $sort_order = 0, $status = 1;
 
     public function mount()
@@ -36,17 +55,48 @@ class FeeStructureComponent extends Component
         abort_unless(Auth::user()->can('fees.manage'), 403);
         if (!Auth::user()->isSuperAdmin()) {
             $this->instituteId = Auth::user()->institute_id;
+            $this->filterInstitute = '';
+        }
+    }
+
+    public function updated($property)
+    {
+        if (in_array($property, ['search', 'filterInstitute', 'filterCourse', 'filterStatus', 'filterDue'], true)) {
+            $this->resetPage();
+        }
+        if ($property === 'filterInstitute') {
+            $this->filterCourse = '';
         }
     }
 
     public function updatedInstituteId()
     {
         $this->courseId = null;
+        $this->sort_order = $this->nextSortOrder();
+    }
+
+    public function updatedCourseId()
+    {
+        if (!$this->editingId) {
+            $this->sort_order = $this->nextSortOrder();
+        }
+    }
+
+    public function clearFilters()
+    {
+        $this->reset(['search', 'filterInstitute', 'filterCourse', 'filterStatus', 'filterDue']);
+        $this->resetPage();
     }
 
     protected function rules()
     {
         return [
+            'instituteId' => ['required', Rule::exists('institutes', 'id')],
+            'courseId' => ['required', function ($attribute, $value, $fail) {
+                if (!InstituteCourse::where('institute_id', $this->instituteId)->where('course_id', $value)->exists()) {
+                    $fail('This course is not offered by the selected institute.');
+                }
+            }],
             'fee_head' => ['required', 'string', 'max:150', Rule::unique('course_fees', 'fee_head')
                 ->where('institute_id', $this->instituteId)->where('course_id', $this->courseId)->whereNull('deleted_at')->ignore($this->editingId)],
             'amount' => 'required|numeric|min:1|max:9999999',
@@ -56,45 +106,65 @@ class FeeStructureComponent extends Component
         ];
     }
 
-    protected function assertCourseSelected()
-    {
-        abort_unless($this->instituteId && $this->courseId && InstituteCourse::where('institute_id', $this->instituteId)->where('course_id', $this->courseId)->exists(), 404);
-    }
+    protected $validationAttributes = ['instituteId' => 'institute', 'courseId' => 'course', 'fee_head' => 'fee'];
 
-    public function create()
+    /**
+     * Open the add modal, optionally for a given course (and institute, for Super Admin).
+     */
+    public function create($courseId = null, $instituteId = null)
     {
-        $this->assertCourseSelected();
         $this->resetForm();
+        if ($instituteId && Auth::user()->isSuperAdmin()) {
+            $this->instituteId = (int) $instituteId;
+        }
+        if ($courseId) {
+            $this->courseId = (int) $courseId;
+        }
+        $this->sort_order = $this->nextSortOrder();
         $this->dispatchBrowserEvent('open-fee-structure-modal');
     }
 
     public function edit($id)
     {
-        $fee = CourseFee::findOrFail($id);
+        $fee = CourseFee::findOrFail($id); // institute-scoped
         $this->resetValidation();
-        $this->fill(['editingId' => $fee->id, 'fee_head' => $fee->fee_head, 'amount' => $fee->amount, 'due_days' => $fee->due_days, 'sort_order' => $fee->sort_order, 'status' => $fee->status ? 1 : 0]);
+        $this->fill([
+            'editingId' => $fee->id, 'instituteId' => $fee->institute_id, 'courseId' => $fee->course_id, 'fee_head' => $fee->fee_head,
+            'amount' => $fee->amount, 'due_days' => $fee->due_days, 'sort_order' => $fee->sort_order, 'status' => $fee->status ? 1 : 0,
+        ]);
         $this->dispatchBrowserEvent('open-fee-structure-modal');
     }
 
     public function save()
     {
-        $this->assertCourseSelected();
         $data = $this->validate();
-        $data['status'] = (bool) $data['status'];
+        $line = [
+            'fee_head' => $data['fee_head'], 'amount' => $data['amount'], 'due_days' => $data['due_days'],
+            'sort_order' => $data['sort_order'], 'status' => (bool) $data['status'],
+        ];
 
         if ($this->editingId) {
             $fee = CourseFee::findOrFail($this->editingId);
-            $old = $fee->only(array_keys($data));
-            $fee->update($data);
-            $this->auditUpdate($fee, 'course_fees', $old, $fee->only(array_keys($data)), "Updated fee structure: {$fee->fee_head}");
+            $old = $fee->only(array_keys($line));
+            $fee->update($line);
+            $this->auditUpdate($fee, 'course_fees', $old, $fee->only(array_keys($line)), "Updated fee structure: {$fee->fee_head}");
         } else {
-            $fee = CourseFee::create($data + ['institute_id' => $this->instituteId, 'course_id' => $this->courseId]);
+            $fee = CourseFee::create($line + ['institute_id' => $this->instituteId, 'course_id' => $this->courseId]);
             $this->auditCreate($fee, 'course_fees', "Added fee structure line: {$fee->fee_head}");
         }
 
         $this->dispatchBrowserEvent('close-fee-structure-modal');
         $this->dispatchBrowserEvent('show-toast', ['type' => 'success', 'message' => 'Fee structure saved. Existing students keep their dues; use "Generate from fee structure" to add new lines.']);
         $this->resetForm();
+    }
+
+    public function toggleStatus($id)
+    {
+        $fee = CourseFee::findOrFail($id);
+        $old = ['status' => $fee->status];
+        $fee->update(['status' => !$fee->status]);
+        $this->auditUpdate($fee, 'course_fees', $old, ['status' => $fee->status], ($fee->status ? 'Activated' : 'Deactivated') . " fee: {$fee->fee_head}");
+        $this->dispatchBrowserEvent('show-toast', ['type' => 'success', 'message' => "{$fee->fee_head} is now " . ($fee->status ? 'active' : 'inactive') . '.']);
     }
 
     public function delete($id)
@@ -116,28 +186,98 @@ class FeeStructureComponent extends Component
     {
         $this->resetValidation();
         $this->reset(['editingId', 'fee_head', 'amount']);
+        if (Auth::user()->isSuperAdmin() && !$this->instituteId && $this->filterInstitute) {
+            $this->instituteId = (int) $this->filterInstitute;
+        }
         $this->due_days = 0;
-        $this->sort_order = (int) CourseFee::where('institute_id', $this->instituteId)->where('course_id', $this->courseId)->max('sort_order') + 1;
+        $this->sort_order = $this->nextSortOrder();
         $this->status = 1;
+    }
+
+    protected function nextSortOrder(): int
+    {
+        if (!$this->instituteId || !$this->courseId) {
+            return 1;
+        }
+
+        return (int) CourseFee::where('institute_id', $this->instituteId)->where('course_id', $this->courseId)->max('sort_order') + 1;
+    }
+
+    protected function feeQuery()
+    {
+        $isSuperAdmin = Auth::user()->isSuperAdmin();
+
+        $query = CourseFee::query()
+            ->when($isSuperAdmin && $this->filterInstitute, fn ($q) => $q->where('course_fees.institute_id', $this->filterInstitute))
+            ->when($this->filterCourse, fn ($q) => $q->where('course_fees.course_id', $this->filterCourse))
+            ->when($this->filterStatus !== '', fn ($q) => $q->where('course_fees.status', $this->filterStatus === 'active'))
+            ->when($this->filterDue === 'joining', fn ($q) => $q->where('course_fees.due_days', 0))
+            ->when($this->filterDue === 'later', fn ($q) => $q->where('course_fees.due_days', '>', 0));
+
+        if ($term = trim($this->search)) {
+            $query->where(fn ($q) => $q->where('course_fees.fee_head', 'like', "%{$term}%")
+                ->orWhereHas('course', fn ($c) => $c->where('code', 'like', "%{$term}%")->orWhere('name', 'like', "%{$term}%")));
+        }
+
+        return $query;
     }
 
     public function render()
     {
         $user = Auth::user();
-        $courses = $this->instituteId
-            ? InstituteCourse::with('course')->where('institute_id', $this->instituteId)->get()->pluck('course')->filter()->sortBy('name')
-            : collect();
+        $isSuperAdmin = $user->isSuperAdmin();
 
-        $fees = $this->instituteId && $this->courseId
-            ? CourseFee::where('institute_id', $this->instituteId)->where('course_id', $this->courseId)->orderBy('sort_order')->get()
+        // Rows grouped by institute → course → display order
+        $fees = $this->feeQuery()
+            ->with(['course', 'institute'])
+            ->withCount('dues')
+            ->join('courses', 'courses.id', '=', 'course_fees.course_id')
+            ->join('institutes', 'institutes.id', '=', 'course_fees.institute_id')
+            ->orderBy('institutes.name')->orderBy('courses.code')->orderBy('course_fees.sort_order')
+            ->select('course_fees.*')
+            ->paginate(self::PER_PAGE);
+
+        // Per-course totals for the group headers (whole structure, not just this page)
+        $groupTotals = CourseFee::selectRaw('institute_id, course_id, COUNT(*) as line_count, SUM(CASE WHEN status = 1 THEN amount ELSE 0 END) as active_total')
+            ->groupBy('institute_id', 'course_id')->get()
+            ->keyBy(fn ($r) => "{$r->institute_id}-{$r->course_id}");
+
+        // Offered courses (respecting the institute filter) and those still without any fee line
+        $scopeInstitute = $isSuperAdmin ? $this->filterInstitute : $user->institute_id;
+        $offered = InstituteCourse::with(['course', 'institute'])
+            ->when($scopeInstitute, fn ($q) => $q->where('institute_id', $scopeInstitute))
+            ->get()->filter(fn ($ic) => $ic->course);
+        $missing = $offered->reject(fn ($ic) => $groupTotals->has("{$ic->institute_id}-{$ic->course_id}"))->values();
+
+        $base = fn () => CourseFee::when($isSuperAdmin && $this->filterInstitute, fn ($q) => $q->where('institute_id', $this->filterInstitute));
+        $configured = $offered->count() - $missing->count();
+        $activeTotals = $groupTotals->filter(fn ($r, $key) => $offered->contains(fn ($ic) => "{$ic->institute_id}-{$ic->course_id}" === $key))->pluck('active_total');
+
+        // Courses for the filter and the modal: those offered by the chosen institute
+        $filterCourseIds = InstituteCourse::when($scopeInstitute, fn ($q) => $q->where('institute_id', $scopeInstitute))->pluck('course_id');
+        $modalCourses = $this->instituteId
+            ? InstituteCourse::with('course')->where('institute_id', $this->instituteId)->get()->pluck('course')->filter()->sortBy('code')
             : collect();
 
         return view('livewire.admin.onboarding.fee-structure-component', [
-            'institutes' => $user->isSuperAdmin() ? Institute::orderBy('name')->get(['id', 'name', 'code']) : Institute::whereKey($user->institute_id)->get(['id', 'name', 'code']),
-            'courses' => $courses,
             'fees' => $fees,
-            'total' => $fees->where('status', true)->sum('amount'),
-            'isSuperAdmin' => $user->isSuperAdmin(),
+            'groupTotals' => $groupTotals,
+            'missing' => $missing,
+            'stats' => [
+                'lines' => $base()->count(),
+                'active' => $base()->where('status', true)->count(),
+                'inactive' => $base()->where('status', false)->count(),
+                'offered' => $offered->count(),
+                'configured' => $configured,
+                'missing' => $missing->count(),
+                'avgTotal' => $activeTotals->count() ? (float) $activeTotals->avg() : 0,
+                'maxTotal' => $activeTotals->count() ? (float) $activeTotals->max() : 0,
+            ],
+            'institutes' => $isSuperAdmin ? Institute::orderBy('name')->get(['id', 'name', 'code']) : Institute::whereKey($user->institute_id)->get(['id', 'name', 'code']),
+            'filterCourses' => Course::whereIn('id', $filterCourseIds)->orderBy('code')->get(['id', 'code', 'name']),
+            'modalCourses' => $modalCourses,
+            'isSuperAdmin' => $isSuperAdmin,
+            'hasFilters' => $this->search || $this->filterInstitute || $this->filterCourse || $this->filterStatus !== '' || $this->filterDue,
         ])->layout('layouts.admin.master');
     }
 }

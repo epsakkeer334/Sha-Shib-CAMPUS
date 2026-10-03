@@ -748,6 +748,46 @@ class Module2WorkflowTest extends TestCase
         $this->assertSame($newPath, $doc->fresh()->file_path);
     }
 
+    public function test_fee_structure_lists_all_fees_with_filters_and_missing_courses()
+    {
+        $second = Course::create(['name' => 'Cabin Crew', 'code' => 'CC-' . uniqid(), 'duration_months' => 12, 'total_semesters' => 2, 'status' => true]);
+        $nofees = Course::create(['name' => 'Ground Ops', 'code' => 'GO-' . uniqid(), 'duration_months' => 12, 'total_semesters' => 2, 'status' => true]);
+        InstituteCourse::create(['institute_id' => $this->inst->id, 'course_id' => $second->id, 'status' => true]);
+        InstituteCourse::create(['institute_id' => $this->inst->id, 'course_id' => $nofees->id, 'status' => true]);
+        $notOffered = Course::create(['name' => 'Not Offered', 'code' => 'NO-' . uniqid(), 'duration_months' => 12, 'total_semesters' => 2, 'status' => true]);
+
+        $this->actingAs($this->admin);
+        $page = Livewire::test(FeeStructureComponent::class);
+        $page->call('create', $this->course->id)->set('fee_head', 'Admission fee')->set('amount', 15000)->set('due_days', 0)->call('save')->assertHasNoErrors();
+        $page->call('create', $this->course->id)->set('fee_head', 'Semester 1 fee')->set('amount', 42000)->set('due_days', 14)->call('save')->assertHasNoErrors();
+        $page->call('create', $second->id)->set('fee_head', 'Uniform fee')->set('amount', 3000)->set('due_days', 7)->call('save')->assertHasNoErrors();
+
+        // A course the institute doesn't offer is refused
+        $page->call('create', $notOffered->id)->set('fee_head', 'X')->set('amount', 10)->call('save')->assertHasErrors(['courseId']);
+
+        // Everything listed without choosing a course: grouped by course with totals; the course without fees flagged
+        Livewire::test(FeeStructureComponent::class)
+            ->assertSee(['Admission fee', 'Semester 1 fee', 'Uniform fee', '57,000'])
+            ->assertSee('1 course without a fee structure')->assertSee($nofees->code)
+            ->assertSee('2 / 3');
+
+        // Filters
+        Livewire::test(FeeStructureComponent::class)->set('filterCourse', $second->id)->assertSee('Uniform fee')->assertDontSee('Semester 1 fee');
+        Livewire::test(FeeStructureComponent::class)->set('filterDue', 'joining')->assertSee('15,000')->assertDontSee('Semester 1 fee');
+        Livewire::test(FeeStructureComponent::class)->set('search', 'semester')->assertSee('Semester 1 fee')->assertDontSee('Uniform fee')
+            ->call('clearFilters')->assertSee('Uniform fee');
+
+        // Status toggle + inactive filter
+        $uniform = CourseFee::where('fee_head', 'Uniform fee')->firstOrFail();
+        Livewire::test(FeeStructureComponent::class)->call('toggleStatus', $uniform->id);
+        $this->assertFalse($uniform->fresh()->status);
+        Livewire::test(FeeStructureComponent::class)->set('filterStatus', 'inactive')->assertSee('Uniform fee')->assertDontSee('Semester 1 fee');
+
+        // Other institute's fees are never shown to this institute admin
+        CourseFee::create(['institute_id' => $this->otherInst->id, 'course_id' => $this->course->id, 'fee_head' => 'Lambda only fee', 'amount' => 1, 'due_days' => 0, 'sort_order' => 1, 'status' => true]);
+        Livewire::test(FeeStructureComponent::class)->assertDontSee('Lambda only fee');
+    }
+
     public function test_queue_pages_render_with_data()
     {
         $student = $this->submittedStudent();
