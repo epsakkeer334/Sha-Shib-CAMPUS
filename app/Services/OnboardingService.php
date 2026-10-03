@@ -28,7 +28,8 @@ class OnboardingService
     public function __construct(
         protected NotificationService $notifications,
         protected SerialNumberService $serials,
-        protected FeeService $fees
+        protected FeeService $fees,
+        protected AppNotifier $inApp
     ) {
     }
 
@@ -70,7 +71,23 @@ class OnboardingService
 
         $this->documentsChanged($student->fresh());
 
+        // In-app: after submission, staff hear about student uploads; the student hears about office uploads.
+        if ($student->submitted_at) {
+            $vars = ['document' => $label, 'reason' => $document->previous_rejection];
+            if ($this->actorIsStudent($student)) {
+                $this->inApp->notify($document->previous_rejection ? 'document_resubmitted' : 'document_uploaded', $student, $vars, 'staff');
+            } else {
+                $this->inApp->notify('document_uploaded', $student, $vars, 'student');
+            }
+        }
+
         return $document;
+    }
+
+    /** True when the logged-in user is this student (portal), not office staff. */
+    protected function actorIsStudent(Student $student): bool
+    {
+        return Auth::check() && $student->user_id && Auth::id() === (int) $student->user_id;
     }
 
     public function deleteDocument(StudentDocument $document): void
@@ -137,6 +154,8 @@ class OnboardingService
             $this->fees->generateDues($student);
         }
 
+        $this->inApp->notify('application_submitted', $student, ['status' => $student->status_label]);
+
         return ['submitted' => true, 'blocking' => [], 'status' => $student->status];
     }
 
@@ -172,6 +191,10 @@ class OnboardingService
             $old = $student->status;
             $student->update(['status' => $status]);
             $this->audit('status_change', 'students', $student, ['old' => ['status' => $old], 'new' => ['status' => $status]]);
+
+            if ($status === 'pending_approval') {
+                $this->inApp->notify('documents_complete', $student);
+            }
         }
     }
 
@@ -185,6 +208,7 @@ class OnboardingService
         if ($gate && $gate->status === 'approved' && !$student->er_number) {
             $gate->update(['status' => 'pending', 'approved_by' => null, 'approved_at' => null]);
             $this->audit('reopen_gate', 'enrollment', $student, ['description' => 'Gate 1 reopened: documents changed after approval']);
+            $this->inApp->notify('gate1_reopened', $student, ['reason' => 'documents changed after approval']);
         }
 
         $this->refreshStatus($student);
@@ -194,14 +218,19 @@ class OnboardingService
      * The student changed personal / academic details after submission: if Gate 1 was already
      * approved, the admin must look again.
      */
-    public function detailsChanged(Student $student): void
+    public function detailsChanged(Student $student, string $section = 'details'): void
     {
         $gate = $student->gate(EnrollmentApproval::DOCUMENTS);
+        $reopened = false;
 
         if ($gate && $gate->status === 'approved' && !$student->er_number) {
             $gate->update(['status' => 'pending', 'approved_by' => null, 'approved_at' => null]);
             $this->audit('reopen_gate', 'enrollment', $student, ['description' => 'Gate 1 reopened: the student changed their details after approval']);
+            $reopened = true;
         }
+
+        $this->inApp->notify($reopened ? 'gate1_reopened' : 'details_updated', $student,
+            ['section' => $section, 'reason' => "the student changed their {$section} after approval"], 'staff');
     }
 
     // ------------------------------------------------------------------ 2.2 document verification
@@ -227,6 +256,8 @@ class OnboardingService
             'reason' => $remarks,
             'description' => "Verified {$document->type_label} of {$document->student->full_name}",
         ]);
+
+        $this->inApp->notify('document_verified', $document->student, ['document' => $document->type_label]);
     }
 
     /**
@@ -259,6 +290,7 @@ class OnboardingService
 
         $this->refreshStatus($student->fresh());
 
+        $this->inApp->notify('document_accepted', $student, ['document' => $document->type_label]);
         $this->notifications->send($student, 'document_accepted', "Your {$document->type_label} is accepted",
             "Dear {$student->first_name},\n\nWe checked your {$document->type_label} again and it is accepted. "
             . "You do not need to upload it again.\n\n" . optional($student->institute)->name);
@@ -287,6 +319,7 @@ class OnboardingService
         ]);
 
         $this->refreshStatus($student->fresh());
+        $this->inApp->notify('document_reopened', $student, ['document' => $document->type_label]);
     }
 
     public function rejectDocument(StudentDocument $document, string $remarks): void
@@ -308,6 +341,7 @@ class OnboardingService
 
         $this->refreshStatus($student->fresh());
 
+        $this->inApp->notify('document_rejected', $student, ['document' => $document->type_label, 'reason' => $remarks]);
         $this->notifications->send($student, 'document_rejected', "Action needed: re-upload your {$document->type_label}",
             "Dear {$student->first_name},\n\nYour {$document->type_label} could not be accepted.\nReason: {$remarks}\n\n"
             . "Please upload a new copy before {$student->formatted_onboarding_deadline}.\n\n" . optional($student->institute)->name);
@@ -324,6 +358,7 @@ class OnboardingService
         }
 
         $labels = array_map(fn ($type) => config("camp.student_document_types.{$type}.0"), $missing);
+        $this->inApp->notify('document_reminder', $student, ['documents' => implode(', ', $labels)]);
         $this->notifications->send($student, 'document_reminder', 'Reminder: documents pending for your admission',
             "Dear {$student->first_name},\n\nPlease upload the following documents:\n- " . implode("\n- ", $labels)
             . "\n\nComplete onboarding before {$student->formatted_onboarding_deadline}.\n\n" . optional($student->institute)->name);
@@ -401,6 +436,8 @@ class OnboardingService
             'description' => "{$approval->label} approved for {$student->full_name}",
         ]);
 
+        $this->inApp->notify($gate === EnrollmentApproval::DOCUMENTS ? 'gate1_approved' : 'gate2_approved', $student);
+
         $this->issueErIfReady($student->fresh(['approvals']));
     }
 
@@ -422,6 +459,7 @@ class OnboardingService
             'description' => "{$approval->label} rejected for {$student->full_name}",
         ]);
 
+        $this->inApp->notify('application_rejected', $student, ['reason' => $remarks]);
         $this->notifications->send($student, 'application_rejected', 'Your admission application needs corrections',
             "Dear {$student->first_name},\n\nYour application was returned for corrections.\nReason: {$remarks}\n\n"
             . 'Please update it and submit again.' . "\n\n" . optional($student->institute)->name);
@@ -459,6 +497,7 @@ class OnboardingService
             $this->audit('issue_er', 'enrollment', $student, ['new' => ['er_number' => $erNumber], 'description' => "ER number {$erNumber} issued to {$student->full_name}"]);
         });
 
+        $this->inApp->notify('er_issued', $student);
         $this->notifications->send($student, 'er_issued', "Your ER number: {$student->er_number}",
             "Dear {$student->first_name},\n\nYour documents and fees are verified. Your ER number is {$student->er_number}.\n"
             . 'Your ID card will be ready after it is signed by the Training Manager.' . "\n\n" . optional($student->institute)->name);
@@ -531,6 +570,7 @@ class OnboardingService
         }
 
         $this->audit('issue', 'id_cards', $card, ['description' => "ID card signed & issued to {$student->full_name}"]);
+        $this->inApp->notify('id_card_issued', $student->fresh());
     }
 
     /**
@@ -544,5 +584,6 @@ class OnboardingService
 
         $card->update(['status' => 'reprinted', 'tm_signature_status' => 'pending', 'signed_by' => null]);
         $this->audit('reprint', 'id_cards', $card, ['reason' => $reason, 'description' => "ID card reprint started for {$card->student->full_name}"]);
+        $this->inApp->notify('id_card_reprint', $card->student, ['reason' => $reason]);
     }
 }

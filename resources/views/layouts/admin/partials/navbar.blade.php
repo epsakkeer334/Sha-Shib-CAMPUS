@@ -52,6 +52,7 @@
                             <i class="ti ti-maximize"></i>
                         </a>
                     </div>
+                    @livewire('admin.notifications.notification-bell')
                     <div class="dropdown me-1">
                         <a href="#" class="btn btn-menubar" data-bs-toggle="dropdown">
                             <i class="ti ti-layout-grid-remove"></i>

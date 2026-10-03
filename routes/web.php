@@ -50,6 +50,7 @@ Route::prefix('admissions')->name('portal.')->group(function () {
         Route::get('/application/academic', Portal\AcademicPage::class)->name('academic');
         Route::get('/application/documents', Portal\DocumentsPage::class)->name('documents');
         Route::get('/application/payment', Portal\PaymentPage::class)->name('payment');
+        Route::get('/notifications', Portal\NotificationsPage::class)->name('notifications');
         Route::get('/files/documents/{document}', [PortalController::class, 'document'])->name('document');
         Route::get('/files/receipts/{payment}', [PortalController::class, 'receipt'])->name('receipt');
         Route::get('/files/payment-qr/{setting}', [PortalController::class, 'paymentQr'])->name('payment-qr');
@@ -58,6 +59,8 @@ Route::prefix('admissions')->name('portal.')->group(function () {
 
 Route::prefix('admin')->middleware(['auth', 'staff', 'active.user'])->group(function () {
     Route::get('/dashboard', AdminDashboard::class)->name('admin.dashboard');
+    // In-app notifications of the logged-in user (bell → "View all")
+    Route::get('/my-notifications', \App\Http\Livewire\Admin\Notifications\MyNotificationsComponent::class)->name('admin.my-notifications');
 
     // Institute Management — payment methods per institute (UPI ID / QR shown on the portal)
     Route::middleware('permission:fees.manage')->group(function () {

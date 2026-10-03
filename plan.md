@@ -475,6 +475,47 @@ Payment rules:
 
 ---
 
+### Module 2A — In-app Workflow Notifications ✅
+
+**Purpose:** tell the right people, inside the app, when a student or an admin moves the onboarding workflow on. Emails/SMS keep going through `NotificationService` → `notifications_log` (unchanged); this adds the in-app layer.
+
+**Database:** Laravel's standard `notifications` table ✅ (`id` uuid — time-ordered per notification, `type`, `notifiable_*` morph, `data` json, `read_at` indexed, timestamps). `data` = `event, audience (staff|student), title, message, stage, stage_label, icon, tone, student_id, student_name, er_number, institute_id, institute_code, actor_name, url`.
+
+**Backend:**
+- `config/workflow_notifications.php` ✅ — event catalogue: recipients, workflow stage, title/message templates (staff and student wording), icon, colour. New events = one config entry + one `notify()` call.
+- `App\Services\AppNotifier` ✅ — `notify($event, $student, $vars, $only = null)`: staff = active users of the student's institute holding the event's permission(s) + Super Admins (`include_super_admin`), never student accounts; student = the student's portal login. The user who did the action is never notified. Failures are reported, never break the workflow.
+- `App\Notifications\WorkflowNotification` ✅ (database channel). Triggered from `OnboardingService`, `FeeService` and the portal registration — so admin screens and the portal raise the same events.
+
+**Events & recipients:**
+
+| Stage | Event | Staff (permission) | Student |
+|---|---|---|---|
+| Registration | `registration_started` (portal sign-up) | onboarding.verify_documents | — |
+| Registration | `application_submitted` | onboarding.verify_documents | ✓ (when submitted by the office) |
+| Details | `details_updated` (after submission) | onboarding.verify_documents | — |
+| Documents | `document_uploaded` (after submission) | onboarding.verify_documents (student upload) | ✓ (office upload) |
+| Documents | `document_resubmitted` (rejected doc re-uploaded, with old reason) | onboarding.verify_documents | — |
+| Documents | `documents_complete` (pending_docs → pending_approval) | onboarding.verify_documents | — |
+| Documents | `document_verified` / `document_rejected` / `document_accepted` (re-review) / `document_reopened` / `document_reminder` | — | ✓ |
+| Gate 1 | `gate1_approved` | payments.verify (ready for fee clearance) | ✓ |
+| Gate 1 | `gate1_reopened` (docs/details changed after approval) | onboarding.verify_documents | — |
+| Gate 1 | `application_rejected` | — | ✓ |
+| Payment | `fees_added` (fee structure / manual due) | — | ✓ |
+| Payment | `payment_submitted` | payments.verify | ✓ (when recorded at the desk) |
+| Payment | `payment_approved` / `payment_rejected` / `fee_waived` | — | ✓ |
+| Gate 2 | `gate2_approved` | — | ✓ |
+| Gate 2 | `gate2_reopened` (new fees after approval) | payments.verify | — |
+| ER number | `er_issued` | enrollment.manage (print ER form & ID card) | ✓ |
+| ID card | `id_card_issued` (student Active) | students.view | ✓ |
+| ID card | `id_card_reprint` | — | ✓ |
+
+**UI:**
+- Admin header bell ✅ (`Admin\Notifications\NotificationBell`, polls every 30 s): red unread badge, dropdown with the 5 latest (title, message, stage chip, student · ER, time), "Mark all read", "View all notifications". Clicking an item marks it read and opens the related screen (document queue for the student, payment queue, ER & ID page…).
+- "View all" page ✅ `admin.my-notifications` (`Admin\Notifications\MyNotificationsComponent`): All / Unread / Read tabs with counts, stage filter, search (student, document, ER number), grouped by day, mark read/unread per item, mark all read, 20 per page.
+- Student portal ✅: bell with unread count in the header → `portal.notifications` (`Portal\NotificationsPage`): All / Unread, mark all read; opening goes to the documents / payment / status step.
+
+**Later:** real-time push (broadcasting) instead of polling; per-user notification preferences; email digests for staff.
+
 ### Module 3 — Examination Lifecycle
 
 **Purpose:** implements Phase 2 — Trigger → Approval → Execution.

@@ -29,7 +29,8 @@ class FeeService
 
     public function __construct(
         protected NotificationService $notifications,
-        protected SerialNumberService $serials
+        protected SerialNumberService $serials,
+        protected AppNotifier $inApp
     ) {
     }
 
@@ -49,6 +50,13 @@ class FeeService
 
         foreach ($fees as $fee) {
             $this->createDue($student, $fee->fee_head, (float) $fee->amount, $student->joining_date->copy()->addDays($fee->due_days), $fee->id);
+        }
+
+        if ($fees->isNotEmpty()) {
+            $this->inApp->notify('fees_added', $student, [
+                'count' => $fees->count() . ' ' . ($fees->count() === 1 ? 'fee was' : 'fees were'),
+                'amount' => money_inr($fees->sum('amount')),
+            ]);
         }
 
         return $fees->count();
@@ -84,7 +92,10 @@ class FeeService
 
     public function addDue(Student $student, string $feeHead, float $amount, $dueDate): StudentDue
     {
-        return $this->createDue($student, $feeHead, $amount, Carbon::parse($dueDate));
+        $due = $this->createDue($student, $feeHead, $amount, Carbon::parse($dueDate));
+        $this->inApp->notify('fees_added', $student, ['count' => "{$feeHead} was", 'amount' => money_inr($amount)]);
+
+        return $due;
     }
 
     protected function createDue(Student $student, string $feeHead, float $amount, Carbon $dueDate, ?int $courseFeeId = null): StudentDue
@@ -116,6 +127,7 @@ class FeeService
         }
 
         $due->update(['status' => 'waived', 'remarks' => $reason]);
+        $this->inApp->notify('fee_waived', $due->student, ['fee' => $due->fee_head, 'reason' => $reason]);
         $this->audit('waive', 'student_dues', $due, ['reason' => $reason, 'description' => "Waived {$due->fee_head} (" . money_inr($due->amount_due - $due->amount_paid) . ") for {$due->student->full_name}"]);
     }
 
@@ -139,6 +151,7 @@ class FeeService
         if ($gate && $gate->status === 'approved' && !$student->er_number) {
             $gate->update(['status' => 'pending', 'approved_by' => null, 'approved_at' => null]);
             $this->audit('reopen_gate', 'enrollment', $student, ['description' => 'Gate 2 reopened: new fees added after approval']);
+            $this->inApp->notify('gate2_reopened', $student, ['reason' => 'new fees added after approval']);
         }
     }
 
@@ -182,6 +195,8 @@ class FeeService
             'description' => "Payment recorded for {$student->full_name}: " . money_inr($amount) . " via {$gateway->name}",
         ]);
 
+        $this->inApp->notify('payment_submitted', $student, ['amount' => money_inr($amount), 'fee' => $due->fee_head, 'method' => $gateway->name]);
+
         return $payment;
     }
 
@@ -214,6 +229,7 @@ class FeeService
         });
 
         $student = $payment->student;
+        $this->inApp->notify('payment_approved', $student, ['amount' => money_inr($payment->amount), 'receipt' => $payment->receipt_number, 'fee' => optional($payment->due)->fee_head]);
         $this->notifications->send($student, 'payment_received', "Payment received — receipt {$payment->receipt_number}",
             "Dear {$student->first_name},\n\nWe have received " . money_inr($payment->amount)
             . ' towards ' . optional($payment->due)->fee_head . ".\nReceipt number: {$payment->receipt_number}\n\n" . optional($student->institute)->name);
@@ -232,6 +248,7 @@ class FeeService
         ]);
 
         $student = $payment->student;
+        $this->inApp->notify('payment_rejected', $student, ['amount' => money_inr($payment->amount), 'reason' => $reason]);
         $this->notifications->send($student, 'payment_rejected', 'Your payment could not be confirmed',
             "Dear {$student->first_name},\n\nYour payment of " . money_inr($payment->amount)
             . ($payment->transaction_reference ? " (ref. {$payment->transaction_reference})" : '')

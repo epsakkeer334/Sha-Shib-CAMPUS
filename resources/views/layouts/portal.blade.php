@@ -32,6 +32,9 @@
 
         /* header / footer */
         .p-header { background: var(--surface); border-bottom: 1px solid var(--line); }
+        .p-bell { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 10px; color: var(--ink-2); }
+        .p-bell:hover { background: var(--brand-tint); color: var(--brand); }
+        .p-bell-badge { position: absolute; top: 2px; right: 2px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #C2410C; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; border: 2px solid var(--surface); }
         .p-header .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
         .logo { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font-weight: 600; font-size: 16px; }
         .logo-mark { width: 36px; height: 36px; border-radius: 8px; background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; }
@@ -145,6 +148,11 @@
             @if($portalStudent)
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <a href="{{ route('portal.status') }}" class="hide-sm" style="text-decoration: none; font-weight: 500;">My application</a>
+                    @php $portalUnread = $portalUser->unreadNotifications()->count(); @endphp
+                    <a href="{{ route('portal.notifications') }}" class="p-bell" title="Notifications" aria-label="Notifications{{ $portalUnread ? " ({$portalUnread} unread)" : '' }}">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 5a2 2 0 1 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3h-16a4 4 0 0 0 2 -3v-3a7 7 0 0 1 4 -6"/><path d="M9 17v1a3 3 0 0 0 6 0v-1"/></svg>
+                        @if($portalUnread)<span class="p-bell-badge">{{ $portalUnread > 99 ? '99+' : $portalUnread }}</span>@endif
+                    </a>
                     <span class="avatar" aria-hidden="true">{{ $portalStudent->initials }}</span>
                     <span class="hide-sm" style="font-weight: 500;">{{ $portalStudent->first_name }}</span>
                     <a href="{{ route('portal.logout') }}" style="font-size: 14px;" data-signout>Sign out</a>

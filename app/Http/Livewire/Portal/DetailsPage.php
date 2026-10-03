@@ -167,6 +167,8 @@ class DetailsPage extends Component
             // Fees of the course are known now, so the student can pay right away.
             app(FeeService::class)->syncCourseDues($student);
 
+            app(\App\Services\AppNotifier::class)->notify('registration_started', $student);
+
             return $user;
         });
 
@@ -213,7 +215,7 @@ class DetailsPage extends Component
 
             app(FeeService::class)->syncCourseDues($student->fresh());
             if ($student->submitted_at) {
-                app(OnboardingService::class)->detailsChanged($student->fresh());
+                app(OnboardingService::class)->detailsChanged($student->fresh(), 'personal details');
             }
         });
 

@@ -488,6 +488,145 @@ class Module2PortalTest extends TestCase
 
     // ------------------------------------------------------------------ payment settings (admin)
 
+    protected function staffUser(string $role, ?Institute $institute = null): User
+    {
+        $user = User::create(['name' => ucfirst($role) . ' ' . uniqid(), 'email' => uniqid() . '@staff.test', 'password' => bcrypt('x'),
+            'institute_id' => optional($institute)->id, 'status' => true]);
+        $user->assignRole($role);
+
+        return $user;
+    }
+
+    protected function events(User $user): array
+    {
+        return $user->fresh()->notifications()->oldest()->orderBy('id')->get()->pluck('data.event')->all();
+    }
+
+    public function test_workflow_notifications_reach_the_right_people()
+    {
+        $admin = $this->staffUser('institute-admin', $this->inst);
+        $accounts = $this->staffUser('accounts', $this->inst);
+        $tm = $this->staffUser('training-manager', $this->inst);
+        $super = $this->staffUser('super-admin');
+        $otherInst = Institute::create(['name' => 'Other Aero ' . uniqid(), 'established_year' => 2001, 'code' => Institute::generateCode('Other Aero', 2001),
+            'email' => uniqid() . '@inst.test', 'phone' => (string) random_int(1000000000, 9999999999), 'status' => true]);
+        $outsider = $this->staffUser('institute-admin', $otherInst);
+        $this->enableGpay();
+
+        // Student registers, completes and submits (the student is the actor → only staff are told)
+        $student = $this->completeApplication();
+        $studentUser = Auth::user();
+        Livewire::test(DocumentsPage::class)->call('submit');
+        $this->assertEqualsCanonicalizing(['registration_started', 'application_submitted'], $this->events($admin));
+        $this->assertContains('registration_started', $this->events($super));
+        $this->assertSame([], $this->events($studentUser));
+        $this->assertSame([], $this->events($accounts));   // not their stage yet
+
+        // Admin verifies three documents and rejects one → student is told about each decision
+        $this->actingAs($admin);
+        $docs = $student->fresh()->documents;
+        $rejected = $docs->firstWhere('document_type', 'marksheet_12');
+        foreach ($docs->where('document_type', '!=', 'marksheet_12') as $doc) {
+            app(\App\Services\OnboardingService::class)->verifyDocument($doc);
+        }
+        app(\App\Services\OnboardingService::class)->rejectDocument($rejected, 'Marks not readable');
+        $this->assertEqualsCanonicalizing(['document_verified', 'document_verified', 'document_verified', 'document_rejected'], $this->events($studentUser));
+        $last = $studentUser->fresh()->notifications()->latest()->orderByDesc('id')->first();
+        $this->assertSame('document_rejected', $last->data['event']);
+        $this->assertStringContainsString('Marks not readable', $last->data['message']);
+        $this->assertSame(route('portal.documents', [], false), $last->data['url']);
+
+        // Student re-uploads the rejected document → admin sees "re-submitted" with the old reason
+        $this->actingAs($studentUser);
+        Livewire::test(DocumentsPage::class)->set('upload_marksheet_12', UploadedFile::fake()->create('m12.pdf', 100, 'application/pdf'));
+        $resubmitted = $admin->fresh()->notifications()->latest()->orderByDesc('id')->first();
+        $this->assertSame('document_resubmitted', $resubmitted->data['event']);
+        $this->assertStringContainsString('Marks not readable', $resubmitted->data['message']);
+        $this->assertSame($student->id, $resubmitted->data['student_id']);
+
+        // Gate 1 → student + Accounts
+        $this->actingAs($admin);
+        $student = $student->fresh();
+        app(\App\Services\OnboardingService::class)->verifyDocument($student->documents()->where('document_type', 'marksheet_12')->first());
+        app(\App\Services\OnboardingService::class)->approveGate($student->fresh(), \App\Models\Admin\EnrollmentApproval::DOCUMENTS);
+        $this->assertContains('gate1_approved', $this->events($studentUser));
+        $this->assertEqualsCanonicalizing(['gate1_approved'], $this->events($accounts));
+
+        // Student pays → Accounts; Accounts approves → student; Gate 2 → ER → TM
+        $this->actingAs($studentUser);
+        Livewire::test(PaymentPage::class)->set('amount', 15000)->set('utr', '627514903318')->set('proof', UploadedFile::fake()->image('gpay.png'))->call('pay')->assertHasNoErrors();
+        $this->assertEqualsCanonicalizing(['gate1_approved', 'payment_submitted'], $this->events($accounts));
+        $this->actingAs($accounts);
+        app(\App\Services\FeeService::class)->approvePayment(StudentPayment::where('student_id', $student->id)->firstOrFail());
+        app(\App\Services\OnboardingService::class)->approveGate($student->fresh(), \App\Models\Admin\EnrollmentApproval::FEES);
+        $studentEvents = $this->events($studentUser);
+        foreach (['payment_approved', 'gate2_approved', 'er_issued'] as $event) {
+            $this->assertContains($event, $studentEvents);
+        }
+        $this->assertEqualsCanonicalizing(['er_issued'], $this->events($tm));
+        $er = $tm->fresh()->notifications()->first();
+        $this->assertStringContainsString($student->fresh()->er_number, $er->data['message']);
+        $this->assertSame(route('admin.onboarding.enrollment.student', $student->id, false), $er->data['url']);
+
+        // Nobody else's institute hears about this student; actors never notify themselves
+        $this->assertSame([], $this->events($outsider));
+        $this->assertNotContains('payment_approved', $this->events($accounts));
+
+        // ---------------------------------------------------------------- admin bell + View all
+        $this->actingAs($admin);
+        $unread = $admin->unreadNotifications()->count();
+        $this->assertGreaterThan(0, $unread);
+        $bell = Livewire::test(\App\Http\Livewire\Admin\Notifications\NotificationBell::class)
+            ->assertSee((string) $unread)->assertSee('Rejected document re-submitted')->assertSee('View all notifications');
+        $this->assertCount(5, $bell->viewData('latest'));
+        $first = $admin->notifications()->latest()->orderByDesc('id')->first();
+        $bell->call('open', $first->id)->assertRedirect($first->data['url']);
+        $this->assertNotNull($first->fresh()->read_at);
+        $bell->call('markAllRead');
+        $this->assertSame(0, $admin->unreadNotifications()->count());
+
+        $this->get(route('admin.my-notifications'))->assertOk()->assertSee('Notifications');
+        $page = Livewire::test(\App\Http\Livewire\Admin\Notifications\MyNotificationsComponent::class)
+            ->assertSee('Today')->assertSee($student->full_name)->assertSee('Registration');
+        $page->call('toggleRead', $first->id);
+        $this->assertNull($first->fresh()->read_at);
+        $page->set('tab', 'unread')->assertSee($first->data['title'])->assertDontSee('New registration started');
+        Livewire::test(\App\Http\Livewire\Admin\Notifications\MyNotificationsComponent::class)->set('stage', 'registration')
+            ->assertSee('New registration started')->assertDontSee('Rejected document re-submitted');
+        Livewire::test(\App\Http\Livewire\Admin\Notifications\MyNotificationsComponent::class)->set('search', 'no-such-thing-xyz')
+            ->assertSee('No notifications match these filters');
+
+        // Users only ever open their own notifications
+        $foreign = $studentUser->notifications()->first();
+        $this->expectException(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
+        Livewire::test(\App\Http\Livewire\Admin\Notifications\NotificationBell::class)->call('open', $foreign->id);
+    }
+
+    public function test_student_portal_notifications_page_and_bell()
+    {
+        $student = $this->completeApplication();
+        $studentUser = Auth::user();
+        Livewire::test(DocumentsPage::class)->call('submit');
+
+        $admin = $this->staffUser('institute-admin', $this->inst);
+        $this->actingAs($admin);
+        app(\App\Services\OnboardingService::class)->rejectDocument($student->documents()->where('document_type', 'marksheet_10')->first(), 'Blurred scan');
+
+        $this->actingAs($studentUser);
+        $this->get(route('portal.status'))->assertOk()->assertSee('Notifications (1 unread)', false);
+        $this->get(route('portal.notifications'))->assertOk()->assertSee('Document rejected — action needed')->assertSee('Blurred scan');
+
+        $n = $studentUser->notifications()->first();
+        Livewire::test(\App\Http\Livewire\Portal\NotificationsPage::class)
+            ->set('unreadOnly', true)->assertSee('Blurred scan')
+            ->call('open', $n->id)->assertRedirect(route('portal.documents', [], false));
+        $this->assertNotNull($n->fresh()->read_at);
+        Livewire::test(\App\Http\Livewire\Portal\NotificationsPage::class)->set('unreadOnly', true)->assertSee('No unread updates');
+
+        // Staff pages stay closed to students
+        $this->get(route('admin.my-notifications'))->assertRedirect();
+    }
+
     public function test_payment_settings_overview_cards_and_quick_toggle()
     {
         $admin = User::create(['name' => 'Admin', 'email' => uniqid() . '@staff.test', 'password' => bcrypt('x'), 'institute_id' => $this->inst->id, 'status' => true]);

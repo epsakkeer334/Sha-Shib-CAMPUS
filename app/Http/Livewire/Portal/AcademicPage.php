@@ -90,7 +90,7 @@ class AcademicPage extends Component
         $this->auditUpdate($student, 'students', $old, $data, "Student updated academic details on the portal: {$student->full_name}");
 
         if ($student->submitted_at) {
-            app(OnboardingService::class)->detailsChanged($student);
+            app(OnboardingService::class)->detailsChanged($student, 'academic details');
         }
 
         PortalProgress::clearDraft($student, 'academic');
