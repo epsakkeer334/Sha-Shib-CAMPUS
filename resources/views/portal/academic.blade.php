@@ -76,7 +76,7 @@
                 @if($readOnly)
                     <a href="{{ route('portal.documents') }}" class="btn btn-primary">Next</a>
                 @else
-                    @if($student->dues()->exists())
+                    @if($student->dues()->exists() && \App\Support\PortalProgress::paymentUnlocked($student))
                         <button type="button" class="btn btn-secondary" wire:click="saveAndPay" wire:loading.attr="disabled">Save and pay now</button>
                     @endif
                     <button type="submit" class="btn btn-primary" wire:loading.attr="disabled">Save and continue</button>

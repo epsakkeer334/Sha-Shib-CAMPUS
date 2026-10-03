@@ -195,6 +195,57 @@ class Student extends BaseModel
         return "<span class='badge badge-soft-{$colour}'>" . e($this->status_label) . '</span>';
     }
 
+    /**
+     * Fees column of the students list: No fees / Paid / Being confirmed / Part paid / Unpaid.
+     */
+    public function getFeeStatusHtmlAttribute()
+    {
+        $dues = $this->relationLoaded('dues') ? $this->dues : $this->dues()->get();
+        if ($dues->isEmpty()) {
+            return "<span class='badge badge-soft-secondary'>No fees</span>";
+        }
+
+        $outstanding = $dues->whereNotIn('status', ['cleared', 'waived'])->sum(fn ($d) => $d->balance);
+        $pending = $this->payments()->where('status', 'pending_verification')->sum('amount');
+
+        if ($outstanding <= 0) {
+            return "<span class='badge badge-soft-success'>Paid</span>";
+        }
+
+        $html = $dues->sum('amount_paid') > 0
+            ? "<span class='badge badge-soft-warning'>Part paid</span>"
+            : "<span class='badge badge-soft-danger'>Unpaid</span>";
+        $html .= "<div class='small text-muted mt-1'>" . e(money_inr($outstanding, false)) . ' due</div>';
+
+        if ($pending > 0) {
+            $html .= "<div class='small text-info'>" . e(money_inr($pending, false)) . ' to verify</div>';
+        }
+
+        return $html;
+    }
+
+    public function getDocumentsGateHtmlAttribute()
+    {
+        return $this->gateBadge(EnrollmentApproval::DOCUMENTS);
+    }
+
+    public function getFeesGateHtmlAttribute()
+    {
+        return $this->gateBadge(EnrollmentApproval::FEES);
+    }
+
+    protected function gateBadge(string $gate): string
+    {
+        $status = optional($this->gate($gate))->status;
+        [$label, $colour] = [
+            'approved' => ['Approved', 'success'],
+            'rejected' => ['Rejected', 'danger'],
+            'pending' => ['Pending', 'info'],
+        ][$status] ?? ['Not submitted', 'secondary'];
+
+        return "<span class='badge badge-soft-{$colour}'>{$label}</span>";
+    }
+
     public function getFormattedJoiningDateAttribute()
     {
         return $this->joining_date ? $this->joining_date->format('d M Y') : '-';

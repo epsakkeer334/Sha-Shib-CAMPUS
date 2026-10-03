@@ -40,14 +40,17 @@ class PortalProgress
         }
 
         if ($student->portal_last_step && isset(self::STEP_ROUTES[$student->portal_last_step])) {
-            return self::STEP_ROUTES[$student->portal_last_step];
+            // The payment step stays closed until the documents are uploaded.
+            return $student->portal_last_step === 'payment' && !self::paymentUnlocked($student)
+                ? 'portal.documents'
+                : self::STEP_ROUTES[$student->portal_last_step];
         }
 
         return match (true) {
             !$student->hasAddressDetails() => 'portal.details',
             !$student->academicDetail()->exists() => 'portal.academic',
             in_array($student->status, ['draft', 'rejected'], true) || $student->missingRequiredDocuments() => 'portal.documents',
-            $student->outstandingAmount() > 0 => 'portal.payment',
+            $student->outstandingAmount() > 0 && self::paymentUnlocked($student) => 'portal.payment',
             default => 'portal.status',
         };
     }
@@ -60,6 +63,16 @@ class PortalProgress
     {
         return in_array($student->status, ['draft', 'pending_docs', 'pending_approval', 'rejected'], true)
             && !$student->payments()->where('status', 'success')->exists();
+    }
+
+    /**
+     * Payment (Pay now / the Payment step) opens once every required document is uploaded.
+     * A student who already submitted a payment keeps access (e.g. a document rejected later).
+     */
+    public static function paymentUnlocked(Student $student): bool
+    {
+        return !$student->missingRequiredDocuments()
+            || $student->payments()->whereIn('status', ['pending_verification', 'success'])->exists();
     }
 
     // ------------------------------------------------------------------ unsaved form drafts

@@ -12,6 +12,7 @@ use App\Http\Livewire\Admin\Students\StudentOnboardingComponent;
 use App\Models\Admin\Category;
 use App\Models\Admin\Country;
 use App\Models\Admin\Course;
+use App\Models\Admin\CourseFee;
 use App\Models\Admin\EnrollmentApproval;
 use App\Models\Admin\HigherSecondaryBoard;
 use App\Models\Admin\Institute;
@@ -182,7 +183,7 @@ class Module2WorkflowTest extends TestCase
             ->set('fee_head', 'Lab & library fee')->set('amount', 6500)->set('due_days', 14)
             ->call('save')->assertHasNoErrors();
 
-        $fees = Livewire::test(StudentFeesComponent::class, ['student' => $student->id])->call('generateDues');
+        $fees = Livewire::test(StudentFeesComponent::class, ['student' => $student->id])->assertSee('Generate from fee structure')->call('generateDues');
         $this->assertSame(2, $student->dues()->count());
         $this->assertSame('2026-10-15', $student->dues()->where('fee_head', 'Lab & library fee')->first()->due_date->toDateString());
 
@@ -248,6 +249,52 @@ class Module2WorkflowTest extends TestCase
         $this->actingAs($this->accounts);
         $this->get(route('admin.students.payments.receipt', $gpayPayment->id))->assertOk()->assertSee($gpayPayment->receipt_number)->assertSee('₹6,500.00');
         $this->get(route('admin.students.payments.proof', $gpayPayment->id))->assertOk();
+    }
+
+    public function test_students_list_shows_fee_and_gate_statuses_and_portal_payments_reach_the_fees_page()
+    {
+        CourseFee::create(['institute_id' => $this->inst->id, 'course_id' => $this->course->id, 'fee_head' => 'Admission fee', 'amount' => 15000, 'due_days' => 0, 'status' => true]);
+        $student = $this->submittedStudent();
+
+        // Accounts adds the course fees with "Generate from fee structure"
+        $this->actingAs($this->accounts);
+        Livewire::test(StudentFeesComponent::class, ['student' => $student->id])->call('generateDues')->assertSee('Admission fee');
+        $this->assertSame(1, $student->dues()->count());
+
+        // A payment submitted by the student on the portal appears on the admin Fees page
+        $due = $student->dues()->first();
+        $payment = app(\App\Services\FeeService::class)->recordPayment($due, $this->gpay, 15000, now(), '627514903318', null, null, 'Portal');
+        Livewire::test(StudentFeesComponent::class, ['student' => $student->id])
+            ->assertSee('627514903318')->assertSee('Pending verification');
+
+        // Students list: fee status + both gates
+        $html = $this->get(route('admin.students'))->assertOk()->assertSee('Gate 1 · Docs')->assertSee('Gate 2 · Fees')->getContent();
+        $this->assertStringContainsString('Unpaid', $html);
+        $this->assertStringContainsString('to verify', $html);
+        $this->assertStringContainsString('Pending', $html);
+
+        Livewire::test(PaymentVerificationComponent::class)->call('select', $payment->id)->call('approve');
+        $this->assertSame('Paid', strip_tags($student->fresh()->fee_status_html));
+        $this->verifyAllDocuments($student);
+        Livewire::test(DocumentVerificationComponent::class)->call('select', $student->id)->call('approveGate');
+        $this->assertStringContainsString('Approved', $student->fresh()->documents_gate_html);
+    }
+
+    public function test_admin_created_student_gets_course_fees_automatically()
+    {
+        CourseFee::create(['institute_id' => $this->inst->id, 'course_id' => $this->course->id, 'fee_head' => 'Admission fee', 'amount' => 15000, 'due_days' => 0, 'status' => true]);
+        $religion = Religion::where('name', 'Hindu')->firstOrFail();
+        $this->actingAs($this->admin);
+
+        Livewire::test(StudentOnboardingComponent::class)
+            ->set('course_id', $this->course->id)->set('joining_date', now()->toDateString())
+            ->set('first_name', 'Auto')->set('last_name', 'Fees')->set('dob', '2007-01-01')->set('gender', 'male')
+            ->set('qualification_id', Qualification::first()->id)->set('religion_id', $religion->id)
+            ->set('category_id', Category::where('religion_id', $religion->id)->first()->id)
+            ->set('email', uniqid() . '@mail.test')->set('phone', '+919800011111')->set('emergency_contact', '+919800022222')
+            ->call('saveBasic')->assertHasNoErrors();
+
+        $this->assertSame(['Admission fee'], Student::where('first_name', 'Auto')->first()->dues()->pluck('fee_head')->all());
     }
 
     // ------------------------------------------------------------------ 2.2 document rules

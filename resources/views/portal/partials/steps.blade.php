@@ -4,7 +4,7 @@
         'details' => ['Your details', $student ? route('portal.details') : null],
         'academic' => ['Academic', $student ? route('portal.academic') : null],
         'documents' => ['Documents', $student ? route('portal.documents') : null],
-        'payment' => ['Payment', $student ? route('portal.payment') : null],
+        'payment' => ['Payment', $student && \App\Support\PortalProgress::paymentUnlocked($student) ? route('portal.payment') : null],
     ];
     $doneMap = [
         'details' => (bool) $student,
@@ -18,7 +18,7 @@
         @php $state = $key === $current ? 'current' : ($doneMap[$key] ? 'done' : 'todo'); @endphp
         <li class="{{ $state }}" @if($state === 'current') aria-current="step" @endif>
             <span class="bar"></span>
-            <span class="tag">{{ $state === 'done' ? 'Done' : 'Step ' . $loop->iteration }}</span>
+            <span class="tag">{{ $state === 'done' ? 'Done' : ($key === 'payment' && $student && !$url ? 'After documents' : 'Step ' . $loop->iteration) }}</span>
             @if($url && $state !== 'current')
                 <a href="{{ $url }}" class="name">{{ $name }}</a>
             @else

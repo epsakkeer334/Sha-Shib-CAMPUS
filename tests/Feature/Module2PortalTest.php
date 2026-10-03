@@ -220,40 +220,59 @@ class Module2PortalTest extends TestCase
         Livewire::test(PaymentPage::class)->assertSet('due_id', null)->assertSee('Being confirmed');
     }
 
-    public function test_fees_are_shown_at_registration_and_pay_now_works_before_submitting()
+    public function test_pay_now_appears_only_after_the_documents_are_uploaded()
     {
         $this->enableGpay();
 
-        // Step 1 shows the fees of the chosen course
+        // Step 1 shows the fees of the chosen course, but no pay option yet
         Livewire::test(DetailsPage::class)
             ->set('institute_id', $this->inst->id)->set('course_id', $this->course->id)
-            ->assertSee('Fees for this course')->assertSee('Admission fee')->assertSee('₹15,000')->assertSee('Save and pay now');
+            ->assertSee('Fees for this course')->assertSee('Admission fee')->assertSee('₹15,000')
+            ->assertDontSee('Save and pay now');
 
-        // "Save and pay now" registers and opens the payment step; fees exist already
         $this->register()->assertRedirect(route('portal.academic'));
-        Auth::logout();
-        $component = Livewire::test(DetailsPage::class);
-        foreach ($this->registrationValues(['email' => uniqid('pay') . '@mail.test', 'phone' => '+9197' . random_int(10000000, 99999999)]) as $field => $value) {
-            $component->set($field, $value);
-        }
-        $component->call('saveAndPay')->assertHasNoErrors()->assertRedirect(route('portal.payment'));
-
         $student = Auth::user()->student;
-        $this->assertSame('draft', $student->status);
         $this->assertSame(1, $student->dues()->count());
 
-        // Draft application can pay; the fee summary on other steps offers "Pay now"
-        Livewire::test(AcademicPage::class)->assertSee('Pay now');
+        // Before documents: fees are listed, but no "Pay now" on any tab and the Payment step is closed
+        foreach ([DetailsPage::class, AcademicPage::class, DocumentsPage::class] as $page) {
+            Livewire::test($page)->assertSee('You can pay once all required documents are uploaded')
+                ->assertDontSee('Pay now')->assertDontSee('Save and pay now');
+        }
+        $this->get(route('portal.details'))->assertSee('After documents');
+        Livewire::test(PaymentPage::class)->assertRedirect(route('portal.documents'));
+        Livewire::test(AcademicPage::class)
+            ->set('matriculation_board_id', MatriculationBoard::first()->id)->set('matriculation_mark', '92')
+            ->set('higher_secondary_board_id', HigherSecondaryBoard::first()->id)->call('choose', 'higher_secondary_subject', 'PCM')
+            ->set('higher_secondary_mark', '90')
+            ->call('saveAndPay')->assertRedirect(route('portal.documents'));
+
+        // Upload the required documents → "Pay now" on every tab, Payment step open (even before submitting)
+        $docs = Livewire::test(DocumentsPage::class);
+        $docs->set('upload_kyc_photo', UploadedFile::fake()->image('photo.jpg'));
+        foreach (['medical_certificate', 'marksheet_10', 'marksheet_12'] as $type) {
+            $docs->set("upload_{$type}", UploadedFile::fake()->create("{$type}.pdf", 100, 'application/pdf'));
+        }
+
+        foreach ([DetailsPage::class, AcademicPage::class, DocumentsPage::class] as $page) {
+            Livewire::test($page)->assertSee('Pay now')->assertDontSee('You can pay once all required documents are uploaded');
+        }
+        $this->assertSame('draft', $student->fresh()->status);
+
         $due = $student->dues()->first();
         Livewire::test(PaymentPage::class)->assertSet('due_id', $due->id)->assertSee('You can pay now')
             ->set('utr', '627514903318')->set('proof', UploadedFile::fake()->image('gpay.png'))
             ->call('pay')->assertHasNoErrors();
         $this->assertSame('pending_verification', $student->payments()->first()->status);
+
+        // Once a payment exists, payment stays open even if a document is removed / rejected later
+        Livewire::test(DocumentsPage::class)->call('remove', $student->documents()->where('document_type', 'marksheet_12')->value('id'));
+        $this->assertTrue(\App\Support\PortalProgress::paymentUnlocked($student->fresh()));
     }
 
     public function test_office_only_institute_shows_no_online_transfer()
     {
-        $this->register()->assertHasNoErrors();
+        $this->completeApplication();
         Livewire::test(PaymentPage::class)->assertSet('setting_id', null)->assertSee('Online transfer is not set up for your institute yet');
     }
 
@@ -330,9 +349,10 @@ class Module2PortalTest extends TestCase
         $this->assertSame([], \App\Support\PortalProgress::draft($student->fresh(), 'academic'));
 
         // Every step can be opened directly, back and forward
-        foreach (['portal.details', 'portal.academic', 'portal.documents', 'portal.payment', 'portal.details'] as $route) {
+        foreach (['portal.details', 'portal.academic', 'portal.documents', 'portal.details'] as $route) {
             $this->get(route($route))->assertOk();
         }
+        $this->get(route('portal.payment'))->assertRedirect(route('portal.documents')); // no documents yet
         $this->assertSame('details', $student->fresh()->portal_last_step);
     }
 

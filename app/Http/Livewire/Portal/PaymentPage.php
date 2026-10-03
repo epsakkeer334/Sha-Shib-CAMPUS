@@ -26,6 +26,13 @@ class PaymentPage extends Component
 
     public function mount()
     {
+        // Payment opens once the required documents are uploaded.
+        if (!PortalProgress::paymentUnlocked($this->student())) {
+            session()->flash('toast', ['type' => 'warning', 'message' => 'Upload all required documents first — then you can pay your fees.']);
+
+            return redirect()->route('portal.documents');
+        }
+
         PortalProgress::remember($this->student(), 'payment');
 
         // "Pay now" links pass the fee to pay (?due=); otherwise the first payable fee.
@@ -72,6 +79,7 @@ class PaymentPage extends Component
     public function pay()
     {
         $student = $this->student();
+        abort_unless(PortalProgress::paymentUnlocked($student), 403);
         abort_unless(in_array($student->status, ['draft', 'pending_docs', 'pending_approval', 'rejected', 'er_issued', 'active'], true), 403);
 
         $due = $this->due_id ? StudentDue::where('student_id', $student->id)->find($this->due_id) : null;

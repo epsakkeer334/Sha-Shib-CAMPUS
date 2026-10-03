@@ -13,6 +13,7 @@ use App\Models\Admin\Religion;
 use App\Models\Admin\State;
 use App\Models\Admin\Student;
 use App\Models\Admin\StudentAcademicDetail;
+use App\Services\FeeService;
 use App\Services\OnboardingService;
 use App\Support\StudentRules;
 use App\Traits\RecordsAuditTrail;
@@ -178,6 +179,7 @@ class StudentOnboardingComponent extends Component
             $old = $student->only(array_keys($data));
             $student->update($data);
             $this->auditUpdate($student, 'students', $this->stringify($old), $this->stringify($student->only(array_keys($data))), "Updated basic details: {$student->full_name}");
+            app(FeeService::class)->syncCourseDues($student->fresh()); // course / joining date may have changed
             $this->toast('success', 'Basic details saved.');
             $this->activeTab = 'address';
 
@@ -187,6 +189,7 @@ class StudentOnboardingComponent extends Component
         $data['status'] = 'draft';
         $student = Student::create($data);
         $this->auditCreate($student, 'students', "Started onboarding: {$student->full_name}");
+        app(FeeService::class)->syncCourseDues($student); // course fees from the fee structure
         session()->flash('toast', ['type' => 'success', 'message' => 'Student created as draft. Continue with address details.']);
 
         return redirect()->route('admin.students.edit', ['student' => $student->id, 'tab' => 'address']);

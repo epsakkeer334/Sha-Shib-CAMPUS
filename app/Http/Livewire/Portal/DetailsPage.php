@@ -172,11 +172,10 @@ class DetailsPage extends Component
 
         session()->regenerate();
         $user->update(['last_login_at' => now(), 'last_login_ip' => request()->ip()]);
-        session()->flash('toast', ['type' => 'success', 'message' => $payNow
-            ? 'Your login is created and your details are saved. You can pay your fees now.'
-            : 'Your login is created and your details are saved. Next: academic details.']);
+        session()->flash('toast', ['type' => 'success', 'message' => 'Your login is created and your details are saved. Next: academic details.']);
 
-        return redirect()->route($payNow ? 'portal.payment' : 'portal.academic');
+        // No documents yet at registration, so payment is not open: continue with Academic.
+        return redirect()->route('portal.academic');
     }
 
     protected function update(bool $payNow)
@@ -220,6 +219,8 @@ class DetailsPage extends Component
 
         PortalProgress::clearDraft($student, 'details');
         session()->flash('toast', ['type' => 'success', 'message' => 'Your details are saved.']);
+
+        $payNow = $payNow && PortalProgress::paymentUnlocked($student->fresh());
 
         return redirect()->route($payNow ? 'portal.payment' : 'portal.academic');
     }

@@ -106,13 +106,13 @@
         <a href="{{ route('portal.academic') }}" class="btn btn-secondary">Back</a>
         <div style="display: flex; gap: 12px; flex-wrap: wrap;">
             @if($canSubmit)
-                @if($student->dues()->exists())
-                    <a href="{{ route('portal.payment') }}" class="btn btn-secondary">Go to payment</a>
+                @if($student->dues()->exists() && \App\Support\PortalProgress::paymentUnlocked($student))
+                    <a href="{{ route('portal.payment') }}" class="btn btn-secondary">Pay now</a>
                 @endif
                 <button type="button" class="btn btn-primary" wire:click="submit" wire:loading.attr="disabled">
                     {{ $student->status === 'rejected' ? 'Submit corrected application' : 'Submit application' }}
                 </button>
-            @else
+            @elseif(\App\Support\PortalProgress::paymentUnlocked($student))
                 <a href="{{ route('portal.payment') }}" class="btn btn-primary">Continue to payment</a>
             @endif
         </div>

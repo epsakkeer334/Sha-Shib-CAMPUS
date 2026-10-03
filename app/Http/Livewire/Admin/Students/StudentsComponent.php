@@ -95,6 +95,9 @@ class StudentsComponent extends Component
             ['label' => 'Joining', 'field' => 'formatted_joining_date', 'sortable' => false, 'searchable' => false],
             ['label' => 'Onboarding Deadline', 'field' => 'formatted_onboarding_deadline', 'sortable' => false, 'searchable' => false],
             ['label' => 'Status', 'field' => 'status_html', 'type' => 'html', 'sortable' => false, 'searchable' => false],
+            ['label' => 'Fees', 'field' => 'fee_status_html', 'type' => 'html', 'sortable' => false, 'searchable' => false],
+            ['label' => 'Gate 1 · Docs', 'field' => 'documents_gate_html', 'type' => 'html', 'sortable' => false, 'searchable' => false],
+            ['label' => 'Gate 2 · Fees', 'field' => 'fees_gate_html', 'type' => 'html', 'sortable' => false, 'searchable' => false],
             ['label' => 'Actions', 'field' => 'actions', 'type' => 'actions', 'actions' => $actions],
         ]);
 

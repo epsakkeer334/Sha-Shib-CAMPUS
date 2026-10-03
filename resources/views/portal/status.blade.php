@@ -99,7 +99,7 @@
                             @if($outstanding > 0){{ money_inr($outstanding, false) }} still to pay. @elseif($submitted && $student->dues->isEmpty()) Fees will be added by the Accounts office. @endif
                         @endif
                     </span>
-                    @if($submitted && $outstanding > 0)<a href="{{ route('portal.payment') }}" style="font-size: 14px; font-weight: 600; margin-top: 4px;">Pay remaining fees</a>@endif
+                    @if($outstanding > 0 && \App\Support\PortalProgress::paymentUnlocked($student))<a href="{{ route('portal.payment') }}" style="font-size: 14px; font-weight: 600; margin-top: 4px;">Pay remaining fees</a>@endif
                 </span>
             </li>
             <li>

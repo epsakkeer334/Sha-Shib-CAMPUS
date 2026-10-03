@@ -68,7 +68,7 @@ class AcademicPage extends Component
 
     public function saveAndPay()
     {
-        return $this->store('portal.payment');
+        return $this->store(PortalProgress::paymentUnlocked($this->student()) ? 'portal.payment' : 'portal.documents');
     }
 
     protected function store(string $next)

@@ -1,8 +1,10 @@
-{{-- Fees of the application with "Pay now" (shown on every registration step). Params: $student --}}
+{{-- Fees of the application (shown on every registration step). "Pay now" appears once the
+     required documents are uploaded (PortalProgress::paymentUnlocked). Params: $student --}}
 @php
     $summaryDues = $student->dues()->with('payments')->orderBy('due_date')->get();
     $summaryOutstanding = $summaryDues->whereNotIn('status', ['cleared', 'waived'])->sum(fn ($d) => $d->balance);
     $firstPayable = $summaryDues->whereNotIn('status', ['cleared', 'waived'])->first(fn ($d) => $d->payableBalance() > 0);
+    $canPay = \App\Support\PortalProgress::paymentUnlocked($student);
 @endphp
 @if($summaryDues->isNotEmpty())
     <section class="card" style="gap: 14px; padding: 20px 24px;" aria-label="Your fees">
@@ -28,7 +30,9 @@
                 </div>
             @endforeach
         </div>
-        @if($firstPayable)
+        @if(!$canPay)
+            <span class="hint">You can pay once all required documents are uploaded.</span>
+        @elseif($firstPayable)
             <a href="{{ route('portal.payment', ['due' => $firstPayable->id]) }}" class="btn btn-primary btn-sm" style="align-self: flex-start;">Pay now</a>
         @elseif($summaryOutstanding <= 0)
             <span class="muted" style="font-size: 14px;">All fees are paid. <a href="{{ route('portal.payment') }}">Receipts</a></span>

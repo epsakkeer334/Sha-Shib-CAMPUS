@@ -65,7 +65,7 @@
                             <span class="mono">{{ money_inr($fee->amount, false) }}</span>
                         </div>
                     @endforeach
-                    <span class="hint">You can pay right after creating your login (“Save and pay now”), or later from the Payment step.</span>
+                    <span class="hint">You can pay these from the Payment step once your documents are uploaded.</span>
                 </div>
             @endif
         </section>
@@ -115,7 +115,7 @@
                 @if($readOnly)
                     <a href="{{ route('portal.academic') }}" class="btn btn-primary">Next</a>
                 @else
-                    @if(($registering && $courseFees->isNotEmpty()) || ($student && $student->dues()->exists()))
+                    @if($student && $student->dues()->exists() && \App\Support\PortalProgress::paymentUnlocked($student))
                         <button type="button" class="btn btn-secondary" wire:click="saveAndPay" wire:loading.attr="disabled">Save and pay now</button>
                     @endif
                     <button type="submit" class="btn btn-primary" wire:loading.attr="disabled">
