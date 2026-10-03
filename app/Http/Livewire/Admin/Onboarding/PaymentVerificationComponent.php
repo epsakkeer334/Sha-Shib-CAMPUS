@@ -68,7 +68,7 @@ class PaymentVerificationComponent extends Component
 
     protected function payments()
     {
-        $query = StudentPayment::with(['student.course', 'due', 'gateway']);
+        $query = StudentPayment::with(['student.course', 'student.approvals', 'due', 'gateway']);
 
         if (isset(self::STATUS_BY_TAB[$this->tab])) {
             $query->where('status', self::STATUS_BY_TAB[$this->tab]);
@@ -156,7 +156,7 @@ class PaymentVerificationComponent extends Component
     public function render()
     {
         $selected = $this->selectedPaymentId
-            ? StudentPayment::with(['student.course', 'due', 'gateway', 'recorder', 'verifier'])->find($this->selectedPaymentId)
+            ? StudentPayment::with(['student.course', 'student.approvals.approver', 'student.dues', 'due', 'gateway', 'recorder', 'verifier'])->find($this->selectedPaymentId)
             : null;
 
         $gateBase = fn () => Student::whereHas('approvals', fn ($q) => $q->where('gate', EnrollmentApproval::DOCUMENTS)->where('status', 'approved'));

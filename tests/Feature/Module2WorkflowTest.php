@@ -401,9 +401,13 @@ class Module2WorkflowTest extends TestCase
             $fees->addDue($student->fresh(), 'Semester 1 fee', 30000, '2026-10-15');
         }
 
-        // Cleared: paid in full, approved, Gate 2 approved. Waiting: payment recorded but not verified.
-        $this->approvedPayment($done->fresh(), 30000);
-        Livewire::test(PaymentVerificationComponent::class)->call('approveGate', $done->id);
+        // Cleared: paid in full, approved, then Gate 2 approved from the payment's detail panel.
+        $paid = $this->approvedPayment($done->fresh(), 30000);
+        Livewire::test(PaymentVerificationComponent::class)->call('select', $paid->id)
+            ->assertSee('Fee gate · Gate 2')->assertSee('Approve fee gate')->assertSee($done->phone)
+            ->call('approveGate', $done->id)
+            ->assertSee('Approved by')->assertDontSee('Approve fee gate');
+        $this->assertTrue($done->fresh()->gateApproved(\App\Models\Admin\EnrollmentApproval::FEES));
         Livewire::test(StudentFeesComponent::class, ['student' => $waiting->id])
             ->set('pay_due_id', $waiting->dues()->first()->id)->set('pay_amount', 30000)->set('pay_gateway_id', $this->cash->id)
             ->call('recordPayment')->assertHasNoErrors();
@@ -416,6 +420,8 @@ class Module2WorkflowTest extends TestCase
             ->payload['effects']['html'];
         $this->assertStringContainsString('pv-row-waiting', $html);
         $this->assertStringContainsString('pv-chip-ok', $html);
+        $this->assertStringContainsString('Fee gate', $html);           // Gate 2 status column
+        $this->assertStringContainsString('ti ti-shield-check', $html);  // Cleared student's gate shown as approved
 
         Livewire::test(PaymentVerificationComponent::class)->set('tab', 'pending')->assertSee('Waiting Menon')->assertDontSee('Cleared Menon');
         Livewire::test(PaymentVerificationComponent::class)->set('tab', 'approved')->assertSee('Cleared Menon')->assertDontSee('Waiting Menon');

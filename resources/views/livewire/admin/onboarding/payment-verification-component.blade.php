@@ -12,6 +12,18 @@
         'refunded' => ['pv-chip-muted', 'Refunded', 'ti ti-arrow-back-up', 'muted'],
         default => ['pv-chip-warn', 'To verify', 'ti ti-hourglass-high', 'warn'],
     };
+    // Fee gate (Gate 2) state for a student: [chip class, label, icon]
+    $gateChip = function ($student) {
+        $gate = $student ? $student->gate(\App\Models\Admin\EnrollmentApproval::FEES) : null;
+        $docsApproved = $student && optional($student->gate(\App\Models\Admin\EnrollmentApproval::DOCUMENTS))->status === 'approved';
+        return match (true) {
+            !$gate => ['pv-chip-muted', 'Not submitted', 'ti ti-circle-dashed'],
+            $gate->status === 'approved' => ['pv-chip-ok', 'Approved', 'ti ti-shield-check'],
+            $gate->status === 'rejected' => ['pv-chip-bad', 'Rejected', 'ti ti-shield-x'],
+            !$docsApproved => ['pv-chip-muted', 'Awaiting docs', 'ti ti-file-search'],
+            default => ['pv-chip-warn', 'Waiting', 'ti ti-hourglass-high'],
+        };
+    };
 @endphp
 <div class="content pay-verify">
     {{-- Header --}}
@@ -88,7 +100,7 @@
                                             <a href="{{ route('admin.students.fees', $item->id) }}" class="pv-name pv-ellipsis">{{ $item->full_name }}</a>
                                             <div class="pv-sub">
                                                 @if(optional($item->course)->code)<span class="pv-code">{{ $item->course->code }}</span>@endif
-                                                <span class="pv-ellipsis">{{ $item->er_number ?: $item->email }}</span>
+                                                <span class="pv-ellipsis" title="{{ $item->er_number }}"><i class="ti ti-phone"></i> {{ $item->phone ?: '—' }}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -152,7 +164,15 @@
                     <div class="table-responsive">
                         <table class="table align-middle mb-0 pv-table">
                             <thead>
-                                <tr><th>Student</th><th>Payment</th><th class="text-end">Amount</th><th>Reference</th><th>Submitted</th><th>Status</th></tr>
+                                <tr>
+                                    <th>Student</th>
+                                    <th>Payment</th>
+                                    <th class="text-end">Amount</th>
+                                    <th>Reference</th>
+                                    <th>Submitted</th>
+                                    <th>Status</th>
+                                    <th>Fee gate</th>
+                                </tr>
                             </thead>
                             <tbody>
                                 @forelse($payments as $payment)
@@ -170,7 +190,7 @@
                                                     <div class="pv-name pv-ellipsis">{{ optional($payment->student)->full_name }}</div>
                                                     <div class="pv-sub">
                                                         @if(optional(optional($payment->student)->course)->code)<span class="pv-code">{{ $payment->student->course->code }}</span>@endif
-                                                        @if(optional($payment->student)->er_number)<span>{{ $payment->student->er_number }}</span>@endif
+                                                        <span class="pv-ellipsis" title="{{ optional($payment->student)->er_number }}"><i class="ti ti-phone"></i> {{ optional($payment->student)->phone ?: '—' }}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -192,9 +212,11 @@
                                             <div class="pv-sub">{{ $payment->created_at->diffForHumans() }}</div>
                                         </td>
                                         <td><span class="pv-chip {{ $chipClass }}"><i class="{{ $chipIcon }}"></i> {{ $chipText }}</span></td>
+                                        @php [$gClass, $gText, $gIcon] = $gateChip($payment->student); @endphp
+                                        <td><span class="pv-chip {{ $gClass }}"><i class="{{ $gIcon }}"></i> {{ $gText }}</span></td>
                                     </tr>
                                 @empty
-                                    <tr><td colspan="6" class="pv-empty-row"><i class="ti ti-receipt-off"></i><div>No payments here.</div></td></tr>
+                                    <tr><td colspan="7" class="pv-empty-row"><i class="ti ti-receipt-off"></i><div>No payments here.</div></td></tr>
                                 @endforelse
                             </tbody>
                         </table>
@@ -232,7 +254,7 @@
                                 <span class="pv-avatar pv-avatar-{{ $tone }}">{{ optional($selected->student)->initials }}</span>
                                 <span class="min-w-0 flex-grow-1">
                                     <span class="pv-name pv-ellipsis d-block">{{ optional($selected->student)->full_name }}</span>
-                                    <span class="pv-sub">{{ optional($selected->student)->er_number ?: optional($selected->student)->email }}</span>
+                                    <span class="pv-sub"><span><i class="ti ti-phone"></i> {{ optional($selected->student)->phone ?: '—' }}</span>@if(optional($selected->student)->er_number)<span>· {{ $selected->student->er_number }}</span>@endif</span>
                                 </span>
                                 <i class="ti ti-chevron-right text-muted"></i>
                             </a>
@@ -285,6 +307,34 @@
                                     <i class="ti ti-printer me-1"></i> Print receipt
                                 </a>
                             @endif
+
+                            {{-- Gate 2 for this student: approve here once the fees are cleared --}}
+                            @php
+                                $student = $selected->student;
+                                $feeGate = $student ? $student->gate(\App\Models\Admin\EnrollmentApproval::FEES) : null;
+                                [$gClass, $gText, $gIcon] = $gateChip($student);
+                                $gateWaiting = optional($feeGate)->status === 'pending';
+                                $gateBlocker = $gateWaiting ? $onboarding->gateBlocker($student, \App\Models\Admin\EnrollmentApproval::FEES) : null;
+                                $outstanding = $student ? $student->outstandingAmount() : 0;
+                            @endphp
+                            <div class="pv-gate-box pv-gate-{{ $gateWaiting && !$gateBlocker ? 'ready' : 'idle' }}">
+                                <div class="d-flex justify-content-between align-items-center gap-2">
+                                    <div class="fw-semibold"><i class="ti ti-shield-check me-1"></i> Fee gate · Gate 2</div>
+                                    <span class="pv-chip {{ $gClass }}"><i class="{{ $gIcon }}"></i> {{ $gText }}</span>
+                                </div>
+                                <div class="pv-sub mt-1">Outstanding: <span class="pv-amount {{ $outstanding > 0 ? 'text-danger' : 'text-success' }}">{{ money_inr($outstanding, false) }}</span></div>
+                                @if(optional($feeGate)->status === 'approved')
+                                    <div class="pv-sub mt-1">Approved by {{ optional($feeGate->approver)->name ?? '—' }} · {{ optional($feeGate->approved_at)->format('d M Y, H:i') }}</div>
+                                @elseif($gateWaiting)
+                                    @if($gateBlocker)
+                                        <div class="pv-sub pv-text-warn mt-1"><i class="ti ti-info-circle"></i> {{ $gateBlocker }}</div>
+                                    @endif
+                                    <button type="button" class="btn btn-sm btn-success w-100 mt-2" wire:click="approveGate({{ $student->id }})" wire:loading.attr="disabled"
+                                            @if($gateBlocker) disabled title="{{ $gateBlocker }}" @endif>
+                                        <i class="ti ti-shield-check me-1"></i> Approve fee gate
+                                    </button>
+                                @endif
+                            </div>
                         </div>
                     @endif
                 </div>
@@ -400,6 +450,9 @@
         .pay-verify .pv-note-ok { background: #DCFCE7; color: #166534; }
         .pay-verify .pv-note-warn { background: #FEF3C7; color: #92400E; }
         .pay-verify .pv-note-bad { background: #FEE2E2; color: #991B1B; }
+        .pay-verify .pv-gate-box { margin-top: 16px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--pv-border); background: #F9FAFB; }
+        .pay-verify .pv-gate-ready { border-color: #86EFAC; background: #F0FDF4; }
+        .pay-verify .pv-sub i { font-size: 13px; }
         .pay-verify .pv-actions { display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; margin-top: 10px; }
         @media (max-width: 575.98px) { .pay-verify .pv-search, .pay-verify .pv-method-select { width: 100%; } .pay-verify .pv-actions { grid-template-columns: 1fr; } }
     </style>
