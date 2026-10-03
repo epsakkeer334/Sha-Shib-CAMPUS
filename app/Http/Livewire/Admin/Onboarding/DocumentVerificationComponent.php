@@ -8,6 +8,7 @@ use App\Models\Admin\StudentDocument;
 use App\Services\OnboardingService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
+use Livewire\WithPagination;
 use RuntimeException;
 
 /**
@@ -16,7 +17,13 @@ use RuntimeException;
  */
 class DocumentVerificationComponent extends Component
 {
-    public $tab = 'pending';
+    use WithPagination;
+
+    /** Students per page in the left queue (paged in the database, so it scales to any number). */
+    const PER_PAGE = 20;
+    const PAGE_NAME = 'queuePage';
+
+    public $tab = 'all';
     public $search = '';
     public $selectedId = null;
 
@@ -24,7 +31,7 @@ class DocumentVerificationComponent extends Component
     public $remarks = [];
     public $gateRemarks = '';
 
-    protected $queryString = ['tab' => ['except' => 'pending'], 'selectedId' => ['as' => 'student', 'except' => null]];
+    protected $queryString = ['tab' => ['except' => 'all'], 'selectedId' => ['as' => 'student', 'except' => null]];
 
     public function mount()
     {
@@ -45,6 +52,12 @@ class DocumentVerificationComponent extends Component
     {
         $this->selectedId = null;
         $this->resetErrorBag();
+        $this->resetPage(self::PAGE_NAME);
+    }
+
+    public function updatedSearch()
+    {
+        $this->resetPage(self::PAGE_NAME);
     }
 
     public function select($id)
@@ -65,7 +78,9 @@ class DocumentVerificationComponent extends Component
             'rejected' => $query->where(fn ($q) => $q->whereHas('approvals', $gate('rejected'))
                 ->orWhere(fn ($q) => $q->whereHas('approvals', $gate('pending'))->whereHas('documents', fn ($d) => $d->where('verification_status', 'rejected')))),
             'approved' => $query->whereHas('approvals', $gate('approved')),
-            default => $query->whereIn('status', ['pending_docs', 'pending_approval'])->whereHas('approvals', $gate('pending')),
+            'pending' => $query->whereIn('status', ['pending_docs', 'pending_approval'])->whereHas('approvals', $gate('pending')),
+            // All submitted students (any documents-gate status), verified ones included
+            default => $query->whereHas('approvals', fn ($q) => $q->where('gate', EnrollmentApproval::DOCUMENTS)),
         };
 
         if ($term = trim($this->search)) {
@@ -73,7 +88,25 @@ class DocumentVerificationComponent extends Component
                 ->orWhere('phone', 'like', "%{$term}%")->orWhere('email', 'like', "%{$term}%"));
         }
 
-        return $query->orderBy('onboarding_deadline')->limit(100)->get();
+        // Students needing a review first (pending documents while Gate 1 is open), then by deadline.
+        // Done in SQL so the order holds across pages.
+        $query->orderByRaw(
+            "CASE WHEN EXISTS (SELECT 1 FROM student_documents d WHERE d.student_id = students.id AND d.verification_status = 'pending' AND d.deleted_at IS NULL)
+                   AND EXISTS (SELECT 1 FROM enrollment_approvals a WHERE a.student_id = students.id AND a.gate = ? AND a.status = 'pending' AND a.deleted_at IS NULL)
+                  THEN 0 ELSE 1 END",
+            [EnrollmentApproval::DOCUMENTS]
+        )->orderBy('onboarding_deadline')->orderBy('id');
+
+        return $query->paginate(self::PER_PAGE, ['*'], self::PAGE_NAME);
+    }
+
+    /**
+     * Has documents waiting for a decision while Gate 1 is still open.
+     */
+    public function needsReview(Student $student): bool
+    {
+        return $student->documents->where('verification_status', 'pending')->isNotEmpty()
+            && optional($student->approvals->firstWhere('gate', EnrollmentApproval::DOCUMENTS))->status === 'pending';
     }
 
     protected function counts(): array
@@ -85,6 +118,7 @@ class DocumentVerificationComponent extends Component
             'rejected' => Student::where(fn ($q) => $q->whereHas('approvals', $gate('rejected'))
                 ->orWhere(fn ($q) => $q->whereHas('approvals', $gate('pending'))->whereHas('documents', fn ($d) => $d->where('verification_status', 'rejected'))))->count(),
             'approved' => Student::whereHas('approvals', $gate('approved'))->count(),
+            'all' => Student::whereHas('approvals', fn ($q) => $q->where('gate', EnrollmentApproval::DOCUMENTS))->count(),
         ];
     }
 

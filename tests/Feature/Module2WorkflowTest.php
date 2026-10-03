@@ -361,6 +361,63 @@ class Module2WorkflowTest extends TestCase
         $this->assertSame(['Admission fee'], Student::where('first_name', 'Auto')->first()->dues()->pluck('fee_head')->all());
     }
 
+    public function test_document_queue_keeps_verified_students_and_highlights_pending_ones()
+    {
+        $done = $this->submittedStudent();
+        $done->update(['first_name' => 'Verified', 'onboarding_deadline' => now()->addDays(2)]);
+        $waiting = $this->submittedStudent();
+        $waiting->update(['first_name' => 'Waiting', 'onboarding_deadline' => now()->addDays(20)]);
+
+        $this->verifyAllDocuments($done);
+        Livewire::test(DocumentVerificationComponent::class)->call('select', $done->id)->call('approveGate');
+
+        // Default "All students": both shown; the one needing review is highlighted and listed first
+        $html = Livewire::test(DocumentVerificationComponent::class)
+            ->assertSet('tab', 'all')
+            ->assertSee('All students')
+            ->assertSeeInOrder(['Waiting Menon', 'Verified Menon'])
+            ->payload['effects']['html'];
+
+        $this->assertStringContainsString('needs-review', $html);   // highlighted row
+        $this->assertStringContainsString('4 to review', $html);
+        $this->assertStringContainsString('dv-state-ok', $html);    // verified student shown with a normal row + green chip
+
+        // "Pending review" still lists only the students waiting for a decision
+        Livewire::test(DocumentVerificationComponent::class)->set('tab', 'pending')->assertSee('Waiting Menon')->assertDontSee('Verified Menon');
+    }
+
+    public function test_document_queue_is_paged_with_students_needing_review_first()
+    {
+        // 21 students already verified (gate approved), earliest deadlines
+        for ($i = 1; $i <= 21; $i++) {
+            $s = $this->submittedStudent();
+            $s->update(['first_name' => 'Done' . str_pad($i, 2, '0', STR_PAD_LEFT), 'onboarding_deadline' => now()->addDays($i)]);
+            $s->documents()->update(['verification_status' => 'verified']);
+            $s->approvals()->where('gate', EnrollmentApproval::DOCUMENTS)->update(['status' => 'approved']);
+        }
+        // 1 student needing review, latest deadline
+        $waiting = $this->submittedStudent();
+        $waiting->update(['first_name' => 'Waiting', 'onboarding_deadline' => now()->addDays(60)]);
+
+        $this->actingAs($this->admin);
+        $page = DocumentVerificationComponent::PAGE_NAME;
+
+        // Page 1: 20 rows, the student needing review comes first despite the latest deadline
+        $queue = Livewire::test(DocumentVerificationComponent::class)
+            ->assertSee('1–20 of 22')->assertSee('Page 1 of 2')
+            ->assertSeeInOrder(['Waiting Menon', 'Done01 Menon'])
+            ->assertDontSee('Done20 Menon');
+
+        // Next / previous
+        $queue->call('nextPage', $page)->assertSee('21–22 of 22')->assertSee('Done20 Menon')->assertSee('Done21 Menon')->assertDontSee('Waiting Menon');
+        $queue->call('previousPage', $page)->assertSee('Waiting Menon');
+
+        // Search and changing the status card go back to page 1
+        $queue->call('nextPage', $page)->set('search', 'Done2')->assertSee('Done20 Menon')->assertDontSee('Page 2 of');
+        Livewire::test(DocumentVerificationComponent::class)->call('nextPage', $page)->set('tab', 'pending')
+            ->assertSee('Waiting Menon')->assertDontSee('Done01 Menon');
+    }
+
     // ------------------------------------------------------------------ 2.2 document rules
 
     public function test_rejected_document_must_be_reuploaded_and_keeps_the_reason()

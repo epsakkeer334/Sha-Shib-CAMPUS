@@ -1,5 +1,6 @@
 @php
     $statusCards = [
+        'all' => ['All students', $counts['all'], 'ti ti-users', 'all', 'Every submitted application'],
         'pending' => ['Pending review', $counts['pending'], 'ti ti-hourglass-high', 'warn', 'Documents waiting to be checked'],
         'rejected' => ['Rejected', $counts['rejected'], 'ti ti-file-x', 'bad', 'Re-upload needed or returned'],
         'approved' => ['Gate approved', $counts['approved'], 'ti ti-circle-check', 'ok', 'Documents gate passed'],
@@ -30,7 +31,7 @@
     {{-- Status cards (queues) --}}
     <div class="row g-3 mb-3">
         @foreach($statusCards as $key => [$label, $count, $icon, $tone, $hint])
-            <div class="col-md-4">
+            <div class="col-sm-6 col-xl-3">
                 <button type="button" wire:click="$set('tab', '{{ $key }}')" class="dv-status dv-status-{{ $tone }} {{ $tab === $key ? 'is-active' : '' }}"
                         aria-pressed="{{ $tab === $key ? 'true' : 'false' }}">
                     <span class="dv-status-icon"><i class="{{ $icon }}"></i></span>
@@ -51,7 +52,7 @@
             <div class="dv-panel h-100">
                 <div class="dv-panel-head">
                     <span class="fw-semibold">{{ $statusCards[$tab][0] ?? 'Students' }}</span>
-                    <span class="dv-count">{{ $students->count() }}</span>
+                    <span class="dv-count">{{ number_format($students->total()) }}</span>
                 </div>
                 <div class="p-2 border-bottom">
                     <div class="position-relative">
@@ -67,21 +68,33 @@
                             $toReview = $item->documents->where('verification_status', 'pending')->count();
                             $percent = $requiredTypes->count() ? round($verified / $requiredTypes->count() * 100) : 0;
                             [$chipClass, $chipText] = $deadlineChip($item->er_number ? null : $item->days_to_deadline);
+                            $itemGate = optional($item->approvals->firstWhere('gate', \App\Models\Admin\EnrollmentApproval::DOCUMENTS))->status;
+                            $hasRejected = $item->documents->where('verification_status', 'rejected')->isNotEmpty();
+                            $needsReview = $toReview > 0 && $itemGate === 'pending';
+                            [$stateClass, $stateText] = match (true) {
+                                $itemGate === 'approved' => ['dv-state-ok', 'Verified'],
+                                $itemGate === 'rejected' => ['dv-state-bad', 'Returned'],
+                                $needsReview => ['dv-state-warn', $toReview . ' to review'],
+                                $hasRejected => ['dv-state-bad', 'Re-upload'],
+                                $verified >= $requiredTypes->count() => ['dv-state-ok', 'All verified'],
+                                default => ['dv-state-muted', 'Awaiting upload'],
+                            };
                         @endphp
-                        <button type="button" wire:click="select({{ $item->id }})" class="dv-queue-item {{ $student && $student->id === $item->id ? 'is-active' : '' }}">
+                        <button type="button" wire:click="select({{ $item->id }})"
+                                class="dv-queue-item {{ $needsReview ? 'needs-review' : '' }} {{ $student && $student->id === $item->id ? 'is-active' : '' }}">
                             <span class="dv-avatar">{{ $item->initials }}</span>
                             <span class="flex-grow-1 min-w-0">
                                 <span class="d-flex justify-content-between align-items-center gap-2">
                                     <span class="fw-semibold text-truncate text-dark">{{ $item->full_name }}</span>
                                     @if($chipText)<span class="dv-chip {{ $chipClass }}">{{ $chipText }}</span>@endif
                                 </span>
-                                <span class="d-flex align-items-center gap-2 small text-muted mt-1">
+                                <span class="d-flex align-items-center gap-2 small text-muted mt-1 flex-wrap">
                                     <span class="dv-course">{{ optional($item->course)->code }}</span>
-                                    @if($tab === 'approved')
-                                        <span>ER {{ $item->er_number ?: 'pending' }}</span>
-                                    @else
-                                        <span>{{ $toReview }} to review</span>
-                                    @endif
+                                    <span class="dv-state {{ $stateClass }}">
+                                        @if($stateClass === 'dv-state-ok')<i class="ti ti-circle-check"></i>@elseif($needsReview)<i class="ti ti-clock"></i>@endif
+                                        {{ $stateText }}
+                                    </span>
+                                    @if($item->er_number)<span class="text-muted">{{ $item->er_number }}</span>@endif
                                 </span>
                                 <span class="dv-progress mt-2" title="{{ $verified }} of {{ $requiredTypes->count() }} required documents verified">
                                     <span style="width: {{ $percent }}%;"></span>
@@ -94,6 +107,21 @@
                         </div>
                     @endforelse
                 </div>
+
+                {{-- Pager (20 per page; students needing review always come first) --}}
+                @if($students->hasPages())
+                    @php $pageName = \App\Http\Livewire\Admin\Onboarding\DocumentVerificationComponent::PAGE_NAME; @endphp
+                    <div class="dv-pager">
+                        <span class="small text-muted">{{ $students->firstItem() }}–{{ $students->lastItem() }} of {{ number_format($students->total()) }}</span>
+                        <div class="d-flex align-items-center gap-1">
+                            <button type="button" class="btn btn-sm btn-light border" wire:click="previousPage('{{ $pageName }}')"
+                                    @if($students->onFirstPage()) disabled @endif aria-label="Previous page"><i class="ti ti-chevron-left"></i></button>
+                            <span class="small px-1 text-nowrap">Page {{ $students->currentPage() }} of {{ $students->lastPage() }}</span>
+                            <button type="button" class="btn btn-sm btn-light border" wire:click="nextPage('{{ $pageName }}')"
+                                    @if(!$students->hasMorePages()) disabled @endif aria-label="Next page"><i class="ti ti-chevron-right"></i></button>
+                        </div>
+                    </div>
+                @endif
             </div>
         </div>
 
@@ -151,7 +179,7 @@
                         @php $typeDocs = $documents->get($type, collect()); @endphp
                         @if($typeDocs->isEmpty())
                             @if($required)
-                                <div class="col-md-6 col-xxl-4">
+                                <div class="col-md-6 col-xxl-3">
                                     <div class="dv-doc dv-doc-missing">
                                         <i class="ti ti-file-off"></i>
                                         <span class="fw-semibold">{{ $label }}</span>
@@ -239,9 +267,21 @@
         .doc-verify .dv-empty i { font-size: 40px; color: #D1D5DB; }
         /* queue */
         .doc-verify .dv-queue { max-height: 68vh; overflow-y: auto; }
+        .doc-verify .dv-pager { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid #F1F2F4; background: #FAFAFA; border-radius: 0 0 12px 12px; }
         .doc-verify .dv-queue-item { width: 100%; display: flex; gap: 10px; padding: 12px 14px; border: 0; border-bottom: 1px solid #F3F4F6; background: #fff; text-align: left; border-left: 3px solid transparent; }
         .doc-verify .dv-queue-item:hover { background: #F9FAFB; }
+        .doc-verify .dv-queue-item.needs-review { background: #FFFBEB; border-left-color: #F59E0B; }
+        .doc-verify .dv-queue-item.needs-review .text-dark { font-weight: 700 !important; }
+        .doc-verify .dv-queue-item.needs-review:hover { background: #FEF3C7; }
         .doc-verify .dv-queue-item.is-active { background: #FFF7F2; border-left-color: #F26522; }
+        .doc-verify .dv-state { display: inline-flex; align-items: center; gap: 3px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+        .doc-verify .dv-state-ok { background: #DCFCE7; color: #15803D; }
+        .doc-verify .dv-state-warn { background: #FEF3C7; color: #B45309; }
+        .doc-verify .dv-state-bad { background: #FEE2E2; color: #DC2626; }
+        .doc-verify .dv-state-muted { background: #F3F4F6; color: #6B7280; }
+        .doc-verify .dv-status-all .dv-status-icon { background: #EEF2FF; color: #4338CA; }
+        .doc-verify .dv-status-all.is-active { border-color: #6366F1; box-shadow: 0 0 0 3px rgba(99, 102, 241, .14); }
+        .doc-verify .dv-status-all.is-active .dv-status-arrow { color: #4338CA; }
         .doc-verify .dv-avatar { width: 36px; height: 36px; border-radius: 50%; background: #FEF0E7; color: #F26522; font-weight: 600; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .doc-verify .dv-avatar-lg { width: 52px; height: 52px; font-size: 17px; }
         .doc-verify .dv-course { padding: 0 6px; border-radius: 5px; background: #EEF2FF; color: #4338CA; font-weight: 500; font-size: 11px; }

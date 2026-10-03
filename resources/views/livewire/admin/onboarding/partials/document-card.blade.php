@@ -11,7 +11,7 @@
     $isPdf = !$doc->is_image;
     $actionable = !$locked && in_array($doc->verification_status, ['pending', 'rejected'], true);
 @endphp
-<div class="col-md-6 col-xxl-4">
+<div class="col-md-6 col-xxl-3">
     <div class="dv-doc {{ $doc->verification_status === 'pending' && !$locked ? 'dv-doc-pending' : '' }} {{ $doc->verification_status === 'rejected' ? 'dv-doc-rejected' : '' }}">
         <a href="{{ $url }}" target="_blank" class="dv-doc-preview" title="Open {{ $doc->original_name }}">
             @if($isPdf)
