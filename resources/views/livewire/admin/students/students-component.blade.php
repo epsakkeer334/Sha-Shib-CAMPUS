@@ -230,6 +230,10 @@
         .students-list .students-table thead th a { color: inherit; text-decoration: none; }
         .students-list .students-table td { padding: 12px 14px; border-color: #F1F2F4; font-size: 14px; }
         .students-list .stu-avatar { width: 36px; height: 36px; border-radius: 50%; background: #FEF0E7; color: #F26522; font-weight: 600; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        /* ER number: green badge once issued, faint dashed placeholder until then */
+        .students-list .er-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px 3px 8px; border-radius: 8px; background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%); border: 1px solid #A7F3D0; color: #047857; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12.5px; font-weight: 600; letter-spacing: .02em; white-space: nowrap; box-shadow: 0 1px 2px rgba(4, 120, 87, .08); }
+        .students-list .er-badge i { font-size: 14px; color: #059669; }
+        .students-list .er-badge-pending { background: #F9FAFB; border: 1px dashed #D1D5DB; color: #9CA3AF; font-family: inherit; font-weight: 500; font-size: 11.5px; box-shadow: none; padding: 2px 8px; }
         .students-list .institute-code { display: inline-block; margin-top: 3px; padding: 1px 8px; border-radius: 6px; background: #EEF2FF; color: #4338CA; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11.5px; font-weight: 500; letter-spacing: .02em; }
         .students-list .min-w-0 { min-width: 0; max-width: 240px; }
         /* Hidden by default. While a request runs, Livewire sets an inline display:flex (wire:loading.delay.flex),

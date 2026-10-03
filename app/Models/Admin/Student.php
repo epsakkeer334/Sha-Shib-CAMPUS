@@ -251,9 +251,16 @@ class Student extends BaseModel
 
     public function getErCellHtmlAttribute(): string
     {
-        $er = $this->er_number
-            ? "<div class='fw-medium' style=\"font-family: 'IBM Plex Mono', ui-monospace, monospace;\">" . e($this->er_number) . '</div>'
-            : "<div class='text-muted'>—</div>";
+        $joined = "<div class='small text-muted text-nowrap'>Joined " . e($this->formatted_joining_date) . '</div>';
+
+        // ER issued: green badge (styled by .er-badge in the students list) + issue date instead of the deadline
+        if ($this->er_number) {
+            $issuedAt = $this->relationLoaded('erRequest') ? optional(optional($this->erRequest)->generated_at)->format('d M Y') : null;
+
+            return "<span class='er-badge' title='ER number'><i class='ti ti-id-badge-2'></i>" . e($this->er_number) . '</span>'
+                . $joined
+                . ($issuedAt ? "<div class='small text-nowrap' style='color: #15803D;'><i class='ti ti-circle-check'></i> Issued {$issuedAt}</div>" : '');
+        }
 
         // Onboarding deadline colour (until the ER number is issued):
         // past → red, within config('camp.deadline_warning_days') → dark yellow, otherwise grey.
@@ -261,7 +268,7 @@ class Student extends BaseModel
         $days = $this->days_to_deadline;
         $style = 'color: #6B7280;';
 
-        if (!$this->er_number && !is_null($days)) {
+        if (!is_null($days)) {
             if ($days < 0) {
                 $style = 'color: #DC2626; font-weight: 600;';
                 $due .= ' · ' . abs($days) . ' ' . (abs($days) === 1 ? 'day' : 'days') . ' overdue';
@@ -271,8 +278,8 @@ class Student extends BaseModel
             }
         }
 
-        return $er
-            . "<div class='small text-muted text-nowrap'>Joined " . e($this->formatted_joining_date) . '</div>'
+        return "<span class='er-badge er-badge-pending'>ER pending</span>"
+            . $joined
             . "<div class='small text-nowrap' style='{$style}'>{$due}</div>";
     }
 

@@ -686,6 +686,14 @@ class Module2WorkflowTest extends TestCase
 
         // Opened from the students list it stays under Students
         $this->get(route('admin.students.enrollment', $pending->id))->assertOk()->assertSee('All students');
+
+        // Students list: issued ER number shown as a green badge with its issue date; others show "ER pending"
+        $this->submittedStudent()->update(['first_name' => 'Noer']);
+        $this->actingAs($this->admin);
+        $html = Livewire::test(\App\Http\Livewire\Admin\Students\StudentsComponent::class)->payload['effects']['html'];
+        $this->assertStringContainsString("<i class='ti ti-id-badge-2'></i>" . $pending->er_number . '</span>', $html);
+        $this->assertStringContainsString('Issued ' . now()->format('d M Y'), $html);
+        $this->assertStringContainsString('ER pending', $html);
     }
 
     public function test_uploads_get_random_paths_without_record_ids()
