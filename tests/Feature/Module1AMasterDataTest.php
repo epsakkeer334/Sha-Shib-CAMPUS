@@ -339,7 +339,7 @@ class Module1AMasterDataTest extends TestCase
     public function test_master_data_menu_is_multi_level_and_super_admin_only()
     {
         $sections = collect(MenuService::for($this->super))->keyBy('title');
-        $master = $sections['Configuration']['items'][0];
+        $master = collect($sections['Administration']['items'])->firstWhere('label', 'Master Data');
 
         $this->assertSame('Master Data', $master['label']);
         $this->assertSame(['Academic', 'Personal', 'Location', 'Finance'], array_column($master['children'], 'label'));
@@ -349,9 +349,9 @@ class Module1AMasterDataTest extends TestCase
         );
 
         $instAdminSections = collect(MenuService::for($this->makeUser('institute-admin', $this->institute)))->keyBy('title');
-        $this->assertFalse($instAdminSections->has('Configuration'));
-        // Institute Admin sees Institute Management with only Institute Courses (permission-based).
-        $this->assertSame(['Institute Courses', 'Payment Settings'], array_column($instAdminSections['Organization']['items'][0]['children'], 'label'));
+        $this->assertNotContains('Master Data', array_column($instAdminSections['Administration']['items'], 'label'));
+        // Institute Admin sees Institute Management without Institutes (permission-based).
+        $this->assertSame(['Institute Courses', 'Fee Structure', 'Payment Settings'], array_column($instAdminSections['Institute']['items'][0]['children'], 'label'));
 
         // Rendered sidebar contains the nested markup
         $this->actingAs($this->super);

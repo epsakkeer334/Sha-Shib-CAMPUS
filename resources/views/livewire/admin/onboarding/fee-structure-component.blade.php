@@ -15,7 +15,7 @@
             <nav>
                 <ol class="breadcrumb mb-1">
                     <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}"><i class="ti ti-smart-home"></i></a></li>
-                    <li class="breadcrumb-item">Student Onboarding</li>
+                    <li class="breadcrumb-item">Institute Management</li>
                     <li class="breadcrumb-item active">Fee structure</li>
                 </ol>
             </nav>
