@@ -386,6 +386,46 @@ class Module2WorkflowTest extends TestCase
         Livewire::test(DocumentVerificationComponent::class)->set('tab', 'pending')->assertSee('Waiting Menon')->assertDontSee('Verified Menon');
     }
 
+    public function test_payment_queue_keeps_handled_payments_and_highlights_ones_to_verify()
+    {
+        $fees = app(\App\Services\FeeService::class);
+        $done = $this->submittedStudent();
+        $done->update(['first_name' => 'Cleared']);
+        $waiting = $this->submittedStudent();
+        $waiting->update(['first_name' => 'Waiting']);
+
+        foreach ([$done, $waiting] as $student) {
+            $this->verifyAllDocuments($student);
+            Livewire::test(DocumentVerificationComponent::class)->call('select', $student->id)->call('approveGate');
+            $this->actingAs($this->accounts);
+            $fees->addDue($student->fresh(), 'Semester 1 fee', 30000, '2026-10-15');
+        }
+
+        // Cleared: paid in full, approved, Gate 2 approved. Waiting: payment recorded but not verified.
+        $this->approvedPayment($done->fresh(), 30000);
+        Livewire::test(PaymentVerificationComponent::class)->call('approveGate', $done->id);
+        Livewire::test(StudentFeesComponent::class, ['student' => $waiting->id])
+            ->set('pay_due_id', $waiting->dues()->first()->id)->set('pay_amount', 30000)->set('pay_gateway_id', $this->cash->id)
+            ->call('recordPayment')->assertHasNoErrors();
+
+        // Default "All payments": approved payment still listed, the one to verify highlighted and first
+        $html = Livewire::test(PaymentVerificationComponent::class)
+            ->assertSet('tab', 'all')
+            ->assertSee('All payments')
+            ->assertSeeInOrder(['Waiting Menon', 'Cleared Menon'])
+            ->payload['effects']['html'];
+        $this->assertStringContainsString('pv-row-waiting', $html);
+        $this->assertStringContainsString('pv-chip-ok', $html);
+
+        Livewire::test(PaymentVerificationComponent::class)->set('tab', 'pending')->assertSee('Waiting Menon')->assertDontSee('Cleared Menon');
+        Livewire::test(PaymentVerificationComponent::class)->set('tab', 'approved')->assertSee('Cleared Menon')->assertDontSee('Waiting Menon');
+
+        // Fee gate: approved student stays listed after the one still waiting
+        Livewire::test(PaymentVerificationComponent::class)->set('tab', 'gate')
+            ->assertSeeInOrder(['Waiting Menon', 'Cleared Menon'])
+            ->assertSee('Approved');
+    }
+
     public function test_document_queue_is_paged_with_students_needing_review_first()
     {
         // 21 students already verified (gate approved), earliest deadlines

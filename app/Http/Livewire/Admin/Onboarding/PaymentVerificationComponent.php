@@ -15,8 +15,9 @@ use RuntimeException;
 
 /**
  * Module 2.3 — Accounts payment verification & fee gate (Gate 2).
- * Design: "Accounts · Payment verification & fee gate".
- * Tabs: To verify / Approved / Rejected / Fee gate. Payment detail panel on the right.
+ * Status cards: All payments / To verify / Approved / Rejected / Fee gate. Nothing is hidden once
+ * handled: "All" lists every payment (those waiting for verification first and highlighted), and the
+ * Fee gate lists every student past Gate 1 (those waiting for Accounts first, approved ones kept).
  */
 class PaymentVerificationComponent extends Component
 {
@@ -24,13 +25,17 @@ class PaymentVerificationComponent extends Component
 
     protected $paginationTheme = 'bootstrap';
 
-    public $tab = 'pending';
+    const PER_PAGE = 15;
+
+    const STATUS_BY_TAB = ['pending' => 'pending_verification', 'approved' => 'success', 'rejected' => 'failed'];
+
+    public $tab = 'all';
     public $search = '';
     public $method = '';
     public $selectedPaymentId = null;
     public $reason = '';
 
-    protected $queryString = ['tab' => ['except' => 'pending']];
+    protected $queryString = ['tab' => ['except' => 'all'], 'search' => ['except' => ''], 'method' => ['except' => '']];
 
     public function mount()
     {
@@ -46,7 +51,9 @@ class PaymentVerificationComponent extends Component
     {
         if (in_array($property, ['tab', 'search', 'method'], true)) {
             $this->resetPage();
-            $this->selectedPaymentId = null;
+            if ($property === 'tab') {
+                $this->selectedPaymentId = null;
+            }
             $this->reason = '';
             $this->resetErrorBag();
         }
@@ -61,36 +68,51 @@ class PaymentVerificationComponent extends Component
 
     protected function payments()
     {
-        $status = ['pending' => 'pending_verification', 'approved' => 'success', 'rejected' => 'failed'][$this->tab] ?? 'pending_verification';
+        $query = StudentPayment::with(['student.course', 'due', 'gateway']);
 
-        $query = StudentPayment::with(['student.course', 'due', 'gateway'])->where('status', $status);
-
+        if (isset(self::STATUS_BY_TAB[$this->tab])) {
+            $query->where('status', self::STATUS_BY_TAB[$this->tab]);
+        }
         if ($this->method) {
             $query->where('payment_gateway_id', $this->method);
         }
         if ($term = trim($this->search)) {
             $query->where(fn ($q) => $q->where('transaction_reference', 'like', "%{$term}%")
                 ->orWhere('receipt_number', 'like', "%{$term}%")
-                ->orWhereHas('student', fn ($s) => $s->where('first_name', 'like', "%{$term}%")->orWhere('last_name', 'like', "%{$term}%")));
+                ->orWhereHas('student', fn ($s) => $s->where('first_name', 'like', "%{$term}%")
+                    ->orWhere('last_name', 'like', "%{$term}%")->orWhere('er_number', 'like', "%{$term}%")));
         }
 
-        return $query->orderBy($status === 'pending_verification' ? 'created_at' : 'verified_at', $status === 'pending_verification' ? 'asc' : 'desc')->paginate(15);
+        // Waiting for verification first (oldest first — first come, first served), then the rest newest first
+        return $query
+            ->orderByRaw("CASE WHEN status = 'pending_verification' THEN 0 ELSE 1 END")
+            ->orderByRaw("CASE WHEN status = 'pending_verification' THEN created_at END ASC")
+            ->orderByDesc('created_at')
+            ->paginate(self::PER_PAGE);
     }
 
     /**
-     * Gate 2 queue: Gate 1 approved, Gate 2 not approved yet.
+     * Gate 2 list: every student whose documents gate is approved. Those still waiting for Accounts
+     * come first; students already approved stay listed (not hidden).
      */
     protected function feeGateStudents()
     {
-        $query = Student::with(['course', 'dues', 'payments'])
+        $query = Student::with(['course', 'dues', 'payments', 'approvals.approver'])
             ->whereHas('approvals', fn ($q) => $q->where('gate', EnrollmentApproval::DOCUMENTS)->where('status', 'approved'))
-            ->whereHas('approvals', fn ($q) => $q->where('gate', EnrollmentApproval::FEES)->where('status', 'pending'));
+            ->whereHas('approvals', fn ($q) => $q->where('gate', EnrollmentApproval::FEES));
 
         if ($term = trim($this->search)) {
-            $query->where(fn ($q) => $q->where('first_name', 'like', "%{$term}%")->orWhere('last_name', 'like', "%{$term}%"));
+            $query->where(fn ($q) => $q->where('first_name', 'like', "%{$term}%")->orWhere('last_name', 'like', "%{$term}%")
+                ->orWhere('er_number', 'like', "%{$term}%"));
         }
 
-        return $query->orderBy('onboarding_deadline')->paginate(15);
+        return $query
+            ->orderByRaw(
+                "CASE WHEN EXISTS (SELECT 1 FROM enrollment_approvals a WHERE a.student_id = students.id AND a.gate = ? AND a.status = 'pending' AND a.deleted_at IS NULL) THEN 0 ELSE 1 END",
+                [EnrollmentApproval::FEES]
+            )
+            ->orderBy('onboarding_deadline')
+            ->paginate(self::PER_PAGE);
     }
 
     public function approve()
@@ -137,12 +159,20 @@ class PaymentVerificationComponent extends Component
             ? StudentPayment::with(['student.course', 'due', 'gateway', 'recorder', 'verifier'])->find($this->selectedPaymentId)
             : null;
 
+        $gateBase = fn () => Student::whereHas('approvals', fn ($q) => $q->where('gate', EnrollmentApproval::DOCUMENTS)->where('status', 'approved'));
+
         return view('livewire.admin.onboarding.payment-verification-component', [
             'payments' => $this->tab === 'gate' ? null : $this->payments(),
             'gateStudents' => $this->tab === 'gate' ? $this->feeGateStudents() : null,
-            'pendingCount' => StudentPayment::where('status', 'pending_verification')->count(),
-            'gateCount' => Student::whereHas('approvals', fn ($q) => $q->where('gate', EnrollmentApproval::DOCUMENTS)->where('status', 'approved'))
-                ->whereHas('approvals', fn ($q) => $q->where('gate', EnrollmentApproval::FEES)->where('status', 'pending'))->count(),
+            'counts' => [
+                'all' => StudentPayment::count(),
+                'pending' => StudentPayment::where('status', 'pending_verification')->count(),
+                'pendingAmount' => (float) StudentPayment::where('status', 'pending_verification')->sum('amount'),
+                'approved' => StudentPayment::where('status', 'success')->count(),
+                'approvedAmount' => (float) StudentPayment::where('status', 'success')->sum('amount'),
+                'rejected' => StudentPayment::where('status', 'failed')->count(),
+                'gate' => $gateBase()->whereHas('approvals', fn ($q) => $q->where('gate', EnrollmentApproval::FEES)->where('status', 'pending'))->count(),
+            ],
             'methods' => PaymentGateway::orderBy('sort_order')->pluck('name', 'id'),
             'selected' => $selected,
             'onboarding' => app(OnboardingService::class),
