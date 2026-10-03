@@ -1,63 +1,71 @@
-{{-- One KYC document with verify / reject. Params: $doc, $locked (gate approved → read-only) --}}
+{{-- One KYC document: compact card with preview, status and verify / reject / re-review.
+     Params: $doc, $locked (Gate 1 approved → read-only) --}}
 @php
-    $statusColour = ['verified' => 'success', 'rejected' => 'danger'][$doc->verification_status] ?? 'info';
-    $statusLabel = $doc->verification_status === 'pending' && $doc->previous_rejection ? 'Re-uploaded' : ucfirst($doc->verification_status);
+    [$statusLabel, $statusClass] = match (true) {
+        $doc->verification_status === 'verified' => ['Verified', 'dv-badge-ok'],
+        $doc->verification_status === 'rejected' => ['Rejected', 'dv-badge-bad'],
+        (bool) $doc->previous_rejection => ['Re-uploaded', 'dv-badge-info'],
+        default => ['Pending', 'dv-badge-warn'],
+    };
     $url = route('admin.students.documents.show', $doc->id);
+    $isPdf = !$doc->is_image;
+    $actionable = !$locked && in_array($doc->verification_status, ['pending', 'rejected'], true);
 @endphp
-<div class="col-md-6">
-    <div class="doc-card h-100 {{ $doc->verification_status === 'pending' && !$locked ? 'doc-card-active' : '' }}">
-        <a href="{{ $url }}" target="_blank" class="doc-preview d-flex align-items-center justify-content-center text-decoration-none" title="Open {{ $doc->original_name }}">
-            @if($doc->is_image)
-                <img src="{{ $url }}" alt="{{ $doc->type_label }}" loading="lazy">
+<div class="col-md-6 col-xxl-4">
+    <div class="dv-doc {{ $doc->verification_status === 'pending' && !$locked ? 'dv-doc-pending' : '' }} {{ $doc->verification_status === 'rejected' ? 'dv-doc-rejected' : '' }}">
+        <a href="{{ $url }}" target="_blank" class="dv-doc-preview" title="Open {{ $doc->original_name }}">
+            @if($isPdf)
+                <span class="dv-doc-pdf"><i class="ti ti-file-type-pdf"></i><span>PDF</span></span>
             @else
-                <span class="text-center text-muted small"><i class="ti ti-file-type-pdf fs-1 text-danger d-block"></i>{{ \Illuminate\Support\Str::limit($doc->original_name, 40) }}</span>
+                <img src="{{ $url }}" alt="{{ $doc->type_label }}" loading="lazy">
             @endif
+            <span class="dv-doc-open"><i class="ti ti-external-link"></i> Open</span>
         </a>
-        <div class="p-3 d-flex flex-column gap-2">
-            <div class="d-flex justify-content-between align-items-center gap-2">
-                <span class="fw-semibold">{{ $doc->type_label }}</span>
-                <span class="badge badge-soft-{{ $statusColour }}">{{ $statusLabel }}</span>
+
+        <div class="dv-doc-body">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+                <div class="min-w-0">
+                    <div class="dv-doc-title text-truncate">{{ $doc->type_label }}</div>
+                    <div class="dv-doc-meta text-truncate" title="{{ $doc->original_name }}">{{ $doc->size_label }} · {{ $doc->uploaded_at->format('d M, H:i') }}</div>
+                </div>
+                <span class="dv-badge {{ $statusClass }}">{{ $statusLabel }}</span>
             </div>
-            <span class="small text-muted">{{ $doc->size_label }} · uploaded {{ $doc->uploaded_at->format('d M, H:i') }}</span>
 
             @if($doc->verification_status !== 'pending')
-                <span class="small text-muted">
-                    by {{ optional($doc->verifier)->name ?? '—' }} · {{ optional($doc->verified_at)->format('d M, H:i') }}
-                    @if($doc->remarks) — “{{ $doc->remarks }}” @endif
-                </span>
+                <div class="dv-doc-note">
+                    <i class="ti ti-user-check"></i> {{ optional($doc->verifier)->name ?? '—' }} · {{ optional($doc->verified_at)->format('d M') }}
+                    @if($doc->remarks)<div class="text-truncate" title="{{ $doc->remarks }}">“{{ $doc->remarks }}”</div>@endif
+                </div>
             @elseif($doc->previous_rejection)
-                <span class="small text-muted">Previously rejected: {{ $doc->previous_rejection }}</span>
+                <div class="dv-doc-note"><i class="ti ti-history"></i> Previously rejected: <span title="{{ $doc->previous_rejection }}">{{ \Illuminate\Support\Str::limit($doc->previous_rejection, 60) }}</span></div>
             @endif
 
-            @if($doc->verification_status === 'rejected' && !$locked)
-                {{-- Re-review: the rejection was a mistake → approve, or put it back in review --}}
-                <div class="rounded p-2 small" style="background: #FBF4F3; color: #6E1E19;">
-                    Rejected by mistake? Review the file again, then approve it or move it back to pending.
-                </div>
-                <div>
-                    <label class="form-label small fw-medium mb-1" for="remarks{{ $doc->id }}">Re-review note</label>
-                    <textarea id="remarks{{ $doc->id }}" rows="2" class="form-control form-control-sm" wire:model.defer="remarks.{{ $doc->id }}"
-                              placeholder="Optional, e.g. checked the original — marks are visible"></textarea>
-                </div>
-                <div class="d-grid gap-2" style="grid-template-columns: 1fr 1.3fr;">
-                    <button type="button" class="btn btn-outline-secondary" wire:click="reopen({{ $doc->id }})" wire:loading.attr="disabled">Move back to pending</button>
-                    <button type="button" class="btn btn-success" wire:click="approveRejected({{ $doc->id }})" wire:loading.attr="disabled">
-                        <i class="ti ti-rotate-clockwise me-1"></i>Approve after re-review
-                    </button>
-                </div>
-            @endif
+            @if($actionable)
+                <textarea rows="1" class="form-control form-control-sm dv-remarks @error('remarks.' . $doc->id) is-invalid @enderror"
+                          wire:model.defer="remarks.{{ $doc->id }}" aria-label="Remarks for {{ $doc->type_label }}"
+                          placeholder="{{ $doc->verification_status === 'rejected' ? 'Re-review note (optional)' : 'Remarks (required to reject)' }}"></textarea>
+                @error('remarks.' . $doc->id) <div class="invalid-feedback d-block small">{{ $message }}</div> @enderror
 
-            @if($doc->verification_status === 'pending' && !$locked)
-                <div>
-                    <label class="form-label small fw-medium mb-1" for="remarks{{ $doc->id }}">Remarks</label>
-                    <textarea id="remarks{{ $doc->id }}" rows="2" class="form-control form-control-sm @error('remarks.' . $doc->id) is-invalid @enderror"
-                              wire:model.defer="remarks.{{ $doc->id }}" placeholder="Required when rejecting"></textarea>
-                    @error('remarks.' . $doc->id) <div class="invalid-feedback">{{ $message }}</div> @enderror
-                </div>
-                <div class="d-grid gap-2" style="grid-template-columns: 1fr 1fr;">
-                    <button type="button" class="btn btn-outline-danger" wire:click="reject({{ $doc->id }})" wire:loading.attr="disabled">Reject</button>
-                    <button type="button" class="btn btn-success" wire:click="verify({{ $doc->id }})" wire:loading.attr="disabled">Verify</button>
-                </div>
+                @if($doc->verification_status === 'pending')
+                    <div class="dv-doc-actions">
+                        <button type="button" class="btn btn-sm btn-outline-danger" wire:click="reject({{ $doc->id }})" wire:loading.attr="disabled">
+                            <i class="ti ti-x"></i> Reject
+                        </button>
+                        <button type="button" class="btn btn-sm btn-success" wire:click="verify({{ $doc->id }})" wire:loading.attr="disabled">
+                            <i class="ti ti-check"></i> Verify
+                        </button>
+                    </div>
+                @else
+                    {{-- Re-review of a rejection made by mistake --}}
+                    <div class="dv-doc-actions">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" wire:click="reopen({{ $doc->id }})" wire:loading.attr="disabled" title="Move back to pending">
+                            <i class="ti ti-arrow-back-up"></i> To pending
+                        </button>
+                        <button type="button" class="btn btn-sm btn-success" wire:click="approveRejected({{ $doc->id }})" wire:loading.attr="disabled" title="Approve after re-review">
+                            <i class="ti ti-rotate-clockwise"></i> Approve
+                        </button>
+                    </div>
+                @endif
             @endif
         </div>
     </div>

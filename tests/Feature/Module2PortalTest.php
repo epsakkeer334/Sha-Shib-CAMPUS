@@ -356,6 +356,25 @@ class Module2PortalTest extends TestCase
         $this->assertSame('details', $student->fresh()->portal_last_step);
     }
 
+    public function test_status_page_counts_documents_verified_by_the_admin()
+    {
+        $student = $this->completeApplication();
+        Livewire::test(DocumentsPage::class)->call('submit');
+        $studentUser = Auth::user();
+        $this->get(route('portal.status'))->assertSee('0 of 4 checked');
+
+        $admin = User::create(['name' => 'Admin', 'email' => uniqid() . '@staff.test', 'password' => bcrypt('x'), 'institute_id' => $this->inst->id, 'status' => true]);
+        $admin->assignRole('institute-admin');
+        $this->actingAs($admin);
+        $verify = Livewire::test(DocumentVerificationComponent::class)->call('select', $student->id);
+        foreach ($student->documents()->whereIn('document_type', ['kyc_photo', 'medical_certificate'])->get() as $doc) {
+            $verify->call('verify', $doc->id);
+        }
+
+        $this->actingAs($studentUser);
+        $this->get(route('portal.status'))->assertSee('2 of 4 checked')->assertSee('Approved');
+    }
+
     public function test_detail_change_after_gate_one_approval_reopens_it()
     {
         $student = $this->completeApplication();

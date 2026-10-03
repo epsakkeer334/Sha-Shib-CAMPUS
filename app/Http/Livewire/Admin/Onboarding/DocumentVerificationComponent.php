@@ -84,6 +84,7 @@ class DocumentVerificationComponent extends Component
             'pending' => Student::whereIn('status', ['pending_docs', 'pending_approval'])->whereHas('approvals', $gate('pending'))->count(),
             'rejected' => Student::where(fn ($q) => $q->whereHas('approvals', $gate('rejected'))
                 ->orWhere(fn ($q) => $q->whereHas('approvals', $gate('pending'))->whereHas('documents', fn ($d) => $d->where('verification_status', 'rejected'))))->count(),
+            'approved' => Student::whereHas('approvals', $gate('approved'))->count(),
         ];
     }
 

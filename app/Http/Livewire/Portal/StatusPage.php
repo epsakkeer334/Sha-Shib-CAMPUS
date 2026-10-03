@@ -24,7 +24,8 @@ class StatusPage extends Component
         $required = collect(config('camp.student_document_types'))->filter(fn ($t) => $t[1]);
         $latestDocs = $student->documents->sortByDesc('uploaded_at')->unique('document_type')->keyBy('document_type');
         $rejectedDocs = $student->documents->where('verification_status', 'rejected');
-        $verifiedCount = $latestDocs->only($required->keys()->all())->where('verification_status', 'verified')->count();
+        // whereIn on document_type (Eloquent Collection::only() would filter by primary key, not by these keys)
+        $verifiedCount = $latestDocs->whereIn('document_type', $required->keys()->all())->where('verification_status', 'verified')->count();
         $pendingPayments = $student->payments->where('status', 'pending_verification');
         $outstanding = $student->outstandingAmount();
 
