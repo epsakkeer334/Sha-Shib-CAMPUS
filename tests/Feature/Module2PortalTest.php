@@ -488,6 +488,58 @@ class Module2PortalTest extends TestCase
 
     // ------------------------------------------------------------------ payment settings (admin)
 
+    public function test_payment_settings_overview_cards_and_quick_toggle()
+    {
+        $admin = User::create(['name' => 'Admin', 'email' => uniqid() . '@staff.test', 'password' => bcrypt('x'), 'institute_id' => $this->inst->id, 'status' => true]);
+        $admin->assignRole('institute-admin');
+        $this->actingAs($admin);
+        $cash = PaymentGateway::where('code', 'cash')->firstOrFail();
+        InstitutePaymentGateway::where('institute_id', $this->inst->id)->delete();
+
+        // Nothing accepted yet → warning; UPI cannot be switched on without a UPI ID (opens the form instead)
+        Livewire::test(PaymentSettingsComponent::class)
+            ->assertSee('No payment method is accepted yet')
+            ->call('toggleAccept', $this->gpay->id)
+            ->assertSet('editingGatewayId', $this->gpay->id)
+            ->assertDispatchedBrowserEvent('open-payment-setting-modal');
+        $this->assertFalse(InstitutePaymentGateway::where('institute_id', $this->inst->id)->where('payment_gateway_id', $this->gpay->id)->exists());
+
+        // Cash: switched on and off from its card
+        $page = Livewire::test(PaymentSettingsComponent::class)->call('toggleAccept', $cash->id);
+        $this->assertTrue((bool) InstitutePaymentGateway::where('institute_id', $this->inst->id)->where('payment_gateway_id', $cash->id)->value('status'));
+        $page->assertSee('What students see')->assertDontSee('No payment method is accepted yet');
+        // Preview: each accepted method opens its own details; clicking the open one collapses it
+        InstitutePaymentGateway::updateOrCreate(['institute_id' => $this->inst->id, 'payment_gateway_id' => $this->gpay->id],
+            ['upi_id' => 'preview.inst@okaxis', 'status' => true]);
+        InstitutePaymentGateway::where('institute_id', $this->inst->id)->where('payment_gateway_id', $cash->id)->update(['instructions' => 'Accounts desk, 10 am to 4 pm']);
+        $page = Livewire::test(PaymentSettingsComponent::class)
+            ->assertSee('preview.inst@okaxis')->assertDontSee('How to pay')    // first method (UPI) open by default
+            ->call('previewMethod', $cash->id, false)
+            ->assertSee('Accounts desk, 10 am to 4 pm')->assertSee('How to pay')
+            ->call('previewMethod', $cash->id, true)
+            ->assertSet('previewGatewayId', -1)->assertDontSee('How to pay');
+        $page->call('toggleAccept', $cash->id);
+        $this->assertFalse((bool) InstitutePaymentGateway::where('institute_id', $this->inst->id)->where('payment_gateway_id', $cash->id)->value('status'));
+
+        InstitutePaymentGateway::where('institute_id', $this->inst->id)->update(['status' => false]); // back to nothing accepted
+
+        // Institute admins cannot open the Super Admin overview or switch institute
+        Livewire::test(PaymentSettingsComponent::class)->call('backToInstitutes')->assertForbidden();
+
+        // Super Admin: overview of every institute first, then manage one
+        $super = User::create(['name' => 'Super', 'email' => uniqid() . '@staff.test', 'password' => bcrypt('x'), 'status' => true]);
+        $super->assignRole('super-admin');
+        $this->actingAs($super);
+        Livewire::test(PaymentSettingsComponent::class)
+            ->assertSet('instituteId', null)
+            ->assertSee($this->inst->name)->assertSee("No payment method — students can't pay", false)
+            ->call('selectInstitute', $this->inst->id)
+            ->assertSet('instituteId', $this->inst->id)
+            ->assertSee('Methods accepted')
+            ->call('backToInstitutes')->assertSet('instituteId', null);
+        $this->get(route('admin.institute-payment-settings', ['institute' => $this->inst->id]))->assertOk()->assertSee('Methods accepted');
+    }
+
     public function test_payment_settings_screen()
     {
         $admin = User::create(['name' => 'Admin', 'email' => uniqid() . '@staff.test', 'password' => bcrypt('x'), 'institute_id' => $this->inst->id, 'status' => true]);
@@ -509,9 +561,61 @@ class Module2PortalTest extends TestCase
         Storage::disk('local')->assertExists($setting->qr_code_path);
         $this->get(route('admin.institute-payment-settings.qr', $setting->id))->assertOk();
 
-        // Online gateways cannot be set up by hand
+    }
+
+    public function test_online_gateway_credentials_are_encrypted_and_never_shown()
+    {
+        $admin = User::create(['name' => 'Admin', 'email' => uniqid() . '@staff.test', 'password' => bcrypt('x'), 'institute_id' => $this->inst->id, 'status' => true]);
+        $admin->assignRole('institute-admin');
+        $this->actingAs($admin);
         $razorpay = PaymentGateway::where('code', 'razorpay')->firstOrFail();
-        $this->expectException(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
-        Livewire::test(PaymentSettingsComponent::class)->call('edit', $razorpay->id);
+        $razorpay->update(['status' => false]); // inactive in Master Data, as seeded
+
+        // Required fields, with Razorpay's own labels
+        $page = Livewire::test(PaymentSettingsComponent::class)
+            ->assertSee('Online payment gateways')->assertSee('Razorpay')
+            ->call('edit', $razorpay->id)
+            ->assertSee('Key ID')->assertSee('Key secret')
+            ->call('save')->assertHasErrors(['merchant_id' => 'required', 'secret' => 'required']);
+
+        // Save credentials (gateway inactive → can be saved, not enabled)
+        $page->set('merchant_id', 'rzp_test_ABCD12345678')->set('secret', 'super-secret-key-123')->set('webhook_secret', 'hook-secret-9')
+            ->set('status', 1)->call('save')->assertHasErrors(['status']);
+        $page->set('status', 0)->call('save')->assertHasNoErrors();
+
+        $setting = InstitutePaymentGateway::where('institute_id', $this->inst->id)->where('payment_gateway_id', $razorpay->id)->firstOrFail();
+        $this->assertSame('super-secret-key-123', $setting->credentials['secret']);
+        $raw = \Illuminate\Support\Facades\DB::table('institute_payment_gateways')->where('id', $setting->id)->value('credentials');
+        $this->assertStringNotContainsString('super-secret-key-123', $raw);              // encrypted at rest
+        $this->assertTrue($setting->is_test_mode);
+        $this->assertFalse($setting->status);
+        $this->assertStringNotContainsString('super-secret-key-123', json_encode(\App\Models\Admin\AuditTrail::latest('id')->first())); // not in the audit trail
+
+        // Secrets never go back to the browser; blank keeps the saved secret
+        $form = Livewire::test(PaymentSettingsComponent::class)->call('edit', $razorpay->id)
+            ->assertSet('secret', null)->assertSet('merchant_id', 'rzp_test_ABCD12345678')
+            ->assertSee('Configured · inactive in Master Data');
+        $html = $form->payload['effects']['html'];
+        $form->call('save')->assertHasNoErrors();
+        $this->assertStringNotContainsString('super-secret-key-123', $html);
+        $this->assertStringNotContainsString('hook-secret-9', $html);
+        $this->assertSame('super-secret-key-123', $setting->fresh()->credentials['secret']);
+
+        // Inactive in Master Data → cannot be switched on; once active → it can
+        Livewire::test(PaymentSettingsComponent::class)->call('toggleAccept', $razorpay->id);
+        $this->assertFalse($setting->fresh()->status);
+        $razorpay->update(['status' => true]);
+        Livewire::test(PaymentSettingsComponent::class)->call('toggleAccept', $razorpay->id)->assertSee('Enabled');
+        $this->assertTrue($setting->fresh()->status);
+
+        // Not configured → switching on opens the set-up form instead
+        $payu = PaymentGateway::where('code', 'payu')->firstOrFail();
+        $payu->update(['status' => true]);
+        Livewire::test(PaymentSettingsComponent::class)->call('toggleAccept', $payu->id)
+            ->assertSet('editingGatewayId', $payu->id)->assertSee('Merchant salt');
+        $this->assertFalse(InstitutePaymentGateway::where('institute_id', $this->inst->id)->where('payment_gateway_id', $payu->id)->exists());
+
+        // Students never see online gateways on the portal payment step (checkout not live)
+        Livewire::test(PaymentSettingsComponent::class)->assertDontSee('Pay with Razorpay');
     }
 }
