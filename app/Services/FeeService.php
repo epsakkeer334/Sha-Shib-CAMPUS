@@ -8,6 +8,7 @@ use App\Models\Admin\PaymentGateway;
 use App\Models\Admin\Student;
 use App\Models\Admin\StudentDue;
 use App\Models\Admin\StudentPayment;
+use App\Support\SecureUpload;
 use App\Traits\RecordsAuditTrail;
 use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
@@ -170,7 +171,7 @@ class FeeService
             'currency' => 'INR',
             'transaction_reference' => $reference ?: null,
             'payer_upi_id' => $payerUpi ?: null,
-            'proof_file_path' => $proof ? $proof->store("students/{$student->id}/payments", 'local') : null,
+            'proof_file_path' => $proof ? SecureUpload::store($proof, 'students/payments') : null,
             'status' => 'pending_verification',
             'paid_at' => Carbon::parse($paidAt)->toDateString(),
             'remarks' => $remarks ?: null,

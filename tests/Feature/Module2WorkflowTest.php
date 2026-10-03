@@ -688,6 +688,58 @@ class Module2WorkflowTest extends TestCase
         $this->get(route('admin.students.enrollment', $pending->id))->assertOk()->assertSee('All students');
     }
 
+    public function test_uploads_get_random_paths_without_record_ids()
+    {
+        $student = $this->submittedStudent();
+        $this->actingAs($this->admin);
+        $secure = fn (string $dir) => '#^' . preg_quote($dir, '#') . '/\d{4}/\d{2}/[A-Za-z0-9]{40}\.(jpg|jpeg|png|pdf)$#';
+
+        // KYC document
+        $doc = app(OnboardingService::class)->storeDocument($student, 'kyc_photo', UploadedFile::fake()->image('my-photo.jpg'));
+        $this->assertMatchesRegularExpression($secure('students/documents'), $doc->file_path);
+        $this->assertStringNotContainsString((string) $student->id . '/', $doc->file_path);
+        $this->assertStringNotContainsString('my-photo', $doc->file_path);
+        $this->assertSame('my-photo.jpg', $doc->original_name); // original name kept only in the database
+        Storage::disk('local')->assertExists($doc->file_path);
+
+        // Payment proof
+        $this->actingAs($this->accounts);
+        $due = app(\App\Services\FeeService::class)->addDue($student, 'Admission fee', 1000, '2026-10-05');
+        $payment = app(\App\Services\FeeService::class)->recordPayment($student->dues()->first(), $this->gpay, 500, now(), 'UTR1234567890', null,
+            UploadedFile::fake()->image('screenshot.png'), null);
+        $this->assertMatchesRegularExpression($secure('students/payments'), $payment->proof_file_path);
+
+        // Two uploads never share a name
+        $this->assertNotSame(\App\Support\SecureUpload::fileName(UploadedFile::fake()->image('a.png')), \App\Support\SecureUpload::fileName(UploadedFile::fake()->image('a.png')));
+    }
+
+    public function test_secure_uploads_command_renames_old_predictable_files()
+    {
+        Storage::fake('public');
+        $student = $this->submittedStudent();
+        $doc = $student->documents()->first();
+        Storage::disk('local')->put("students/{$student->id}/old-name.pdf", 'pdf');
+        $doc->update(['file_path' => "students/{$student->id}/old-name.pdf"]);
+        Storage::disk('public')->put('institutes/logos/1773404581_69b401a52f711.png', 'png');
+        $this->inst->update(['logo' => '1773404581_69b401a52f711.png']);
+
+        $this->artisan('camp:secure-uploads', ['--dry-run' => true])->assertExitCode(0);
+        $this->assertSame("students/{$student->id}/old-name.pdf", $doc->fresh()->file_path); // dry run changes nothing
+
+        $this->artisan('camp:secure-uploads')->assertExitCode(0);
+        $newPath = $doc->fresh()->file_path;
+        $this->assertMatchesRegularExpression('#^students/documents/\d{4}/\d{2}/[A-Za-z0-9]{40}\.pdf$#', $newPath);
+        Storage::disk('local')->assertExists($newPath);
+        Storage::disk('local')->assertMissing("students/{$student->id}/old-name.pdf");
+        $logo = \Illuminate\Support\Facades\DB::table('institutes')->where('id', $this->inst->id)->value('logo');
+        $this->assertMatchesRegularExpression('#^[A-Za-z0-9]{40}\.png$#', $logo);
+        Storage::disk('public')->assertExists("institutes/logos/{$logo}");
+
+        // Running again changes nothing
+        $this->artisan('camp:secure-uploads')->assertExitCode(0);
+        $this->assertSame($newPath, $doc->fresh()->file_path);
+    }
+
     public function test_queue_pages_render_with_data()
     {
         $student = $this->submittedStudent();

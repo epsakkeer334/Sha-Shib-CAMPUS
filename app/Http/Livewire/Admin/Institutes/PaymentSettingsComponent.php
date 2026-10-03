@@ -5,6 +5,7 @@ namespace App\Http\Livewire\Admin\Institutes;
 use App\Models\Admin\Institute;
 use App\Models\Admin\InstitutePaymentGateway;
 use App\Models\Admin\PaymentGateway;
+use App\Support\SecureUpload;
 use App\Traits\RecordsAuditTrail;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -90,7 +91,7 @@ class PaymentSettingsComponent extends Component
             if ($setting->qr_code_path) {
                 Storage::disk('local')->delete($setting->qr_code_path);
             }
-            $setting->qr_code_path = $this->qr_upload->store("institutes/{$this->instituteId}/payment", 'local');
+            $setting->qr_code_path = SecureUpload::store($this->qr_upload, 'institutes/payment-qr');
         }
         $setting->save();
 

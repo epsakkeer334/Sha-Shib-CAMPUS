@@ -7,6 +7,7 @@ use App\Models\Admin\ErRequest;
 use App\Models\Admin\IdCard;
 use App\Models\Admin\Student;
 use App\Models\Admin\StudentDocument;
+use App\Support\SecureUpload;
 use App\Traits\RecordsAuditTrail;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
@@ -53,7 +54,7 @@ class OnboardingService
                 'student_id' => $student->id,
                 'institute_id' => $student->institute_id,
                 'document_type' => $type,
-                'file_path' => $file->store("students/{$student->id}", 'local'),
+                'file_path' => SecureUpload::store($file, 'students/documents'),
                 'original_name' => mb_substr($file->getClientOriginalName(), 0, 255),
                 'mime_type' => $file->getMimeType(),
                 'size' => $file->getSize(),

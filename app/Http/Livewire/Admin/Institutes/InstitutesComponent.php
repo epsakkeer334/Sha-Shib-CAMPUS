@@ -11,6 +11,7 @@ use App\Models\Admin\State;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Traits\RecordsAuditTrail;
+use App\Support\SecureUpload;
 
 class InstitutesComponent extends Component
 {
@@ -279,13 +280,8 @@ class InstitutesComponent extends Component
 
     protected function storeImage($image, $folder = 'institutes')
     {
-        // Generate unique filename
-        $imageName = time() . '_' . uniqid() . '.' . $image->getClientOriginalExtension();
-
-        // Store the image
-        $image->storeAs("public/{$folder}", $imageName);
-
-        return $imageName;
+        // Random, non-predictable file name (storage/app/public/{folder}/<random>.<ext>)
+        return SecureUpload::storeName($image, $folder, 'public');
     }
 
     public function save()
