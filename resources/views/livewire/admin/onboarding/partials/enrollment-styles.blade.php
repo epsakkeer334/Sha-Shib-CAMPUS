@@ -49,5 +49,8 @@
     .er-ui .er-chip-bad { background: #FEE2E2; color: #DC2626; }
     .er-ui .er-chip-muted { background: #F3F4F6; color: var(--er-muted); }
     .er-ui .er-code { padding: 0 6px; border-radius: 5px; background: #EEF2FF; color: #4338CA; font-weight: 600; font-size: 11px; }
+    /* ER number badge (same look as the students list) */
+    .er-ui .er-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px 3px 8px; border-radius: 8px; background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%); border: 1px solid #A7F3D0; color: #047857; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12.5px; font-weight: 600; letter-spacing: .02em; white-space: nowrap; box-shadow: 0 1px 2px rgba(4, 120, 87, .08); }
+    .er-ui .er-badge i { font-size: 14px; color: #059669; }
     .er-ui .er-inst-code { display: inline-block; margin-top: 3px; padding: 1px 8px; border-radius: 6px; background: #EEF2FF; color: #4338CA; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11.5px; font-weight: 500; }
 </style>

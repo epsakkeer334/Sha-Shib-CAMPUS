@@ -148,8 +148,8 @@
                                 <div class="er-sub er-ellipsis" style="max-width: 150px;" title="{{ optional($item->course)->name }}">{{ optional($item->course)->name }}</div>
                             </td>
                             <td>
-                                <div class="er-mono fw-semibold">{{ $item->er_number }}</div>
-                                <div class="er-sub">Issued {{ optional(optional($form)->generated_at)->format('d M Y') ?? '—' }}</div>
+                                <span class="er-badge" title="ER number"><i class="ti ti-id-badge-2"></i>{{ $item->er_number }}</span>
+                                <div class="er-sub mt-1" style="color: #15803D;"><i class="ti ti-circle-check"></i> Issued {{ optional(optional($form)->generated_at)->format('d M Y') ?? '—' }}</div>
                             </td>
                             <td>
                                 <div class="er-steps" title="Generated → Printed → TM signed → Archived">
