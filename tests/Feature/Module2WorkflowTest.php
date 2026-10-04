@@ -356,6 +356,7 @@ class Module2WorkflowTest extends TestCase
             ->set('qualification_id', Qualification::first()->id)->set('religion_id', $religion->id)
             ->set('category_id', Category::where('religion_id', $religion->id)->first()->id)
             ->set('email', uniqid() . '@mail.test')->set('phone', '+919800011111')->set('emergency_contact', '+919800022222')
+            ->set('create_login', false)
             ->call('saveBasic')->assertHasNoErrors();
 
         $this->assertSame(['Admission fee'], Student::where('first_name', 'Auto')->first()->dues()->pluck('fee_head')->all());

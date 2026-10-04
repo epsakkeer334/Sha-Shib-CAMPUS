@@ -16,8 +16,13 @@ use App\Models\Admin\StudentAcademicDetail;
 use App\Services\FeeService;
 use App\Services\OnboardingService;
 use App\Support\StudentRules;
+use App\Models\User;
 use App\Traits\RecordsAuditTrail;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
@@ -41,6 +46,10 @@ class StudentOnboardingComponent extends Component
     // Basic details
     public $institute_id, $course_id, $first_name, $last_name, $dob, $gender, $qualification_id;
     public $email, $phone, $emergency_contact, $religion_id, $category_id, $joining_date;
+
+    // Student portal login (users row with role "student"), created / reset from the Basic tab
+    public $create_login = true;
+    public $login_password, $login_password_confirmation;
 
     // Address & parent
     public $address, $country_id, $state_id, $city, $pincode;
@@ -80,6 +89,7 @@ class StudentOnboardingComponent extends Component
     protected function loadStudent(Student $student)
     {
         $this->studentId = $student->id;
+        $this->create_login = false; // existing students: adding a login is opt-in
         $this->fill($student->only([
             'institute_id', 'course_id', 'first_name', 'last_name', 'gender', 'qualification_id', 'email', 'phone',
             'emergency_contact', 'religion_id', 'category_id', 'address', 'country_id', 'state_id', 'city', 'pincode',
@@ -162,6 +172,66 @@ class StudentOnboardingComponent extends Component
         ];
     }
 
+    /** Fill both password fields with a strong random password the office can hand over. */
+    public function generatePassword()
+    {
+        $password = Str::random(4) . random_int(10, 99) . Str::upper(Str::random(2)) . '@' . random_int(1, 9);
+        $this->login_password = $this->login_password_confirmation = $password;
+        $this->resetValidation(['login_password', 'login_password_confirmation']);
+    }
+
+    /**
+     * Validation for the portal login: on create (when "create login" is on), when adding a login to an
+     * existing student, or when resetting the password. Email / phone must be free in users as well.
+     */
+    protected function loginRules(?Student $student): array
+    {
+        $loginUser = optional($student)->user;
+        $needsLogin = !$loginUser && $this->create_login;
+
+        $rules = [];
+        if ($needsLogin || $loginUser) {
+            $rules['email'] = [Rule::unique('users', 'email')->ignore(optional($loginUser)->id)];
+            $rules['phone'] = [Rule::unique('users', 'phone')->ignore(optional($loginUser)->id)];
+        }
+        if ($needsLogin) {
+            $rules['login_password'] = ['required', 'string', 'min:8', 'max:64', 'confirmed'];
+        } elseif ($loginUser && $this->login_password) {
+            $rules['login_password'] = ['string', 'min:8', 'max:64', 'confirmed'];
+        }
+
+        return $rules;
+    }
+
+    /**
+     * Create the student's portal login, or keep it in step with the student (name, email, phone, password).
+     */
+    protected function syncLogin(Student $student): void
+    {
+        $user = $student->user;
+
+        if ($user) {
+            $changes = ['name' => $student->full_name, 'email' => $student->email, 'phone' => $student->phone];
+            if ($this->login_password) {
+                $changes['password'] = Hash::make($this->login_password);
+            }
+            $user->update($changes);
+            if ($this->login_password) {
+                $this->audit('reset_password', 'users', $user, ['description' => "Portal password reset for {$student->full_name}"]);
+            }
+        } elseif ($this->create_login && $this->login_password) {
+            $user = User::create([
+                'name' => $student->full_name, 'email' => $student->email, 'phone' => $student->phone,
+                'password' => Hash::make($this->login_password), 'institute_id' => $student->institute_id, 'status' => true,
+            ]);
+            $user->assignRole('student');
+            $student->update(['user_id' => $user->id]);
+            $this->audit('create', 'users', $user, ['description' => "Portal login created for {$student->full_name}"]);
+        }
+
+        $this->login_password = $this->login_password_confirmation = null;
+    }
+
     public function saveBasic()
     {
         $student = $this->authorizeChange();
@@ -172,25 +242,37 @@ class StudentOnboardingComponent extends Component
             $this->institute_id = Auth::user()->institute_id; // institute users: own institute only
         }
 
-        $data = $this->validate($this->basicRules(), $this->messages());
+        $rules = array_merge_recursive($this->basicRules(), $this->loginRules($student));
+        $data = $this->validate($rules, $this->messages(), ['login_password' => 'password']);
+        unset($data['login_password'], $data['login_password_confirmation']);
         $data['onboarding_deadline'] = \Carbon\Carbon::parse($data['joining_date'])->addDays(config('camp.onboarding_days'))->toDateString();
 
         if ($student) {
-            $old = $student->only(array_keys($data));
-            $student->update($data);
-            $this->auditUpdate($student, 'students', $this->stringify($old), $this->stringify($student->only(array_keys($data))), "Updated basic details: {$student->full_name}");
+            $hadLogin = (bool) $student->user_id;
+            $passwordReset = $hadLogin && $this->login_password;
+            DB::transaction(function () use ($student, $data) {
+                $old = $student->only(array_keys($data));
+                $student->update($data);
+                $this->auditUpdate($student, 'students', $this->stringify($old), $this->stringify($student->only(array_keys($data))), "Updated basic details: {$student->full_name}");
+                $this->syncLogin($student->fresh());
+            });
             app(FeeService::class)->syncCourseDues($student->fresh()); // course / joining date may have changed
-            $this->toast('success', 'Basic details saved.');
+            $this->toast('success', 'Basic details saved.' . ($passwordReset ? ' Portal password updated.' : (!$hadLogin && $student->fresh()->user_id ? ' Portal login created.' : '')));
             $this->activeTab = 'address';
 
             return null;
         }
 
         $data['status'] = 'draft';
-        $student = Student::create($data);
-        $this->auditCreate($student, 'students', "Started onboarding: {$student->full_name}");
+        $student = DB::transaction(function () use ($data) {
+            $student = Student::create($data);
+            $this->auditCreate($student, 'students', "Started onboarding: {$student->full_name}");
+            $this->syncLogin($student);
+
+            return $student;
+        });
         app(FeeService::class)->syncCourseDues($student); // course fees from the fee structure
-        session()->flash('toast', ['type' => 'success', 'message' => 'Student created as draft. Continue with address details.']);
+        session()->flash('toast', ['type' => 'success', 'message' => 'Student created as draft' . ($student->fresh()->user_id ? ' with a portal login' : '') . '. Continue with address details.']);
 
         return redirect()->route('admin.students.edit', ['student' => $student->id, 'tab' => 'address']);
     }
@@ -241,6 +323,17 @@ class StudentOnboardingComponent extends Component
 
     // ---------------------------------------------------------------- tab 4: KYC documents
 
+    /**
+     * Choosing a file uploads it right away (no separate Upload click). For a type that already has a
+     * file, the new one replaces it (OnboardingService keeps the previous rejection reason).
+     */
+    public function updated($property)
+    {
+        if (str_starts_with($property, 'upload_') && $this->{$property}) {
+            $this->uploadDocument(substr($property, 7));
+        }
+    }
+
     public function uploadDocument($type)
     {
         $student = $this->authorizeChange();
@@ -248,6 +341,11 @@ class StudentOnboardingComponent extends Component
 
         $label = config("camp.student_document_types.{$type}.0");
         $property = "upload_{$type}";
+
+        if (!$this->{$property} && $student->documents()->where('document_type', $type)->exists()) {
+            return; // already uploaded automatically when the file was chosen
+        }
+        $replacing = $type !== 'other' && $student->documents()->where('document_type', $type)->exists();
 
         $this->validate(
             [$property => StudentRules::document($type)],
@@ -258,7 +356,8 @@ class StudentOnboardingComponent extends Component
         app(OnboardingService::class)->storeDocument($student, $type, $this->{$property});
 
         $this->reset($property);
-        $this->toast('success', "{$label} uploaded.");
+        $this->resetValidation($property);
+        $this->toast('success', $replacing ? "{$label} replaced." : "{$label} uploaded.");
     }
 
     public function confirmDeleteDocument($id)

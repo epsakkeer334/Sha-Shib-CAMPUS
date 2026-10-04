@@ -99,6 +99,7 @@ class Module2StudentOnboardingTest extends TestCase
             'email' => uniqid('stu') . '@mail.test',
             'phone' => '+919876543210',
             'emergency_contact' => '+919876500000',
+            'create_login' => false, // portal login has its own test
         ], $override);
 
         foreach ($values as $field => $value) {
@@ -117,6 +118,97 @@ class Module2StudentOnboardingTest extends TestCase
             'religion_id' => $this->religion->id, 'category_id' => $this->category->id,
             'joining_date' => now()->toDateString(), 'onboarding_deadline' => now()->addDays(30)->toDateString(), 'status' => 'draft',
         ], $override));
+    }
+
+    public function test_admin_creates_the_student_portal_login()
+    {
+        $this->actingAs($this->super);
+        $email = uniqid('login') . '@mail.test';
+        $phone = '+9198' . random_int(10000000, 99999999);
+
+        // Login is on by default for a new student: password required and confirmed
+        $page = $this->basic(Livewire::test(StudentOnboardingComponent::class)->set('institute_id', $this->instA->id),
+            ['create_login' => true, 'email' => $email, 'phone' => $phone, 'first_name' => 'Loginy'])
+            ->assertSee('Student portal login')
+            ->assertSee('name="gender"', false);                    // one gender at a time
+        $page->call('saveBasic')->assertHasErrors(['login_password' => 'required']);
+        $page->set('login_password', 'short')->set('login_password_confirmation', 'short')->call('saveBasic')->assertHasErrors(['login_password' => 'min']);
+        $page->call('generatePassword');
+        $password = $page->get('login_password');
+        $this->assertSame($password, $page->get('login_password_confirmation'));
+        $this->assertGreaterThanOrEqual(8, strlen($password));
+        $page->assertSee($password)->call('saveBasic')->assertHasNoErrors();
+
+        $student = Student::where('email', $email)->firstOrFail();
+        $user = $student->user;
+        $this->assertNotNull($user);
+        $this->assertTrue($user->hasRole('student'));
+        $this->assertSame($this->instA->id, $user->institute_id);
+        $this->assertSame($phone, $user->phone);
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check($password, $user->password));
+        $this->assertNull($page->get('login_password'));
+
+        // Existing student with a login: email change follows, password reset is optional
+        $edit = Livewire::test(StudentOnboardingComponent::class, ['student' => $student->id])
+            ->assertSee('Login active')->assertSee($email)->assertDontSee($password);
+        $newEmail = uniqid('moved') . '@mail.test';
+        $edit->set('email', $newEmail)->call('saveBasic')->assertHasNoErrors();
+        $this->assertSame($newEmail, $user->fresh()->email);
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check($password, $user->fresh()->password)); // unchanged when left blank
+        $edit->call('goTo', 'basic')->set('login_password', 'NewPass#2026')->set('login_password_confirmation', 'NewPass#2026')->call('saveBasic')->assertHasNoErrors();
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check('NewPass#2026', $user->fresh()->password));
+
+        // The student can sign in to the portal with these credentials
+        auth()->logout();
+        $this->assertTrue(\Illuminate\Support\Facades\Auth::attempt(['email' => $newEmail, 'password' => 'NewPass#2026']));
+
+        // Email already used by another login is refused
+        $this->actingAs($this->super);
+        $this->basic(Livewire::test(StudentOnboardingComponent::class)->set('institute_id', $this->instA->id),
+            ['create_login' => true, 'email' => uniqid() . '@mail.test', 'phone' => $phone])
+            ->set('login_password', 'Another#123')->set('login_password_confirmation', 'Another#123')
+            ->call('saveBasic')->assertHasErrors(['phone' => 'unique']);
+
+        // Existing student without a login: adding one is opt-in
+        $plain = $this->basic(Livewire::test(StudentOnboardingComponent::class)->set('institute_id', $this->instA->id), ['email' => uniqid() . '@mail.test', 'first_name' => 'Nologin']);
+        $plain->call('saveBasic')->assertHasNoErrors();
+        $noLogin = Student::where('first_name', 'Nologin')->latest('id')->firstOrFail();
+        $this->assertNull($noLogin->user_id);
+        Livewire::test(StudentOnboardingComponent::class, ['student' => $noLogin->id])
+            ->assertSet('create_login', false)->call('saveBasic')->assertHasNoErrors()      // no password needed
+            ->set('create_login', true)->set('phone', '+9197' . random_int(10000000, 99999999))
+            ->set('login_password', 'Later#1234')->set('login_password_confirmation', 'Later#1234')->call('saveBasic')->assertHasNoErrors();
+        $this->assertNotNull($noLogin->fresh()->user_id);
+    }
+
+    public function test_documents_upload_on_select_and_can_be_replaced_or_deleted()
+    {
+        $this->actingAs($this->super);
+        $this->basic(Livewire::test(StudentOnboardingComponent::class)->set('institute_id', $this->instA->id), ['first_name' => 'Autoup'])->call('saveBasic');
+        $student = Student::where('first_name', 'Autoup')->latest('id')->firstOrFail();
+
+        $page = Livewire::test(StudentOnboardingComponent::class, ['student' => $student->id])->call('goTo', 'documents')
+            ->assertSee('Choose file')->assertSee('uploads automatically');
+
+        // Choosing a file is enough — no Upload click
+        $page->set('upload_marksheet_10', UploadedFile::fake()->create('first.pdf', 100, 'application/pdf'))->assertHasNoErrors()
+            ->assertSet('upload_marksheet_10', null)->assertSee('first.pdf')->assertSee('Replace');
+        $this->assertSame(1, $student->documents()->where('document_type', 'marksheet_10')->count());
+
+        // Replace: choosing again swaps the file (still one document of this type)
+        $page->set('upload_marksheet_10', UploadedFile::fake()->create('second.pdf', 100, 'application/pdf'))->assertHasNoErrors()
+            ->assertSee('second.pdf')->assertDontSee('first.pdf')
+            ->assertDispatchedBrowserEvent('show-toast', fn ($name, $data) => $data['message'] === '10th Marksheet replaced.');
+        $this->assertSame(['second.pdf'], $student->documents()->where('document_type', 'marksheet_10')->pluck('original_name')->all());
+
+        // A wrong file type is refused and nothing is stored
+        $page->set('upload_kyc_photo', UploadedFile::fake()->create('photo.exe', 10))->assertHasErrors(['upload_kyc_photo']);
+        $this->assertSame(0, $student->documents()->where('document_type', 'kyc_photo')->count());
+
+        // Delete
+        $doc = $student->documents()->where('document_type', 'marksheet_10')->firstOrFail();
+        $page->call('confirmDeleteDocument', $doc->id)->call('deleteDocument')->assertSee('Choose file');
+        $this->assertSame(0, $student->documents()->where('document_type', 'marksheet_10')->count());
     }
 
     public function test_full_onboarding_flow_by_super_admin()

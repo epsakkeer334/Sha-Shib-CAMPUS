@@ -28,7 +28,7 @@
 
             @foreach($docs as $doc)
                 @php [$cls, $text] = $badge($doc); @endphp
-                <div class="docrow">
+                <div class="docrow" wire:key="doc-{{ $doc->id }}">
                     <a class="doc-icon" href="{{ route('portal.document', $doc->id) }}" target="_blank" title="Open {{ $doc->original_name }}">
                         @if($doc->is_image)<img src="{{ route('portal.document', $doc->id) }}" alt="">@else PDF @endif
                     </a>
@@ -55,7 +55,7 @@
             @endforeach
 
             @if($docs->isEmpty() && $type !== 'other')
-                <div style="padding: 18px 28px; border-bottom: 1px solid var(--line-2); display: flex; flex-direction: column; gap: 10px;">
+                <div style="padding: 18px 28px; border-bottom: 1px solid var(--line-2); display: flex; flex-direction: column; gap: 10px;" wire:key="empty-{{ $type }}">
                     <span style="font-weight: 600;">{{ $label }}@if($required) *@endif</span>
                     @if($canUpload)
                         <label class="dropzone">
@@ -71,7 +71,7 @@
             @endif
 
             @if($type === 'other' && $canUpload)
-                <div class="docrow">
+                <div class="docrow" wire:key="add-other">
                     <div class="doc-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M10 4 V16 M4 10 H16"></path></svg></div>
                     <div style="display: flex; flex-direction: column;"><span style="font-weight: 600;">{{ $label }}</span><span class="muted" style="font-size: 14px;">Optional, e.g. transfer or community certificate</span></div>
                     <label class="btn btn-secondary btn-sm" style="cursor: pointer;">Add file
@@ -80,8 +80,8 @@
                 </div>
             @endif
 
-            <div wire:loading wire:target="upload_{{ $type }}" style="padding: 0 28px 14px;" class="muted">Uploading {{ strtolower($label) }}…</div>
-            @error('upload_' . $type)<div class="error" style="padding: 0 28px 14px;">{{ $message }}</div>@enderror
+            <div wire:key="uploading-{{ $type }}" wire:loading wire:target="upload_{{ $type }}" style="padding: 0 28px 14px;" class="muted">Uploading {{ strtolower($label) }}…</div>
+            @error('upload_' . $type)<div class="error" style="padding: 0 28px 14px;" wire:key="error-{{ $type }}">{{ $message }}</div>@enderror
         @endforeach
     </section>
 
