@@ -15,6 +15,7 @@ class Institute extends BaseModel
         'name',
         'established_year',
         'code',
+        'code_prefix',
         'description',
         'address',
         'city',
@@ -47,16 +48,25 @@ class Institute extends BaseModel
         'state_name'
     ];
 
-    /**
-     * Build the next institute code: first 3 letters of the name + established year
-     * + a group-wide running number starting at CODE_SEQUENCE_START (e.g. SHA/2005/1010).
-     * Call inside a DB transaction when saving so concurrent creates cannot collide.
-     */
-    public static function generateCode(string $name, $establishedYear, bool $lock = false): ?string
-    {
-        $prefix = strtoupper(substr(preg_replace('/[^A-Za-z]/', '', $name), 0, 3));
+    /** Allowed code prefix: 2–6 letters (stored upper-case). */
+    const CODE_PREFIX_PATTERN = '/^[A-Za-z]{2,6}$/';
 
-        if (strlen($prefix) < 3 || !preg_match('/^\d{4}$/', (string) $establishedYear)) {
+    public static function normalizePrefix(?string $prefix): string
+    {
+        return strtoupper(trim((string) $prefix));
+    }
+
+    /**
+     * Institute code: PREFIX/ESTABLISHED_YEAR/RUNNING_NUMBER, e.g. SHA/2005/1010.
+     * PREFIX is chosen by the Super Admin (2–6 letters); the running number is group-wide and
+     * starts at CODE_SEQUENCE_START. Call inside a DB transaction (with $lock) when saving so
+     * concurrent creates cannot collide. Returns null while the prefix or year is not valid yet.
+     */
+    public static function generateCode(?string $prefix, $establishedYear, bool $lock = false): ?string
+    {
+        $prefix = static::normalizePrefix($prefix);
+
+        if (!preg_match(self::CODE_PREFIX_PATTERN, $prefix) || !preg_match('/^\d{4}$/', (string) $establishedYear)) {
             return null;
         }
 
@@ -66,7 +76,7 @@ class Institute extends BaseModel
         }
 
         $lastSequence = $query->pluck('code')
-            ->map(fn ($code) => preg_match('~^[A-Z]{3}/\d{4}/(\d+)$~', (string) $code, $m) ? (int) $m[1] : 0)
+            ->map(fn ($code) => preg_match('~^[A-Z]{2,6}/\d{4}/(\d+)$~', (string) $code, $m) ? (int) $m[1] : 0)
             ->max();
 
         $sequence = max((int) $lastSequence + 1, self::CODE_SEQUENCE_START);

@@ -40,7 +40,7 @@ class Module1CoreTest extends TestCase
         return Institute::create([
             'name' => $name . ' ' . uniqid(),
             'established_year' => $year,
-            'code' => Institute::generateCode($name, $year),
+            'code' => Institute::generateCode(substr(preg_replace('/[^A-Za-z]/', '', $name), 0, 3), $year),
             'email' => uniqid() . '@inst.test',
             'phone' => (string) random_int(1000000000, 9999999999),
             'status' => true,
@@ -109,6 +109,65 @@ class Module1CoreTest extends TestCase
             ->assertHasNoErrors();
 
         $this->assertNull(User::where('name', 'Second Super Admin')->first()->institute_id);
+    }
+
+    public function test_institute_code_uses_the_chosen_prefix()
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $this->actingAs($this->makeUser('super-admin'));
+        $country = \App\Models\Admin\Country::firstOrCreate(['code' => 'TST'], ['name' => 'Testland', 'status' => true]);
+        $state = \App\Models\Admin\State::firstOrCreate(['country_id' => $country->id, 'name' => 'Test State'], ['status' => true]);
+
+        $page = Livewire::test(\App\Http\Livewire\Admin\Institutes\InstitutesComponent::class)
+            ->set('name', 'Sha Shib Aviation Academy ' . uniqid())
+            ->set('established_year', 2005)
+            ->set('country_id', $country->id)->set('state_id', $state->id)
+            ->set('email', uniqid() . '@inst.test')->set('phone', (string) random_int(1000000000, 9999999999))
+            ->set('logo', \Illuminate\Http\UploadedFile::fake()->image('logo.png'));
+
+        // Prefix is required and must be 2–6 letters
+        $page->call('save')->assertHasErrors(['code_prefix' => 'required']);
+        $page->set('code_prefix', 'S1')->call('save')->assertHasErrors(['code_prefix' => 'regex']);
+        $page->set('code_prefix', 'TOOLONGX')->call('save')->assertHasErrors(['code_prefix' => 'regex']);
+
+        // Typed in lower case → upper case; the preview follows prefix and year, not the name
+        $page->set('code_prefix', 'ssa')->assertSet('code_prefix', 'SSA');
+        $this->assertMatchesRegularExpression('~^SSA/2005/\d+$~', $page->get('code'));
+
+        $page->call('save')->assertHasNoErrors();
+        $institute = Institute::where('code_prefix', 'SSA')->latest('id')->firstOrFail();
+        $this->assertMatchesRegularExpression('~^SSA/2005/\d{4,}$~', $institute->code);
+
+        // Running number is group-wide: the next institute (different prefix) gets the next number
+        $next = Institute::generateCode('KAP', 2010);
+        [, , $seq] = explode('/', $institute->code);
+        $this->assertSame('KAP/2010/' . ((int) $seq + 1), $next);
+
+        // Duplicate prefix: refused while typing (any case) and on save; a deleted institute's prefix stays taken
+        $fresh = fn () => Livewire::test(\App\Http\Livewire\Admin\Institutes\InstitutesComponent::class)
+            ->set('name', 'Second Academy ' . uniqid())->set('established_year', 2011)
+            ->set('country_id', $country->id)->set('state_id', $state->id)
+            ->set('email', uniqid() . '@inst.test')->set('phone', (string) random_int(1000000000, 9999999999))
+            ->set('logo', \Illuminate\Http\UploadedFile::fake()->image('logo.png'));
+        $fresh()->set('code_prefix', 'ssa')->assertHasErrors(['code_prefix' => 'unique'])
+            ->assertSee('This prefix is already used by another institute')
+            ->call('save')->assertHasErrors(['code_prefix' => 'unique']);
+        $this->assertSame(1, Institute::where('code_prefix', 'SSA')->count());
+
+        $gone = Institute::create(['name' => 'Gone Institute ' . uniqid(), 'established_year' => 2000, 'code_prefix' => 'GON',
+            'code' => Institute::generateCode('GON', 2000), 'email' => uniqid() . '@inst.test', 'phone' => (string) random_int(1000000000, 9999999999), 'status' => true]);
+        $gone->delete();
+        $fresh()->set('code_prefix', 'GON')->assertHasErrors(['code_prefix' => 'unique']);
+
+        // A free prefix is shown as available
+        $fresh()->set('code_prefix', 'FRE')->assertHasNoErrors()->assertSee('Available');
+
+        // Code (and its prefix) cannot be changed on edit
+        Livewire::test(\App\Http\Livewire\Admin\Institutes\InstitutesComponent::class)->call('edit', $institute->id)
+            ->assertSet('code_prefix', 'SSA')->set('code_prefix', 'XYZ')->set('name', $institute->name . ' Updated')
+            ->call('update')->assertHasNoErrors();
+        $this->assertSame($institute->code, $institute->fresh()->code);
+        $this->assertSame('SSA', $institute->fresh()->code_prefix);
     }
 
     public function test_institute_admin_creates_staff_only_in_own_institute()

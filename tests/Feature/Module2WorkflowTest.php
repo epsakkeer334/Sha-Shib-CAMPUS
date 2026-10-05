@@ -78,7 +78,7 @@ class Module2WorkflowTest extends TestCase
     protected function makeInstitute(string $name): Institute
     {
         return Institute::create([
-            'name' => $name . ' ' . uniqid(), 'established_year' => 2004, 'code' => Institute::generateCode($name, 2004),
+            'name' => $name . ' ' . uniqid(), 'established_year' => 2004, 'code' => Institute::generateCode(substr(preg_replace('/[^A-Za-z]/', '', $name), 0, 3), 2004),
             'email' => uniqid() . '@inst.test', 'phone' => (string) random_int(1000000000, 9999999999), 'status' => true,
         ]);
     }

@@ -41,7 +41,7 @@ class Module1AMasterDataTest extends TestCase
         $this->institute = Institute::create([
             'name' => 'Gamma Aviation ' . uniqid(),
             'established_year' => 2005,
-            'code' => Institute::generateCode('Gamma Aviation', 2005),
+            'code' => Institute::generateCode('GAM', 2005),
             'email' => uniqid() . '@inst.test',
             'phone' => (string) random_int(1000000000, 9999999999),
             'status' => true,
@@ -182,7 +182,7 @@ class Module1AMasterDataTest extends TestCase
         foreach ($routes as $route) {
             $this->get(route($route))->assertOk();
         }
-        $this->get(route('admin.institute-courses'))->assertOk();
+        $this->get(route('admin.institute-courses'))->assertOk()->assertSee('Institute Code'); // Super Admin sees every institute
         $this->get(route('admin.institute-courses.institute', $this->institute->id))->assertOk();
 
         $this->actingAs($this->makeUser('institute-admin', $this->institute));
@@ -240,7 +240,7 @@ class Module1AMasterDataTest extends TestCase
         $other = Institute::create([
             'name' => 'Delta Aero ' . uniqid(),
             'established_year' => 2012,
-            'code' => Institute::generateCode('Delta Aero', 2012),
+            'code' => Institute::generateCode('DEL', 2012),
             'email' => uniqid() . '@inst.test',
             'phone' => (string) random_int(1000000000, 9999999999),
             'status' => true,
@@ -251,7 +251,8 @@ class Module1AMasterDataTest extends TestCase
         $admin = $this->makeUser('institute-admin', $this->institute);
         $this->actingAs($admin);
 
-        $this->get(route('admin.institute-courses'))->assertOk();
+        // Own institute only → no Institute / Institute Code columns in the list
+        $this->get(route('admin.institute-courses'))->assertOk()->assertDontSee('Institute Code')->assertSee('Course Code');
         $this->get(route('admin.institute-courses.institute', $this->institute->id))->assertOk();
         $this->get(route('admin.institute-courses.institute', $other->id))->assertNotFound();
 

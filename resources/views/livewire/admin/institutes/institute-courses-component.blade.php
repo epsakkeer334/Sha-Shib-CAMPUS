@@ -29,8 +29,10 @@
             :model-class="\App\Models\Admin\InstituteCourse::class"
             :columns="array_merge([
                 ['label' => '#', 'field' => 'id', 'sortable' => true],
+            ], auth()->user()->isSuperAdmin() ? [
                 ['label' => 'Institute', 'field' => 'institute.name', 'sortable' => false],
                 ['label' => 'Institute Code', 'field' => 'institute.code', 'sortable' => false],
+            ] : [], [
                 ['label' => 'Course', 'field' => 'course.name', 'sortable' => false],
                 ['label' => 'Course Code', 'field' => 'course.code', 'sortable' => false],
                 ['label' => 'Status', 'field' => 'status', 'type' => 'status', 'sortable' => true],

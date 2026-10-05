@@ -68,7 +68,7 @@ class Module2StudentOnboardingTest extends TestCase
     protected function makeInstitute(string $name, int $year): Institute
     {
         return Institute::create([
-            'name' => $name . ' ' . uniqid(), 'established_year' => $year, 'code' => Institute::generateCode($name, $year),
+            'name' => $name . ' ' . uniqid(), 'established_year' => $year, 'code' => Institute::generateCode(substr(preg_replace('/[^A-Za-z]/', '', $name), 0, 3), $year),
             'email' => uniqid() . '@inst.test', 'phone' => (string) random_int(1000000000, 9999999999), 'status' => true,
         ]);
     }

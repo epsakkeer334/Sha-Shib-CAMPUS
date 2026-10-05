@@ -78,14 +78,27 @@
                             </div>
                             <div class="row g-3">
                                 <!-- Institute Name -->
-                                <div class="col-md-6">
+                                <div class="col-md-5">
                                     <label class="form-label fw-medium small">Institute Name <span class="text-danger">*</span></label>
                                     <input type="text" class="form-control @error('name') is-invalid @enderror" wire:model="name" placeholder="Enter institute name">
                                     @error('name') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
 
+                                <!-- Code Prefix -->
+                                <div class="col-md-2">
+                                    <label class="form-label fw-medium small">Code Prefix @unless($isEdit)<span class="text-danger">*</span>@endunless</label>
+                                    <input type="text" class="form-control text-uppercase @error('code_prefix') is-invalid @elseif($this->prefixAvailable) is-valid @enderror" wire:model.debounce.300ms="code_prefix"
+                                           maxlength="6" placeholder="e.g. SHA" autocomplete="off" @if($isEdit) readonly @endif style="font-family: 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .05em;">
+                                    @error('code_prefix') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                    @if(!$errors->has('code_prefix') && $this->prefixAvailable)
+                                        <small class="text-success" style="font-size: 0.7rem;"><i class="ti ti-circle-check"></i> Available</small>
+                                    @else
+                                        <small class="text-muted" style="font-size: 0.7rem;">2–6 letters, unique</small>
+                                    @endif
+                                </div>
+
                                 <!-- Established Year -->
-                                <div class="col-md-3">
+                                <div class="col-md-2">
                                     <label class="form-label fw-medium small">Established Year <span class="text-danger">*</span></label>
                                     <input type="number" class="form-control @error('established_year') is-invalid @enderror" wire:model="established_year"
                                         min="1800" max="{{ date('Y') }}" placeholder="e.g., {{ date('Y') }}">
@@ -101,7 +114,7 @@
                                                placeholder="Auto-generated">
                                     </div>
                                     <small class="text-muted" style="font-size: 0.7rem;">
-                                        {{ $isEdit ? 'Code cannot be changed.' : 'Format: first 3 letters/year/number. Final code is assigned on save.' }}
+                                        {{ $isEdit ? 'Code cannot be changed.' : 'Prefix / established year / number. Final number is assigned on save.' }}
                                     </small>
                                 </div>
 

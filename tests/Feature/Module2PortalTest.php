@@ -59,7 +59,7 @@ class Module2PortalTest extends TestCase
         $this->seed(MasterDataSeeder::class);
 
         $this->inst = Institute::create([
-            'name' => 'Portal Aviation ' . uniqid(), 'established_year' => 2003, 'code' => Institute::generateCode('Portal Aviation', 2003),
+            'name' => 'Portal Aviation ' . uniqid(), 'established_year' => 2003, 'code' => Institute::generateCode('POR', 2003),
             'email' => uniqid() . '@inst.test', 'phone' => (string) random_int(1000000000, 9999999999), 'status' => true,
         ]);
         $this->course = Course::create(['name' => 'Diploma in Aviation', 'code' => 'DA-' . uniqid(), 'duration_months' => 24, 'total_semesters' => 4, 'status' => true]);
@@ -508,7 +508,7 @@ class Module2PortalTest extends TestCase
         $accounts = $this->staffUser('accounts', $this->inst);
         $tm = $this->staffUser('training-manager', $this->inst);
         $super = $this->staffUser('super-admin');
-        $otherInst = Institute::create(['name' => 'Other Aero ' . uniqid(), 'established_year' => 2001, 'code' => Institute::generateCode('Other Aero', 2001),
+        $otherInst = Institute::create(['name' => 'Other Aero ' . uniqid(), 'established_year' => 2001, 'code' => Institute::generateCode('OTH', 2001),
             'email' => uniqid() . '@inst.test', 'phone' => (string) random_int(1000000000, 9999999999), 'status' => true]);
         $outsider = $this->staffUser('institute-admin', $otherInst);
         $this->enableGpay();

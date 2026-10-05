@@ -20,7 +20,7 @@ class InstitutesComponent extends Component
     protected $paginationTheme = 'bootstrap';
 
     // Form fields
-    public $name, $established_year, $code, $description, $address, $city, $state_id, $country_id, $postal_code;
+    public $name, $established_year, $code, $code_prefix, $description, $address, $city, $state_id, $country_id, $postal_code;
     public $contact_person, $email, $phone, $website, $logo, $banner, $about, $status = 1;
     public $recordId;
     public $isEdit = false;
@@ -49,6 +49,9 @@ class InstitutesComponent extends Component
         $rules = [
             'name' => ['required', 'string', 'max:255', 'regex:/(.*[A-Za-z]){3}/'],
             'established_year' => 'required|integer|digits:4|min:1800|max:' . date('Y'),
+            // The code is fixed once created, so the prefix is only asked for (and checked) on create.
+            // Unique across all institutes, deleted ones included (their codes may still be on printed documents).
+            'code_prefix' => $this->isEdit ? 'nullable' : ['required', 'regex:' . Institute::CODE_PREFIX_PATTERN, 'unique:institutes,code_prefix'],
             'description' => 'nullable|string',
             'address' => 'nullable|string|max:500',
             'city' => 'nullable|string|max:100',
@@ -92,7 +95,11 @@ class InstitutesComponent extends Component
         'name.required' => 'Institute name is required.',
         'name.max' => 'Name must not exceed 255 characters.',
         'name.unique' => 'This institute name is already taken.',
-        'name.regex' => 'Name must contain at least 3 letters (used for the institute code).',
+        'name.regex' => 'Name must contain at least 3 letters.',
+
+        'code_prefix.required' => 'Code prefix is required.',
+        'code_prefix.regex' => 'Code prefix must be 2 to 6 letters (A–Z), e.g. SHA.',
+        'code_prefix.unique' => 'This prefix is already used by another institute. Choose a different one.',
 
         'established_year.required' => 'Established year is required.',
         'established_year.digits' => 'Established year must be a 4-digit year.',
@@ -170,9 +177,23 @@ class InstitutesComponent extends Component
         $this->state_id = null;
     }
 
-    public function updatedName()
+    public function updatedCodePrefix()
     {
+        $this->code_prefix = Institute::normalizePrefix($this->code_prefix);
         $this->refreshCodePreview();
+
+        // Check while typing (format + duplicate), not only on save
+        if (!$this->isEdit && $this->code_prefix !== '') {
+            $this->validateOnly('code_prefix');
+        }
+    }
+
+    /** Typed prefix is valid and not taken yet (for the green "available" hint). */
+    public function getPrefixAvailableProperty(): bool
+    {
+        return !$this->isEdit
+            && preg_match(Institute::CODE_PREFIX_PATTERN, (string) $this->code_prefix)
+            && !Institute::withTrashed()->where('code_prefix', Institute::normalizePrefix($this->code_prefix))->exists();
     }
 
     public function updatedEstablishedYear()
@@ -186,7 +207,7 @@ class InstitutesComponent extends Component
     protected function refreshCodePreview()
     {
         if (!$this->isEdit) {
-            $this->code = Institute::generateCode((string) $this->name, $this->established_year);
+            $this->code = Institute::generateCode($this->code_prefix, $this->established_year);
         }
     }
 
@@ -237,6 +258,7 @@ class InstitutesComponent extends Component
             'name' => $institute->name,
             'established_year' => $institute->established_year,
             'code' => $institute->code,
+            'code_prefix' => $institute->code_prefix ?: strtok((string) $institute->code, '/'),
             'description' => $institute->description,
             'address' => $institute->address,
             'city' => $institute->city,
@@ -270,7 +292,7 @@ class InstitutesComponent extends Component
     protected function resetFields()
     {
         $this->reset([
-            'recordId', 'name', 'established_year', 'code', 'description', 'address', 'city', 'state_id', 'country_id',
+            'recordId', 'name', 'established_year', 'code', 'code_prefix', 'description', 'address', 'city', 'state_id', 'country_id',
             'postal_code', 'contact_person', 'email', 'phone', 'website', 'logo', 'banner',
             'about', 'status', 'isEdit'
         ]);
@@ -318,7 +340,8 @@ class InstitutesComponent extends Component
         }
 
         $institute = DB::transaction(function () use ($data) {
-            $data['code'] = Institute::generateCode($this->name, $this->established_year, true);
+            $data['code_prefix'] = Institute::normalizePrefix($this->code_prefix);
+            $data['code'] = Institute::generateCode($data['code_prefix'], $this->established_year, true);
 
             return Institute::create($data);
         });
