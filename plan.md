@@ -384,9 +384,13 @@ Default permissions (editable on Roles & Permissions): Institute Admin — stude
 | institute_id, course_id | bigint FK |  |
 | fee_head | string | unique per institute + course |
 | amount | decimal(10,2) |  |
-| due_days | int | due date = joining date + due_days |
+| due_type | enum(joining,fixed) ✅ | `joining`: due = joining date + `due_days`; `fixed`: same calendar date for every student |
+| due_date | date nullable ✅ | used when `due_type = fixed` |
+| due_days | int | days after joining (0 = on joining) |
 | sort_order | int |  |
 | status | boolean |  |
+
+Rules in place ✅: a new or re-activated fee line is charged straight away to every current student of that institute + course (all statuses except rejected / alumni), never twice, and the student is notified; editing a line changes it only for students charged from then on. The Fee Structure screen lists one collapsible card per course (accordion) with fees count, on-joining amount, next fixed due date and course total.
 
 `student_dues` ✅ (data source for the Accounts gate)
 
