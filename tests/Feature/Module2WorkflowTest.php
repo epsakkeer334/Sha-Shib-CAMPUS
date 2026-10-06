@@ -906,6 +906,57 @@ class Module2WorkflowTest extends TestCase
         $this->assertSame($this->admin->id, $lone->erRequest->fresh()->tm_signed_by);
     }
 
+    public function test_new_fee_lines_have_fixed_or_joining_due_dates_and_reach_current_students()
+    {
+        $a = $this->submittedStudent();
+        $a->update(['first_name' => 'Current', 'joining_date' => '2026-10-01']);
+        $b = $this->submittedStudent();
+        $b->update(['first_name' => 'Rejected', 'status' => 'rejected']);
+        $c = $this->submittedStudent($this->otherInst);                         // other institute
+
+        $this->actingAs($this->admin);
+        $page = Livewire::test(FeeStructureComponent::class);
+
+        // Fixed date: required when chosen
+        $page->call('create', $this->course->id)->set('fee_head', 'Semester 2 fee')->set('amount', 42000)
+            ->set('due_type', 'fixed')->call('save')->assertHasErrors(['due_date' => 'required']);
+        $page->set('due_date', '2027-01-15')->call('save')->assertHasNoErrors()
+            ->assertDispatchedBrowserEvent('show-toast', fn ($n, $d) => str_contains($d['message'], 'Semester 2 fee added to 1 student'));
+
+        $sem = CourseFee::where('fee_head', 'Semester 2 fee')->firstOrFail();
+        $this->assertSame('fixed', $sem->due_type);
+        $this->assertSame('Due 15 Jan 2027', $sem->due_label);
+
+        // Charged at once to the current student only, with the fixed date; the student is notified
+        $due = $a->dues()->where('course_fee_id', $sem->id)->firstOrFail();
+        $this->assertSame('2027-01-15', $due->due_date->toDateString());
+        $this->assertSame(0, $b->dues()->where('course_fee_id', $sem->id)->count());
+        $this->assertSame(0, \App\Models\Admin\StudentDue::withoutGlobalScopes()->where('student_id', $c->id)->where('fee_head', 'Semester 2 fee')->count());
+        $this->assertTrue(\App\Models\Admin\AuditTrail::where('module', 'course_fees')->where('action', 'apply_fee')->where('reference_id', $sem->id)
+            ->where('meta', 'like', '%added to 1 existing student%')->exists());
+
+        // Joining-based fee: joining date + days
+        $page->call('create', $this->course->id)->set('fee_head', 'Lab fee')->set('amount', 3000)
+            ->set('due_type', 'joining')->set('due_days', 10)->call('save')->assertHasNoErrors();
+        $this->assertSame('2026-10-11', $a->dues()->where('fee_head', 'Lab fee')->firstOrFail()->due_date->toDateString());
+
+        // Editing the amount does not touch dues already created
+        $page->call('edit', $sem->id)->set('amount', 45000)->call('save')->assertHasNoErrors();
+        $this->assertEquals(42000, (float) $due->fresh()->amount_due);
+
+        // Deactivate → re-activate: never charged twice
+        $page->call('toggleStatus', $sem->id)->call('toggleStatus', $sem->id);
+        $this->assertSame(1, $a->dues()->where('course_fee_id', $sem->id)->count());
+
+        // A student added later gets the fixed date too
+        $late = $this->submittedStudent();
+        app(\App\Services\FeeService::class)->generateDues($late->fresh());
+        $this->assertSame('2027-01-15', $late->dues()->where('fee_head', 'Semester 2 fee')->firstOrFail()->due_date->toDateString());
+
+        // Filter shows fixed-date fees
+        Livewire::test(FeeStructureComponent::class)->set('filterDue', 'fixed')->assertSee('Semester 2 fee')->assertDontSee('Lab fee');
+    }
+
     public function test_queue_pages_render_with_data()
     {
         $student = $this->submittedStudent();

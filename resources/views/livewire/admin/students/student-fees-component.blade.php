@@ -22,7 +22,7 @@
             <div class="card shadow-sm border-0 mb-3">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h5 class="fw-semibold mb-0">Fees</h5>
-                    <span class="text-muted">Still to pay <b class="amount fs-5 text-dark ms-1">{{ money_inr($outstanding, false) }}</b></span>
+                    <span class="text-muted">Still to pay <b class="amount fs-15 text-dark ms-1">{{ money_inr($outstanding, false) }}</b></span>
                 </div>
                 <div class="table-responsive">
                     <table class="table align-middle mb-0">
@@ -200,7 +200,7 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-light me-2" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-primary" wire:click="addDue">Add fee</button>
                 </div>
             </div>

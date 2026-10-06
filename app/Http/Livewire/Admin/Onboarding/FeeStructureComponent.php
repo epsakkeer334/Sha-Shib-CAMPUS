@@ -6,7 +6,9 @@ use App\Models\Admin\Course;
 use App\Models\Admin\CourseFee;
 use App\Models\Admin\Institute;
 use App\Models\Admin\InstituteCourse;
+use App\Services\FeeService;
 use App\Traits\RecordsAuditTrail;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
@@ -43,6 +45,8 @@ class FeeStructureComponent extends Component
     public $instituteId = null;
     public $courseId = null;
     public $editingId = null, $fee_head, $amount, $due_days = 0, $sort_order = 0, $status = 1;
+    public $due_type = CourseFee::DUE_JOINING; // joining (N days after joining) | fixed (calendar date)
+    public $due_date = null;
 
     public function mount()
     {
@@ -100,13 +104,15 @@ class FeeStructureComponent extends Component
             'fee_head' => ['required', 'string', 'max:150', Rule::unique('course_fees', 'fee_head')
                 ->where('institute_id', $this->instituteId)->where('course_id', $this->courseId)->whereNull('deleted_at')->ignore($this->editingId)],
             'amount' => 'required|numeric|min:1|max:9999999',
-            'due_days' => 'required|integer|min:0|max:3650',
+            'due_type' => ['required', Rule::in([CourseFee::DUE_JOINING, CourseFee::DUE_FIXED])],
+            'due_days' => [$this->due_type === CourseFee::DUE_JOINING ? 'required' : 'nullable', 'integer', 'min:0', 'max:3650'],
+            'due_date' => [$this->due_type === CourseFee::DUE_FIXED ? 'required' : 'nullable', 'date', 'after_or_equal:2000-01-01', 'before:2100-01-01'],
             'sort_order' => 'required|integer|min:0|max:999',
             'status' => 'boolean',
         ];
     }
 
-    protected $validationAttributes = ['instituteId' => 'institute', 'courseId' => 'course', 'fee_head' => 'fee'];
+    protected $validationAttributes = ['instituteId' => 'institute', 'courseId' => 'course', 'fee_head' => 'fee', 'due_date' => 'due date', 'due_days' => 'days after joining'];
 
     /**
      * Open the add modal, optionally for a given course (and institute, for Super Admin).
@@ -131,6 +137,7 @@ class FeeStructureComponent extends Component
         $this->fill([
             'editingId' => $fee->id, 'instituteId' => $fee->institute_id, 'courseId' => $fee->course_id, 'fee_head' => $fee->fee_head,
             'amount' => $fee->amount, 'due_days' => $fee->due_days, 'sort_order' => $fee->sort_order, 'status' => $fee->status ? 1 : 0,
+            'due_type' => $fee->due_type ?: CourseFee::DUE_JOINING, 'due_date' => optional($fee->due_date)->toDateString(),
         ]);
         $this->dispatchBrowserEvent('open-fee-structure-modal');
     }
@@ -138,13 +145,17 @@ class FeeStructureComponent extends Component
     public function save()
     {
         $data = $this->validate();
+        $fixed = $data['due_type'] === CourseFee::DUE_FIXED;
         $line = [
-            'fee_head' => $data['fee_head'], 'amount' => $data['amount'], 'due_days' => $data['due_days'],
+            'fee_head' => $data['fee_head'], 'amount' => $data['amount'], 'due_type' => $data['due_type'],
+            'due_date' => $fixed ? $data['due_date'] : null, 'due_days' => $fixed ? 0 : (int) $data['due_days'],
             'sort_order' => $data['sort_order'], 'status' => (bool) $data['status'],
         ];
 
+        $wasActive = false;
         if ($this->editingId) {
             $fee = CourseFee::findOrFail($this->editingId);
+            $wasActive = (bool) $fee->status;
             $old = $fee->only(array_keys($line));
             $fee->update($line);
             $this->auditUpdate($fee, 'course_fees', $old, $fee->only(array_keys($line)), "Updated fee structure: {$fee->fee_head}");
@@ -153,8 +164,14 @@ class FeeStructureComponent extends Component
             $this->auditCreate($fee, 'course_fees', "Added fee structure line: {$fee->fee_head}");
         }
 
+        // New (or re-activated) fee → charge it to the course's current students straight away.
+        // Amount / date changes are not pushed to dues already created.
+        $charged = (!$this->editingId || !$wasActive) ? app(FeeService::class)->applyFeeToStudents($fee) : 0;
+
         $this->dispatchBrowserEvent('close-fee-structure-modal');
-        $this->dispatchBrowserEvent('show-toast', ['type' => 'success', 'message' => 'Fee structure saved. Existing students keep their dues; use "Generate from fee structure" to add new lines.']);
+        $this->dispatchBrowserEvent('show-toast', ['type' => 'success', 'message' => 'Fee structure saved.'
+            . ($charged ? " {$fee->fee_head} added to {$charged} " . Str::plural('student', $charged) . '.' : '')
+            . ($this->editingId ? ' Changes apply to students charged from now on; existing dues stay as they are.' : '')]);
         $this->resetForm();
     }
 
@@ -164,7 +181,9 @@ class FeeStructureComponent extends Component
         $old = ['status' => $fee->status];
         $fee->update(['status' => !$fee->status]);
         $this->auditUpdate($fee, 'course_fees', $old, ['status' => $fee->status], ($fee->status ? 'Activated' : 'Deactivated') . " fee: {$fee->fee_head}");
-        $this->dispatchBrowserEvent('show-toast', ['type' => 'success', 'message' => "{$fee->fee_head} is now " . ($fee->status ? 'active' : 'inactive') . '.']);
+        $charged = $fee->status ? app(FeeService::class)->applyFeeToStudents($fee) : 0;
+        $this->dispatchBrowserEvent('show-toast', ['type' => 'success', 'message' => "{$fee->fee_head} is now " . ($fee->status ? 'active' : 'inactive') . '.'
+            . ($charged ? " Added to {$charged} " . Str::plural('student', $charged) . '.' : '')]);
     }
 
     public function delete($id)
@@ -185,7 +204,8 @@ class FeeStructureComponent extends Component
     protected function resetForm()
     {
         $this->resetValidation();
-        $this->reset(['editingId', 'fee_head', 'amount']);
+        $this->reset(['editingId', 'fee_head', 'amount', 'due_date']);
+        $this->due_type = CourseFee::DUE_JOINING;
         if (Auth::user()->isSuperAdmin() && !$this->instituteId && $this->filterInstitute) {
             $this->instituteId = (int) $this->filterInstitute;
         }
@@ -211,8 +231,9 @@ class FeeStructureComponent extends Component
             ->when($isSuperAdmin && $this->filterInstitute, fn ($q) => $q->where('course_fees.institute_id', $this->filterInstitute))
             ->when($this->filterCourse, fn ($q) => $q->where('course_fees.course_id', $this->filterCourse))
             ->when($this->filterStatus !== '', fn ($q) => $q->where('course_fees.status', $this->filterStatus === 'active'))
-            ->when($this->filterDue === 'joining', fn ($q) => $q->where('course_fees.due_days', 0))
-            ->when($this->filterDue === 'later', fn ($q) => $q->where('course_fees.due_days', '>', 0));
+            ->when($this->filterDue === 'joining', fn ($q) => $q->where('course_fees.due_type', CourseFee::DUE_JOINING)->where('course_fees.due_days', 0))
+            ->when($this->filterDue === 'later', fn ($q) => $q->where('course_fees.due_type', CourseFee::DUE_JOINING)->where('course_fees.due_days', '>', 0))
+            ->when($this->filterDue === 'fixed', fn ($q) => $q->where('course_fees.due_type', CourseFee::DUE_FIXED));
 
         if ($term = trim($this->search)) {
             $query->where(fn ($q) => $q->where('course_fees.fee_head', 'like', "%{$term}%")

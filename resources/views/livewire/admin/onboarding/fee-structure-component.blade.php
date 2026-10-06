@@ -84,6 +84,7 @@
                 <option value="">Any due date</option>
                 <option value="joining">Due on joining</option>
                 <option value="later">Due after joining</option>
+                <option value="fixed">Fixed due date</option>
             </select>
             <select class="form-select form-select-sm" wire:model="filterStatus" aria-label="Status">
                 <option value="">Any status</option>
@@ -146,8 +147,12 @@
                             <td><span class="fw-semibold">{{ $fee->fee_head }}</span></td>
                             <td class="text-end"><span class="fs-amount">{{ money_inr($fee->amount, false) }}</span></td>
                             <td>
-                                @if($fee->due_days)
-                                    <span class="fs-chip fs-chip-info"><i class="ti ti-calendar-time"></i> {{ $fee->due_days }} {{ \Illuminate\Support\Str::plural('day', $fee->due_days) }} after joining</span>
+                                @if($fee->isFixedDue())
+                                    <span class="fs-chip {{ $fee->due_date->isPast() ? 'fs-chip-bad' : 'fs-chip-fixed' }}" title="Fixed due date for every student">
+                                        <i class="ti ti-calendar-event"></i> {{ $fee->due_label }}
+                                    </span>
+                                @elseif($fee->due_days)
+                                    <span class="fs-chip fs-chip-info"><i class="ti ti-calendar-time"></i> {{ $fee->due_label }}</span>
                                 @else
                                     <span class="fs-chip fs-chip-warn"><i class="ti ti-calendar-check"></i> On joining</span>
                                 @endif
@@ -225,8 +230,21 @@
                         </div>
                         @include('livewire.admin.students.partials.input', ['name' => 'fee_head', 'label' => 'Fee', 'required' => true, 'col' => 12, 'placeholder' => 'e.g. Admission fee'])
                         @include('livewire.admin.students.partials.input', ['name' => 'amount', 'label' => 'Amount (₹)', 'type' => 'number', 'step' => '0.01', 'required' => true])
-                        @include('livewire.admin.students.partials.input', ['name' => 'due_days', 'label' => 'Due (days after joining)', 'type' => 'number', 'required' => true, 'help' => '0 = due on the joining date'])
                         @include('livewire.admin.students.partials.input', ['name' => 'sort_order', 'label' => 'Display order', 'type' => 'number', 'required' => true])
+                        <div class="col-12">
+                            <label class="form-label fw-medium small d-block">Due date <span class="text-danger">*</span></label>
+                            <div class="fs-due-switch" role="radiogroup" aria-label="Due date type">
+                                <input type="radio" class="btn-check" name="due_type" id="dueJoining" value="joining" wire:model="due_type">
+                                <label class="fs-due-option" for="dueJoining"><i class="ti ti-calendar-time"></i><span><strong>After joining</strong><small>Each student's joining date + days</small></span></label>
+                                <input type="radio" class="btn-check" name="due_type" id="dueFixed" value="fixed" wire:model="due_type">
+                                <label class="fs-due-option" for="dueFixed"><i class="ti ti-calendar-event"></i><span><strong>Fixed date</strong><small>Same date for every student</small></span></label>
+                            </div>
+                        </div>
+                        @if($due_type === 'fixed')
+                            @include('livewire.admin.students.partials.input', ['name' => 'due_date', 'label' => 'Due on', 'type' => 'date', 'required' => true, 'help' => 'e.g. semester or lab fee due date'])
+                        @else
+                            @include('livewire.admin.students.partials.input', ['name' => 'due_days', 'label' => 'Days after joining', 'type' => 'number', 'required' => true, 'help' => '0 = due on the joining date'])
+                        @endif
                         <div class="col-md-6 d-flex align-items-end">
                             <div class="form-check form-switch">
                                 <input class="form-check-input" type="checkbox" id="feeStatus" wire:model="status" value="1">
@@ -295,6 +313,15 @@
         .fs-ui .fs-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
         .fs-ui .fs-chip-warn { background: #FEF3C7; color: #B45309; }
         .fs-ui .fs-chip-info { background: #E0F2FE; color: #0369A1; }
+        .fs-ui .fs-chip-fixed { background: #EEF2FF; color: #4338CA; }
+        .fs-ui .fs-chip-bad { background: #FEE2E2; color: #DC2626; }
+        .fs-ui .fs-due-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .fs-ui .fs-due-option { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #E5E7EB; border-radius: 10px; cursor: pointer; margin: 0; transition: border-color .15s, background .15s; }
+        .fs-ui .fs-due-option i { font-size: 20px; color: #9CA3AF; }
+        .fs-ui .fs-due-option span { display: flex; flex-direction: column; line-height: 1.25; }
+        .fs-ui .fs-due-option small { color: #6B7280; font-size: 11.5px; }
+        .fs-ui .btn-check:checked + .fs-due-option { border-color: #F26522; background: #FFF7F2; box-shadow: 0 0 0 3px rgba(242, 101, 34, .12); }
+        .fs-ui .btn-check:checked + .fs-due-option i { color: #F26522; }
         .fs-ui .fs-row-inactive td { color: #9CA3AF; }
         .fs-ui .fs-row-inactive .fw-semibold, .fs-ui .fs-row-inactive .fs-amount { color: #9CA3AF; text-decoration: line-through; text-decoration-color: #D1D5DB; }
         .fs-ui .fs-empty-row { text-align: center; color: var(--fs-muted); padding: 48px 12px !important; }

@@ -49,7 +49,7 @@ class FeeService
             ->get();
 
         foreach ($fees as $fee) {
-            $this->createDue($student, $fee->fee_head, (float) $fee->amount, $student->joining_date->copy()->addDays($fee->due_days), $fee->id);
+            $this->createDue($student, $fee->fee_head, (float) $fee->amount, $fee->dueDateFor($student), $fee->id);
         }
 
         if ($fees->isNotEmpty()) {
@@ -81,13 +81,45 @@ class FeeService
                 continue;
             }
 
-            $dueDate = $student->joining_date->copy()->addDays($due->courseFee->due_days)->toDateString();
+            $dueDate = $due->courseFee->dueDateFor($student)->toDateString();
             if ($due->due_date->toDateString() !== $dueDate) {
                 $due->update(['due_date' => $dueDate]);
             }
         }
 
         $this->generateDues($student->fresh());
+    }
+
+    /** Statuses whose students are charged automatically when a fee line is added / activated. */
+    const CURRENT_STUDENT_EXCLUDED = ['rejected', 'alumni'];
+
+    /**
+     * A fee line was added to (or re-activated in) the structure: charge it right away to every
+     * current student of that institute + course who does not have it yet (never duplicated).
+     * Each student is notified. Returns how many students were charged.
+     */
+    public function applyFeeToStudents(CourseFee $fee): int
+    {
+        if (!$fee->status) {
+            return 0;
+        }
+
+        $students = Student::where('institute_id', $fee->institute_id)
+            ->where('course_id', $fee->course_id)
+            ->whereNotIn('status', self::CURRENT_STUDENT_EXCLUDED)
+            ->whereDoesntHave('dues', fn ($q) => $q->where('course_fee_id', $fee->id))
+            ->get();
+
+        foreach ($students as $student) {
+            DB::transaction(fn () => $this->createDue($student, $fee->fee_head, (float) $fee->amount, $fee->dueDateFor($student), $fee->id));
+            $this->inApp->notify('fees_added', $student, ['count' => "{$fee->fee_head} was", 'amount' => money_inr($fee->amount)]);
+        }
+
+        if ($students->isNotEmpty()) {
+            $this->audit('apply_fee', 'course_fees', $fee, ['description' => "Fee {$fee->fee_head} (" . money_inr($fee->amount) . ") added to {$students->count()} existing student(s)"]);
+        }
+
+        return $students->count();
     }
 
     public function addDue(Student $student, string $feeHead, float $amount, $dueDate): StudentDue
