@@ -95,6 +95,7 @@ Route::prefix('admin')->middleware(['auth', 'staff', 'active.user'])->group(func
             Route::get('/{student}/enrollment', StudentEnrollmentComponent::class)->name('.enrollment');
             Route::get('/{student}/er-form', [OnboardingPrintController::class, 'erForm'])->name('.er-form');
             Route::get('/{student}/id-card', [OnboardingPrintController::class, 'idCard'])->name('.id-card');
+            Route::post('/{student}/printed/{document}', [OnboardingPrintController::class, 'recordPrint'])->name('.printed')->where('document', 'id-card|er-form');
             Route::get('/payments/{payment}/receipt', [OnboardingPrintController::class, 'receipt'])->name('.payments.receipt');
             Route::get('/payments/{payment}/proof', [OnboardingPrintController::class, 'paymentProof'])->name('.payments.proof');
         });

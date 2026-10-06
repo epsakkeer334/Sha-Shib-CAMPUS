@@ -24,6 +24,9 @@ class MyNotificationsComponent extends Component
 
     protected $queryString = ['tab' => ['except' => 'all'], 'stage' => ['except' => ''], 'search' => ['except' => '']];
 
+    // The bell's "Mark all read" → refresh this list too
+    protected $listeners = ['notificationsUpdated' => '$refresh'];
+
     public function updated($property)
     {
         if (in_array($property, ['tab', 'stage', 'search'], true)) {
@@ -43,11 +46,13 @@ class MyNotificationsComponent extends Component
     {
         $notification = Auth::user()->notifications()->findOrFail($id);
         $notification->update(['read_at' => $notification->read_at ? null : now()]);
+        $this->emitTo('admin.notifications.notification-bell', 'notificationsUpdated'); // bell badge updates at once
     }
 
     public function markAllRead()
     {
         Auth::user()->unreadNotifications()->update(['read_at' => now()]);
+        $this->emitTo('admin.notifications.notification-bell', 'notificationsUpdated');
         $this->dispatchBrowserEvent('show-toast', ['type' => 'success', 'message' => 'All notifications marked as read.']);
     }
 

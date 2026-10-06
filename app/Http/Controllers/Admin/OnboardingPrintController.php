@@ -41,6 +41,28 @@ class OnboardingPrintController extends Controller
         ]);
     }
 
+    /**
+     * Called by the print page after the browser's print dialog (window "afterprint"):
+     * counts ID card prints (every stage, also after issue) and marks the ER form printed.
+     */
+    public function recordPrint(Student $student, string $document)
+    {
+        abort_unless(in_array($document, ['id-card', 'er-form'], true) && $student->er_number, 404);
+        $service = app(\App\Services\OnboardingService::class);
+
+        if ($document === 'id-card') {
+            abort_unless($student->idCard, 404);
+            $service->markCardPrinted($student->idCard);
+
+            return response()->json(['document' => $document, 'print_count' => $student->idCard->fresh()->print_count]);
+        }
+
+        abort_unless($student->erRequest, 404);
+        $service->markFormPrinted($student->erRequest);
+
+        return response()->json(['document' => $document, 'printed_at' => optional($student->erRequest->fresh()->printed_at)->toIso8601String()]);
+    }
+
     public function paymentProof(StudentPayment $payment)
     {
         abort_unless($payment->proof_file_path && Storage::disk('local')->exists($payment->proof_file_path), 404);

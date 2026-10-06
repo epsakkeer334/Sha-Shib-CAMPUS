@@ -588,8 +588,11 @@ class Module2PortalTest extends TestCase
         $this->get(route('admin.my-notifications'))->assertOk()->assertSee('Notifications');
         $page = Livewire::test(\App\Http\Livewire\Admin\Notifications\MyNotificationsComponent::class)
             ->assertSee('Today')->assertSee($student->full_name)->assertSee('Registration');
-        $page->call('toggleRead', $first->id);
+        $page->call('toggleRead', $first->id)->assertEmitted('notificationsUpdated');   // bell badge refreshes at once
         $this->assertNull($first->fresh()->read_at);
+        Livewire::test(\App\Http\Livewire\Admin\Notifications\NotificationBell::class)
+            ->call('markAllRead')->assertEmitted('notificationsUpdated');                  // and the open page refreshes
+        $page->call('toggleRead', $first->id);                                            // back to unread for the checks below
         $page->set('tab', 'unread')->assertSee($first->data['title'])->assertDontSee('New registration started');
         Livewire::test(\App\Http\Livewire\Admin\Notifications\MyNotificationsComponent::class)->set('stage', 'registration')
             ->assertSee('New registration started')->assertDontSee('Rejected document re-submitted');
@@ -620,6 +623,8 @@ class Module2PortalTest extends TestCase
         Livewire::test(\App\Http\Livewire\Portal\NotificationsPage::class)
             ->set('unreadOnly', true)->assertSee('Blurred scan')
             ->call('open', $n->id)->assertRedirect(route('portal.documents', [], false));
+        Livewire::test(\App\Http\Livewire\Portal\NotificationsPage::class)->call('markAllRead')
+            ->assertDispatchedBrowserEvent('portal-unread', ['count' => 0]);                // header badge cleared
         $this->assertNotNull($n->fresh()->read_at);
         Livewire::test(\App\Http\Livewire\Portal\NotificationsPage::class)->set('unreadOnly', true)->assertSee('No unread updates');
 

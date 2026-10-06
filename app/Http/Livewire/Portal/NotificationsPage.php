@@ -33,6 +33,7 @@ class NotificationsPage extends Component
     public function markAllRead()
     {
         Auth::user()->unreadNotifications()->update(['read_at' => now()]);
+        $this->dispatchBrowserEvent('portal-unread', ['count' => 0]); // header bell badge
     }
 
     public function paginationView()

@@ -1,6 +1,8 @@
 @extends('admin.print.layout')
 
 @section('title', 'ID card ' . $student->er_number)
+@section('print_record_url', route('admin.students.printed', [$student->id, 'id-card']))
+@section('print_record_key', 'id-card:' . $student->id)
 
 @push('styles')
 <style>

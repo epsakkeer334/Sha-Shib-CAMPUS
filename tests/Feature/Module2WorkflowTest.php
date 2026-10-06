@@ -810,6 +810,102 @@ class Module2WorkflowTest extends TestCase
         Livewire::test(FeeStructureComponent::class)->assertDontSee('Lambda only fee');
     }
 
+    public function test_id_card_prints_are_counted_at_every_stage_including_after_issue()
+    {
+        $student = $this->erIssuedStudent('Printy');
+        $card = $student->idCard;
+        $this->actingAs($this->tm);
+
+        // The print page carries the counter (after the browser's print dialog)
+        $this->get(route('admin.students.id-card', $student->id))->assertOk()
+            ->assertSee(route('admin.students.printed', [$student->id, 'id-card']))->assertSee('afterprint')->assertSee('csrf-token', false);
+
+        // Before issue
+        $this->postJson(route('admin.students.printed', [$student->id, 'id-card']))->assertOk()->assertJson(['print_count' => 1]);
+        $this->assertSame(1, $card->fresh()->print_count);
+
+        // Issue (TM logged in → recorded as the signer), then print duplicates: still counted
+        Livewire::test(StudentEnrollmentComponent::class, ['student' => $student->id])->call('cardIssued')->assertHasNoErrors();
+        $this->assertSame('issued', $card->fresh()->status);
+        $this->postJson(route('admin.students.printed', [$student->id, 'id-card']))->assertOk()->assertJson(['print_count' => 2]);
+        $this->postJson(route('admin.students.printed', [$student->id, 'id-card']))->assertOk()->assertJson(['print_count' => 3]);
+        $this->assertTrue(\App\Models\Admin\AuditTrail::where('module', 'id_cards')->where('reference_id', $card->id)
+            ->where('meta', 'like', '%print #3 — card already issued%')->exists());
+
+        // Manual fallback still works after issue
+        Livewire::test(StudentEnrollmentComponent::class, ['student' => $student->id])->call('cardPrinted')->assertSee('4×');
+        $this->assertSame(4, $card->fresh()->print_count);
+
+        // ER form print from the print page marks the step done
+        $this->postJson(route('admin.students.printed', [$student->id, 'er-form']))->assertOk();
+        $this->assertNotNull($student->erRequest->fresh()->printed_at);
+
+        // Unknown documents / other institutes are refused
+        $this->post(route('admin.students.printed', [$student->id, 'id-card']) . 'x')->assertNotFound();
+        $other = $this->submittedStudent($this->otherInst);
+        $this->postJson(route('admin.students.printed', [$other->id, 'id-card']))->assertNotFound();
+    }
+
+    public function test_training_manager_signer_is_recorded_correctly()
+    {
+        $student = $this->erIssuedStudent('Signy');
+        $otherTm = $this->makeUser('training-manager', $this->otherInst);
+        $super = $this->makeUser('super-admin');
+
+        // Training Manager: no dropdown — they are recorded as the signer automatically
+        $this->actingAs($this->tm);
+        Livewire::test(StudentEnrollmentComponent::class, ['student' => $student->id])
+            ->call('formPrinted')
+            ->assertSee('Mark TM signed')->assertDontSee('Signed by (Training Manager)')
+            ->call('formSigned');
+        $this->assertSame($this->tm->id, $student->erRequest->fresh()->tm_signed_by);
+
+        // Institute admin: dropdown shown; must choose a TM of this institute
+        $this->actingAs($this->admin);
+        $adminPage = Livewire::test(StudentEnrollmentComponent::class, ['student' => $student->id])
+            ->assertSee('Signed by (Training Manager)')->assertSee($this->tm->name)
+            ->call('cardPrinted')->call('cardIssued')
+            ->assertDispatchedBrowserEvent('show-toast', fn ($n, $d) => $d['message'] === 'Choose the Training Manager who signed.');
+        $this->assertSame('pending', $student->idCard->fresh()->tm_signature_status);
+
+        // Other staff with enrollment rights (not TM / admins) cannot record a TM signature while the institute has a TM
+        $clerk = $this->makeUser('accounts', $this->inst);
+        $clerk->givePermissionTo('enrollment.manage');
+        $this->actingAs($clerk);
+        Livewire::test(StudentEnrollmentComponent::class, ['student' => $student->id])
+            ->assertDontSee('Signed by (Training Manager)')->assertSee('Waiting for the Training Manager to sign')
+            ->call('cardIssued')
+            ->assertDispatchedBrowserEvent('show-toast', fn ($n, $d) => $d['message'] === 'Only the Training Manager can record this signature.');
+
+        // Super Admin: dropdown shown, must choose a TM of this institute
+        $this->actingAs($super);
+        $page = Livewire::test(StudentEnrollmentComponent::class, ['student' => $student->id])
+            ->assertSee('Signed by (Training Manager)')->assertSee($this->tm->name)
+            ->call('cardIssued')
+            ->assertDispatchedBrowserEvent('show-toast', fn ($n, $d) => $d['message'] === 'Choose the Training Manager who signed.');
+        $page->set('cardSignerId', $otherTm->id)->call('cardIssued');          // a TM of another institute is refused
+        $this->assertSame('pending', $student->idCard->fresh()->tm_signature_status);
+        $page->set('cardSignerId', $this->tm->id)->call('cardIssued');
+        $this->assertSame($this->tm->id, $student->idCard->fresh()->signed_by); // the TM, not the Super Admin
+        $this->assertSame('active', $student->fresh()->status);
+
+        // Institute admin picks the TM for the ER form of another student
+        $picked = $this->erIssuedStudent('Picked');
+        $this->actingAs($this->admin);
+        Livewire::test(StudentEnrollmentComponent::class, ['student' => $picked->id])
+            ->call('formPrinted')->set('formSignerId', $this->tm->id)->call('formSigned');
+        $this->assertSame($this->tm->id, $picked->erRequest->fresh()->tm_signed_by);
+
+        // Institute without a Training Manager account: the admin can record it, under their own name
+        $lone = $this->erIssuedStudent('Lonely');
+        $this->tm->update(['status' => false]);
+        $this->actingAs($this->admin);
+        Livewire::test(StudentEnrollmentComponent::class, ['student' => $lone->id])
+            ->assertSee('No Training Manager account')
+            ->call('formPrinted')->call('formSigned');
+        $this->assertSame($this->admin->id, $lone->erRequest->fresh()->tm_signed_by);
+    }
+
     public function test_queue_pages_render_with_data()
     {
         $student = $this->submittedStudent();

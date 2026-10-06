@@ -18,6 +18,9 @@ class StudentEnrollmentComponent extends Component
     // NOT named $student: the route parameter is {student}.
     public $studentId;
     public $reprintReason = '';
+    // Training Manager who physically signed (ER form / ID card); preselected when a TM is logged in
+    public $formSignerId = null;
+    public $cardSignerId = null;
     // Opened from the ER & ID cards queue (admin.onboarding.enrollment.student): back link + menu stay on the queue
     public $fromQueue = false;
 
@@ -26,6 +29,10 @@ class StudentEnrollmentComponent extends Component
         abort_unless(Auth::user()->can('students.view'), 403);
         $this->studentId = Student::findOrFail($student)->id; // institute scope → 404 for others
         $this->fromQueue = request()->routeIs('admin.onboarding.enrollment.student');
+
+        if (Auth::user()->hasRole('training-manager')) {
+            $this->formSignerId = $this->cardSignerId = Auth::id();
+        }
     }
 
     public function hydrate()
@@ -58,7 +65,7 @@ class StudentEnrollmentComponent extends Component
 
     public function formSigned()
     {
-        $this->act(fn ($s, $svc) => $svc->markFormSigned($this->required($s->erRequest)), 'Marked as signed by the Training Manager.');
+        $this->act(fn ($s, $svc) => $svc->markFormSigned($this->required($s->erRequest), $this->formSignerId ? (int) $this->formSignerId : null), 'Marked as signed by the Training Manager.');
     }
 
     public function formArchived()
@@ -73,7 +80,7 @@ class StudentEnrollmentComponent extends Component
 
     public function cardIssued()
     {
-        $this->act(fn ($s, $svc) => $svc->issueCard($this->required($s->idCard)), 'ID card signed & issued. The student is now Active.');
+        $this->act(fn ($s, $svc) => $svc->issueCard($this->required($s->idCard), $this->cardSignerId ? (int) $this->cardSignerId : null), 'ID card signed & issued. The student is now Active.');
     }
 
     public function cardReprint()
@@ -112,6 +119,10 @@ class StudentEnrollmentComponent extends Component
             'card' => $student->idCard,
             'photo' => $student->documents->where('document_type', 'kyc_photo')->sortByDesc('uploaded_at')->first(),
             'canManage' => Auth::user()->can('enrollment.manage'),
+            'trainingManagers' => $onboarding->trainingManagers($student),
+            // TM: records their own signature; Super Admin / Institute Admin: choose the TM (dropdown)
+            'canSign' => $onboarding->canRecordSignature($student),
+            'chooseSigner' => $onboarding->choosesSigner(),
             'fees' => [
                 'total' => (float) $student->dues->where('status', '!=', 'waived')->sum('amount_due'),
                 'paid' => (float) $student->dues->sum('amount_paid'),

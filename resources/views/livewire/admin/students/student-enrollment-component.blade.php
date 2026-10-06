@@ -129,7 +129,14 @@
                                         @if(!$form->printed_at)
                                             <button type="button" class="btn btn-primary" wire:click="formPrinted" wire:loading.attr="disabled"><i class="ti ti-printer me-1"></i> Mark printed</button>
                                         @elseif($form->tm_signature_status !== 'physically_signed')
-                                            <button type="button" class="btn btn-success" wire:click="formSigned" wire:loading.attr="disabled"><i class="ti ti-signature me-1"></i> Mark TM signed</button>
+                                            @if($canSign)
+                                                @if($chooseSigner || $trainingManagers->isEmpty())
+                                                    @include('livewire.admin.students.partials.tm-signer', ['model' => 'formSignerId', 'managers' => $trainingManagers])
+                                                @endif
+                                                <button type="button" class="btn btn-success" wire:click="formSigned" wire:loading.attr="disabled"><i class="ti ti-signature me-1"></i> Mark TM signed</button>
+                                            @else
+                                                <span class="small text-muted align-self-center"><i class="ti ti-hourglass-high"></i> Waiting for the Training Manager's signature</span>
+                                            @endif
                                         @elseif(!$form->archived_at)
                                             <button type="button" class="btn btn-success" wire:click="formArchived" wire:loading.attr="disabled"><i class="ti ti-archive me-1"></i> Confirm archived</button>
                                         @endif
@@ -161,12 +168,22 @@
                                 </div>
                                 <div class="er-note"><i class="ti ti-info-circle"></i> The card is valid only after the Training Manager signs it by hand.</div>
                                 <div class="d-flex gap-2 flex-wrap mt-auto pt-2 border-top">
-                                    <a href="{{ route('admin.students.id-card', $student->id) }}" target="_blank" class="btn btn-outline-secondary"
-                                       @if($canManage && !$cardIssued) wire:click="cardPrinted" @endif>
+                                    <a href="{{ route('admin.students.id-card', $student->id) }}" target="_blank" class="btn btn-outline-secondary" title="Opens the card; each print is counted automatically">
                                         <i class="ti ti-printer me-1"></i> Print card
                                     </a>
                                     @if($canManage)
-                                        @if(!$cardIssued)
+                                        <button type="button" class="btn btn-link btn-sm text-decoration-none px-1" wire:click="cardPrinted" wire:loading.attr="disabled"
+                                                title="Use only if a print was not counted automatically">
+                                            <i class="ti ti-plus"></i> Record print
+                                        </button>
+                                    @endif
+                                    @if($canManage)
+                                        @if(!$cardIssued && !$canSign)
+                                            <span class="small text-muted align-self-center"><i class="ti ti-hourglass-high"></i> Waiting for the Training Manager to sign &amp; issue</span>
+                                        @elseif(!$cardIssued)
+                                            @if($chooseSigner || $trainingManagers->isEmpty())
+                                                @include('livewire.admin.students.partials.tm-signer', ['model' => 'cardSignerId', 'managers' => $trainingManagers])
+                                            @endif
                                             <button type="button" class="btn btn-success" wire:click="cardIssued" wire:loading.attr="disabled" @if(!$card->print_count) disabled title="Print the card first" @endif>
                                                 <i class="ti ti-signature me-1"></i> Mark signed &amp; issued
                                             </button>
@@ -350,6 +367,16 @@
 
 <script>
 document.addEventListener('livewire:load', function () {
+    // A print in another tab (ER form / ID card page) → refresh the counts and steps here
+    if ('BroadcastChannel' in window) {
+        new BroadcastChannel('camp-prints').onmessage = function (event) {
+            const key = (event.data && event.data.key) || '';
+            if (key === 'id-card:{{ $student->id }}' || key === 'er-form:{{ $student->id }}') {
+                @this.call('$refresh');
+            }
+        };
+    }
+
     window.addEventListener('close-reprint-modal', () => {
         const instance = bootstrap.Modal.getInstance(document.getElementById('reprintModal'));
         if (instance) {

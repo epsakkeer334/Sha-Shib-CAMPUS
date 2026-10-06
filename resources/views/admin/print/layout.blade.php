@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title') · {{ config('app.name') }}</title>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -33,5 +34,26 @@
 <body>
     <div class="toolbar"><button type="button" onclick="window.print()">Print / Save as PDF</button></div>
     @yield('content')
+
+    @hasSection('print_record_url')
+    <script>
+    // Count the print once the browser's print dialog closes (toolbar button or Ctrl+P), then tell
+    // open CAMP tabs (e.g. the student's ER & ID page) to refresh their print count.
+    (function () {
+        const url = {!! json_encode(trim($__env->yieldContent('print_record_url')), JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) !!};
+        const key = {!! json_encode(trim($__env->yieldContent('print_record_key')), JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) !!};
+        window.addEventListener('afterprint', function () {
+            fetch(url, {
+                method: 'POST', keepalive: true, credentials: 'same-origin',
+                headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 'Accept': 'application/json' },
+            }).then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
+                if (data && 'BroadcastChannel' in window) {
+                    new BroadcastChannel('camp-prints').postMessage({ key: key, data: data });
+                }
+            }).catch(function () {});
+        });
+    })();
+    </script>
+    @endif
 </body>
 </html>

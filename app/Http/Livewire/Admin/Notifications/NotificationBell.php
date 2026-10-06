@@ -12,6 +12,9 @@ class NotificationBell extends Component
 {
     const LATEST = 5;
 
+    // Read / unread changed elsewhere (e.g. the "View all" page) → refresh the badge immediately
+    protected $listeners = ['notificationsUpdated' => '$refresh'];
+
     public function open($id)
     {
         $notification = Auth::user()->notifications()->findOrFail($id);
@@ -23,6 +26,7 @@ class NotificationBell extends Component
     public function markAllRead()
     {
         Auth::user()->unreadNotifications()->update(['read_at' => now()]);
+        $this->emit('notificationsUpdated'); // e.g. the notifications page, if open
     }
 
     public function render()

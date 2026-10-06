@@ -516,7 +516,61 @@ class OnboardingService
         $this->audit('print', 'er_requests', $form, ['description' => "ER form printed for {$form->student->full_name}"]);
     }
 
-    public function markFormSigned(ErRequest $form): void
+    /**
+     * Training Managers who can be recorded as the physical signer for this student's institute.
+     */
+    public function trainingManagers(Student $student)
+    {
+        return \App\Models\User::role('training-manager')->where('institute_id', $student->institute_id)
+            ->where('status', true)->orderBy('name')->get(['id', 'name']);
+    }
+
+    /**
+     * Who may record the Training Manager's physical signature (ER form "TM signed", ID card "signed & issued"):
+     *  - the Training Manager themselves (recorded as the signer automatically);
+     *  - the Super Admin and the Institute Admin, choosing which Training Manager signed;
+     *  - other users with enrollment.manage only while the institute has no Training Manager account (recorded under them).
+     */
+    public function canRecordSignature(Student $student): bool
+    {
+        $user = Auth::user();
+
+        return $user && ($user->hasRole('training-manager') || $this->choosesSigner() || $this->trainingManagers($student)->isEmpty());
+    }
+
+    /** Super Admin and Institute Admin pick the Training Manager who signed (dropdown). */
+    public function choosesSigner(): bool
+    {
+        $user = Auth::user();
+
+        return $user && !$user->hasRole('training-manager') && ($user->isSuperAdmin() || $user->hasRole('institute-admin'));
+    }
+
+    /**
+     * The signer to store, following canRecordSignature().
+     */
+    protected function resolveSigner(Student $student, ?int $signerId): int
+    {
+        $user = Auth::user();
+        $managers = $this->trainingManagers($student);
+
+        if ($managers->isEmpty()) {
+            return (int) $user->id;
+        }
+        if ($user->hasRole('training-manager') && $managers->contains('id', $user->id)) {
+            return (int) $user->id;                      // a TM always records their own signature
+        }
+        if ($this->choosesSigner()) {
+            if ($signerId && $managers->contains('id', $signerId)) {
+                return $signerId;
+            }
+            throw new RuntimeException('Choose the Training Manager who signed.');
+        }
+
+        throw new RuntimeException('Only the Training Manager can record this signature.');
+    }
+
+    public function markFormSigned(ErRequest $form, ?int $signerId = null): void
     {
         if (!$form->printed_at) {
             throw new RuntimeException('Print the ER request form before marking it signed.');
@@ -525,8 +579,9 @@ class OnboardingService
             throw new RuntimeException('The form is already marked signed.');
         }
 
-        $form->update(['tm_signature_status' => 'physically_signed', 'tm_signed_by' => Auth::id(), 'tm_signed_at' => now(), 'status' => 'signed']);
-        $this->audit('sign', 'er_requests', $form, ['description' => "ER form marked as physically signed by the TM for {$form->student->full_name}"]);
+        $signer = $this->resolveSigner($form->student, $signerId);
+        $form->update(['tm_signature_status' => 'physically_signed', 'tm_signed_by' => $signer, 'tm_signed_at' => now(), 'status' => 'signed']);
+        $this->audit('sign', 'er_requests', $form, ['description' => "ER form marked as physically signed by the TM ({$form->fresh()->signer->name}) for {$form->student->full_name}"]);
     }
 
     public function markFormArchived(ErRequest $form): void
@@ -544,16 +599,21 @@ class OnboardingService
 
     // ------------------------------------------------------------------ 2.5 ID card
 
+    /**
+     * One more physical print of the ID card — counted at every stage, including after it is issued
+     * (duplicates / lost-card copies), so the count is the true number of cards printed.
+     */
     public function markCardPrinted(IdCard $card): void
     {
         $card->increment('print_count');
-        $this->audit('print', 'id_cards', $card, ['description' => "ID card printed for {$card->student->full_name} (print #{$card->print_count})"]);
+        $state = $card->tm_signature_status === 'physically_signed' ? ' — card already issued' : '';
+        $this->audit('print', 'id_cards', $card, ['description' => "ID card printed for {$card->student->full_name} (print #{$card->print_count}{$state})"]);
     }
 
     /**
      * TM signed the printed card by hand → issued; the student becomes Active.
      */
-    public function issueCard(IdCard $card): void
+    public function issueCard(IdCard $card, ?int $signerId = null): void
     {
         if ($card->print_count < 1) {
             throw new RuntimeException('Print the ID card before marking it signed and issued.');
@@ -562,7 +622,8 @@ class OnboardingService
             throw new RuntimeException('The ID card is already issued.');
         }
 
-        $card->update(['tm_signature_status' => 'physically_signed', 'signed_by' => Auth::id(), 'issue_date' => now()->toDateString(), 'status' => 'issued']);
+        $signer = $this->resolveSigner($card->student, $signerId);
+        $card->update(['tm_signature_status' => 'physically_signed', 'signed_by' => $signer, 'issue_date' => now()->toDateString(), 'status' => 'issued']);
 
         $student = $card->student;
         if ($student->status === 'er_issued') {

@@ -1,6 +1,8 @@
 @extends('admin.print.layout')
 
 @section('title', 'ER request form ' . $student->er_number)
+@section('print_record_url', route('admin.students.printed', [$student->id, 'er-form']))
+@section('print_record_key', 'er-form:' . $student->id)
 
 @php
     $academic = $student->academicDetail;
