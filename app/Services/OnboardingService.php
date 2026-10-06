@@ -498,6 +498,10 @@ class OnboardingService
         });
 
         $this->inApp->notify('er_issued', $student);
+
+        // Admission confirmed → the course's other fees (beyond the admission fee) are added now
+        $this->fees->generateDues($student->fresh());
+
         $this->notifications->send($student, 'er_issued', "Your ER number: {$student->er_number}",
             "Dear {$student->first_name},\n\nYour documents and fees are verified. Your ER number is {$student->er_number}.\n"
             . 'Your ID card will be ready after it is signed by the Training Manager.' . "\n\n" . optional($student->institute)->name);

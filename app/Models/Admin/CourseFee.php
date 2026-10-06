@@ -14,10 +14,11 @@ class CourseFee extends BaseModel
     const DUE_JOINING = 'joining'; // due N days after the student's joining date
     const DUE_FIXED = 'fixed';     // due on a fixed calendar date
 
-    protected $fillable = ['institute_id', 'course_id', 'fee_head', 'amount', 'due_type', 'due_date', 'due_days', 'sort_order', 'status', 'created_by', 'updated_by'];
+    protected $fillable = ['institute_id', 'course_id', 'fee_head', 'amount', 'admission_fee', 'due_type', 'due_date', 'due_days', 'sort_order', 'status', 'created_by', 'updated_by'];
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'admission_fee' => 'boolean',
         'due_date' => 'date',
         'due_days' => 'integer',
         'sort_order' => 'integer',
@@ -44,6 +45,21 @@ class CourseFee extends BaseModel
     public function scopeActive($query)
     {
         return $query->where('status', true);
+    }
+
+    /** Admission fee line(s): the only fees charged and paid during registration. */
+    public function scopeAdmissionFee($query)
+    {
+        return $query->where('admission_fee', true);
+    }
+
+    /**
+     * Does this institute course have an (active) admission fee? When it has none, all fees are
+     * charged at registration (the behaviour before the registration-fee flag existed).
+     */
+    public static function courseHasAdmissionFee(int $instituteId, int $courseId): bool
+    {
+        return static::active()->admissionFee()->where('institute_id', $instituteId)->where('course_id', $courseId)->exists();
     }
 
     public function getAmountLabelAttribute()

@@ -129,6 +129,11 @@
                                 @if(($sum->inactive_count ?? 0) > 0)
                                     <span class="fs-chip fs-chip-muted" title="Inactive fee lines are not charged">{{ $sum->inactive_count }} inactive</span>
                                 @endif
+                                @if(!($sum->admission_count ?? 0))
+                                    <span class="fs-chip fs-chip-warn" title="Mark the fee students pay during registration. Until then every fee of this course is charged at registration.">
+                                        <i class="ti ti-alert-triangle"></i> No admission fee
+                                    </span>
+                                @endif
                             </div>
                             @if($isSuperAdmin)
                                 <div class="fs-course-inst"><i class="ti ti-building"></i> {{ $g->institute_name }}
@@ -138,7 +143,9 @@
                         </div>
                         <div class="fs-course-stats">
                             <span class="fs-stat"><span>Fees</span><strong>{{ $sum->line_count ?? $lines->count() }}</strong></span>
-                            <span class="fs-stat"><span>On joining</span><strong>{{ money_inr($sum->joining_total ?? 0, false) }}</strong></span>
+                            <span class="fs-stat" title="Paid during registration; the other fees are added with the ER number">
+                                <span>Admission fee</span><strong>{{ ($sum->admission_count ?? 0) ? money_inr($sum->admission_total, false) : '—' }}</strong>
+                            </span>
                             <span class="fs-stat"><span>Next fixed due</span><strong>{{ $nextDue ? $nextDue->format('d M Y') : '—' }}</strong></span>
                             <span class="fs-stat fs-stat-total"><span>Course total</span><strong>{{ money_inr($sum->active_total ?? 0, false) }}</strong></span>
                         </div>
@@ -167,7 +174,12 @@
                                     @foreach($lines as $fee)
                                         <tr class="{{ $fee->status ? '' : 'fs-row-inactive' }}" wire:key="fee-{{ $fee->id }}">
                                             <td><span class="fs-order">{{ $fee->sort_order }}</span></td>
-                                            <td><span class="fw-semibold">{{ $fee->fee_head }}</span></td>
+                                            <td>
+                                                <span class="fw-semibold">{{ $fee->fee_head }}</span>
+                                                @if($fee->admission_fee)
+                                                    <span class="fs-chip fs-chip-adm ms-1" title="Paid during registration"><i class="ti ti-user-check"></i> Admission fee</span>
+                                                @endif
+                                            </td>
                                             <td class="text-end"><span class="fs-amount">{{ money_inr($fee->amount, false) }}</span></td>
                                             <td>
                                                 @if($fee->isFixedDue())
@@ -234,7 +246,7 @@
 
     {{-- Add / edit modal --}}
     <div class="modal fade" id="feeStructureModal" tabindex="-1" aria-hidden="true" wire:ignore.self>
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content fs-modal">
                 <div class="modal-header">
                     <div class="d-flex align-items-center gap-2">
@@ -267,6 +279,15 @@
                         @include('livewire.admin.students.partials.input', ['name' => 'amount', 'label' => 'Amount (₹)', 'type' => 'number', 'step' => '0.01', 'required' => true])
                         @include('livewire.admin.students.partials.input', ['name' => 'sort_order', 'label' => 'Display order', 'type' => 'number', 'required' => true])
                         <div class="col-12">
+                            <label class="fs-adm-toggle {{ $admission_fee ? 'is-on' : '' }}">
+                                <input class="form-check-input" type="checkbox" wire:model="admission_fee">
+                                <span>
+                                    <span class="fw-semibold d-block"><i class="ti ti-user-check"></i> Admission fee</span>
+                                    <span class="small text-muted">Paid by the student during registration. The course's other fees are added automatically once the ER number is issued.</span>
+                                </span>
+                            </label>
+                        </div>
+                        <div class="col-12">
                             <label class="form-label fw-medium small d-block">Due date <span class="text-danger">*</span></label>
                             <div class="fs-due-switch" role="radiogroup" aria-label="Due date type">
                                 <input type="radio" class="btn-check" name="due_type" id="dueJoining" value="joining" wire:model="due_type">
@@ -289,7 +310,7 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-light me-2" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-primary" wire:click="save" wire:loading.attr="disabled"><i class="ti ti-check me-1"></i> Save</button>
                 </div>
             </div>
@@ -346,6 +367,11 @@
         .fs-ui .fs-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
         .fs-ui .fs-chip-warn { background: #FEF3C7; color: #B45309; }
         .fs-ui .fs-chip-info { background: #E0F2FE; color: #0369A1; }
+        .fs-ui .fs-chip-adm { background: #DCFCE7; color: #15803D; }
+        .fs-ui .fs-adm-toggle { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid #E5E7EB; border-radius: 10px; cursor: pointer; margin: 0; transition: border-color .15s, background .15s; }
+        .fs-ui .fs-adm-toggle .form-check-input { width: 1.2em; height: 1.2em; margin-top: 2px; flex-shrink: 0; }
+        .fs-ui .fs-adm-toggle.is-on { border-color: #86EFAC; background: #F0FDF4; }
+        .fs-ui .fs-adm-toggle .form-check-input:checked { background-color: #16A34A; border-color: #16A34A; }
         .fs-ui .fs-chip-fixed { background: #EEF2FF; color: #4338CA; }
         .fs-ui .fs-chip-bad { background: #FEE2E2; color: #DC2626; }
         .fs-ui .fs-due-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

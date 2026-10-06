@@ -217,7 +217,7 @@
                     @include('livewire.admin.students.partials.input', ['name' => 'waiveReason', 'label' => 'Reason', 'type' => 'textarea', 'required' => true, 'col' => 12])
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-light me-2" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-warning" wire:click="waive">Waive fee</button>
                 </div>
             </div>

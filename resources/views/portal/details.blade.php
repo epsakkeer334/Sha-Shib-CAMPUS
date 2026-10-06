@@ -54,18 +54,36 @@
 
             {{-- Fees of the chosen course --}}
             @if($registering && $courseFees->isNotEmpty())
+                @php
+                    $admissionFees = $courseFees->where('admission_fee', true);
+                    $laterFees = $admissionFees->isNotEmpty() ? $courseFees->where('admission_fee', false) : collect();
+                    $payNow = $admissionFees->isNotEmpty() ? $admissionFees : $courseFees;
+                @endphp
                 <div style="border-radius: 12px; background: var(--bg); padding: 16px 20px; display: flex; flex-direction: column; gap: 10px;">
                     <div class="row-between">
-                        <span style="font-weight: 600;">Fees for this course</span>
-                        <span class="mono" style="font-weight: 600;">{{ money_inr($courseFees->sum('amount'), false) }}</span>
+                        <span style="font-weight: 600;">{{ $admissionFees->isNotEmpty() ? 'To pay during registration' : 'Fees for this course' }}</span>
+                        <span class="mono" style="font-weight: 600;">{{ money_inr($payNow->sum('amount'), false) }}</span>
                     </div>
-                    @foreach($courseFees as $fee)
+                    @foreach($payNow as $fee)
                         <div class="row-between" style="font-size: 14px;">
-                            <span>{{ $fee->fee_head }} <span class="muted">· {{ $fee->due_days ? 'due ' . $fee->due_days . ' days after joining' : 'due on joining' }}</span></span>
+                            <span>{{ $fee->fee_head }} <span class="muted">· {{ $fee->due_label }}</span></span>
                             <span class="mono">{{ money_inr($fee->amount, false) }}</span>
                         </div>
                     @endforeach
-                    <span class="hint">You can pay these from the Payment step once your documents are uploaded.</span>
+                    <span class="hint">You can pay {{ $payNow->count() === 1 ? 'this' : 'these' }} from the Payment step once your documents are uploaded.</span>
+                    @if($laterFees->isNotEmpty())
+                        <div style="border-top: 1px dashed var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 6px;">
+                            <div class="row-between" style="font-size: 14px;">
+                                <span class="muted">Other course fees — added after your admission is confirmed (ER number)</span>
+                                <span class="mono muted">{{ money_inr($laterFees->sum('amount'), false) }}</span>
+                            </div>
+                            @foreach($laterFees as $fee)
+                                <div class="row-between muted" style="font-size: 13px;">
+                                    <span>{{ $fee->fee_head }}</span><span class="mono">{{ money_inr($fee->amount, false) }}</span>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
                 </div>
             @endif
         </section>

@@ -39,11 +39,21 @@ class FeeService
     /**
      * Add the institute's active fee-structure lines for the student's course that are not added yet.
      */
+    /**
+     * Add the course's active fee lines the student does not have yet.
+     * During registration (no ER number yet) only the admission fee line(s) are added — the other
+     * lines follow when the ER number is issued. A course without a admission fee keeps the old
+     * behaviour (every line at registration).
+     */
     public function generateDues(Student $student): int
     {
+        $admissionFeeOnly = !$student->er_number
+            && CourseFee::courseHasAdmissionFee((int) $student->institute_id, (int) $student->course_id);
+
         $fees = CourseFee::active()
             ->where('institute_id', $student->institute_id)
             ->where('course_id', $student->course_id)
+            ->when($admissionFeeOnly, fn ($q) => $q->admissionFee())
             ->whereNotIn('id', $student->dues()->whereNotNull('course_fee_id')->pluck('course_fee_id'))
             ->orderBy('sort_order')
             ->get();
@@ -104,9 +114,16 @@ class FeeService
             return 0;
         }
 
+        // Admission fee → students still registering (no ER number). Other fees → admitted students
+        // (ER issued); students still registering get them with their ER number — unless the course has
+        // no admission fee, where every fee is charged at registration.
+        $admissionFeeMode = CourseFee::courseHasAdmissionFee((int) $fee->institute_id, (int) $fee->course_id);
+
         $students = Student::where('institute_id', $fee->institute_id)
             ->where('course_id', $fee->course_id)
             ->whereNotIn('status', self::CURRENT_STUDENT_EXCLUDED)
+            ->when($fee->admission_fee, fn ($q) => $q->whereNull('er_number'))
+            ->when(!$fee->admission_fee && $admissionFeeMode, fn ($q) => $q->whereNotNull('er_number'))
             ->whereDoesntHave('dues', fn ($q) => $q->where('course_fee_id', $fee->id))
             ->get();
 

@@ -502,6 +502,82 @@ class Module2PortalTest extends TestCase
         return $user->fresh()->notifications()->oldest()->orderBy('id')->get()->pluck('data.event')->all();
     }
 
+    public function test_only_the_admission_fee_is_paid_during_registration()
+    {
+        // Admission fee (from setUp) is the admission fee; Semester 1 fee comes after admission
+        CourseFee::where('institute_id', $this->inst->id)->where('fee_head', 'Admission fee')->update(['admission_fee' => true]);
+        CourseFee::create(['institute_id' => $this->inst->id, 'course_id' => $this->course->id, 'fee_head' => 'Semester 1 fee', 'amount' => 42000, 'due_days' => 14, 'status' => true]);
+        $this->enableGpay();
+
+        // Step 1 shows what is paid now and what comes later
+        Livewire::test(DetailsPage::class)->set('institute_id', $this->inst->id)->set('course_id', $this->course->id)
+            ->assertSee('To pay during registration')->assertSee('Other course fees');
+
+        // Registration → only the admission fee is charged; the portal payment asks only for it
+        $student = $this->completeApplication();
+        $studentUser = Auth::user();
+        Livewire::test(DocumentsPage::class)->call('submit');
+        $this->assertSame(['Admission fee'], $student->fresh()->dues()->pluck('fee_head')->all());
+        Livewire::test(PaymentPage::class)->assertSet('amount', 15000.0)->assertDontSee('Semester 1 fee');
+        Livewire::test(PaymentPage::class)->set('amount', 15000)->set('utr', '627514903399')->set('proof', UploadedFile::fake()->image('gpay.png'))->call('pay')->assertHasNoErrors();
+
+        // Gate 1 + Gate 2 need only the admission fee
+        $admin = $this->staffUser('institute-admin', $this->inst);
+        $accounts = $this->staffUser('accounts', $this->inst);
+        $this->actingAs($admin);
+        foreach ($student->fresh()->documents as $doc) {
+            app(\App\Services\OnboardingService::class)->verifyDocument($doc);
+        }
+        app(\App\Services\OnboardingService::class)->approveGate($student->fresh(), \App\Models\Admin\EnrollmentApproval::DOCUMENTS);
+        $this->actingAs($accounts);
+        app(\App\Services\FeeService::class)->approvePayment(StudentPayment::where('student_id', $student->id)->firstOrFail());
+        app(\App\Services\OnboardingService::class)->approveGate($student->fresh(), \App\Models\Admin\EnrollmentApproval::FEES);
+
+        // ER issued → the other course fees are added automatically and the student is told
+        $student = $student->fresh();
+        $this->assertNotNull($student->er_number);
+        $this->assertEqualsCanonicalizing(['Admission fee', 'Semester 1 fee'], $student->dues()->pluck('fee_head')->all());
+        $this->assertSame($student->joining_date->copy()->addDays(14)->toDateString(),
+            $student->dues()->where('fee_head', 'Semester 1 fee')->first()->due_date->toDateString()); // its own due rule (joining + 14 days)
+        $this->assertTrue($studentUser->fresh()->notifications()->where('data', 'like', '%fees_added%')->where('data', 'like', '%42,000%')->exists());
+
+        // New lines: a admission fee reaches students still registering, other fees only admitted students
+        $registering = $this->staffRegisteringStudent();
+        $this->actingAs($admin);
+        $page = Livewire::test(\App\Http\Livewire\Admin\Onboarding\FeeStructureComponent::class);
+        $page->call('create', $this->course->id)->set('fee_head', 'Lab fee')->set('amount', 5000)->set('due_days', 0)->call('save')->assertHasNoErrors();
+        $this->assertSame(1, $student->dues()->where('fee_head', 'Lab fee')->count());
+        $this->assertSame(0, $registering->dues()->where('fee_head', 'Lab fee')->count());
+        $page->call('create', $this->course->id)->set('fee_head', 'Application form fee')->set('amount', 500)->set('admission_fee', true)->call('save')->assertHasNoErrors();
+        $this->assertSame(1, $registering->dues()->where('fee_head', 'Application form fee')->count());
+        $this->assertSame(0, $student->dues()->where('fee_head', 'Application form fee')->count());
+        $page->assertSee('Admission fee')->assertDontSee('No admission fee');
+    }
+
+    /** A student who has registered but has no ER number yet (created directly, no login). */
+    protected function staffRegisteringStudent(): Student
+    {
+        $s = Student::create(['institute_id' => $this->inst->id, 'course_id' => $this->course->id, 'first_name' => 'Still', 'last_name' => 'Registering',
+            'dob' => '2007-01-01', 'gender' => 'male', 'qualification_id' => \App\Models\Admin\Qualification::first()->id,
+            'email' => uniqid('reg') . '@mail.test', 'phone' => '+9198' . random_int(10000000, 99999999), 'emergency_contact' => '+919800000009',
+            'religion_id' => $this->religion->id, 'category_id' => \App\Models\Admin\Category::where('religion_id', $this->religion->id)->first()->id,
+            'joining_date' => '2026-10-01', 'onboarding_deadline' => '2026-10-31', 'status' => 'pending_docs']);
+        app(\App\Services\FeeService::class)->generateDues($s);
+
+        return $s->fresh();
+    }
+
+    public function test_course_without_an_admission_fee_charges_every_fee_at_registration()
+    {
+        CourseFee::create(['institute_id' => $this->inst->id, 'course_id' => $this->course->id, 'fee_head' => 'Semester 1 fee', 'amount' => 42000, 'status' => true]);
+        $student = $this->completeApplication();
+        Livewire::test(DocumentsPage::class)->call('submit');
+        $this->assertEqualsCanonicalizing(['Admission fee', 'Semester 1 fee'], $student->fresh()->dues()->pluck('fee_head')->all());
+
+        $this->actingAs($this->staffUser('institute-admin', $this->inst));
+        Livewire::test(\App\Http\Livewire\Admin\Onboarding\FeeStructureComponent::class)->assertSee('No admission fee');
+    }
+
     public function test_workflow_notifications_reach_the_right_people()
     {
         $admin = $this->staffUser('institute-admin', $this->inst);

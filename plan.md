@@ -384,6 +384,7 @@ Default permissions (editable on Roles & Permissions): Institute Admin — stude
 | institute_id, course_id | bigint FK |  |
 | fee_head | string | unique per institute + course |
 | amount | decimal(10,2) |  |
+| admission_fee | boolean ✅ | **admission fee**: the only line(s) charged and paid during registration; the other lines are added automatically when the ER number is issued (a course with no admission fee charges every line at registration) |
 | due_type | enum(joining,fixed) ✅ | `joining`: due = joining date + `due_days`; `fixed`: same calendar date for every student |
 | due_date | date nullable ✅ | used when `due_type = fixed` |
 | due_days | int | days after joining (0 = on joining) |

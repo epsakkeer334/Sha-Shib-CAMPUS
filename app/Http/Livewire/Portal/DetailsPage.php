@@ -247,7 +247,7 @@ class DetailsPage extends Component
             'courses' => $institute ? $institute->offeredCourses()->orderBy('name')->get(['courses.id', 'courses.name'])->pluck('name', 'id') : collect(),
             // Fees of the chosen course, shown before registering
             'courseFees' => $this->institute_id && $this->course_id
-                ? CourseFee::active()->where('institute_id', $this->institute_id)->where('course_id', $this->course_id)->orderBy('sort_order')->get()
+                ? CourseFee::active()->where('institute_id', $this->institute_id)->where('course_id', $this->course_id)->orderByDesc('admission_fee')->orderBy('sort_order')->get()
                 : collect(),
             'qualifications' => Qualification::active()->orderBy('name')->pluck('name', 'id'),
             'religions' => Religion::active()->orderBy('name')->pluck('name', 'id'),

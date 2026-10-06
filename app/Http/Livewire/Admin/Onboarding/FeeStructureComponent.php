@@ -47,6 +47,7 @@ class FeeStructureComponent extends Component
     public $editingId = null, $fee_head, $amount, $due_days = 0, $sort_order = 0, $status = 1;
     public $due_type = CourseFee::DUE_JOINING; // joining (N days after joining) | fixed (calendar date)
     public $due_date = null;
+    public $admission_fee = false; // paid during registration; other fees follow with the ER number
 
     public function mount()
     {
@@ -109,6 +110,7 @@ class FeeStructureComponent extends Component
             'due_date' => [$this->due_type === CourseFee::DUE_FIXED ? 'required' : 'nullable', 'date', 'after_or_equal:2000-01-01', 'before:2100-01-01'],
             'sort_order' => 'required|integer|min:0|max:999',
             'status' => 'boolean',
+            'admission_fee' => 'boolean',
         ];
     }
 
@@ -138,6 +140,7 @@ class FeeStructureComponent extends Component
             'editingId' => $fee->id, 'instituteId' => $fee->institute_id, 'courseId' => $fee->course_id, 'fee_head' => $fee->fee_head,
             'amount' => $fee->amount, 'due_days' => $fee->due_days, 'sort_order' => $fee->sort_order, 'status' => $fee->status ? 1 : 0,
             'due_type' => $fee->due_type ?: CourseFee::DUE_JOINING, 'due_date' => optional($fee->due_date)->toDateString(),
+            'admission_fee' => (bool) $fee->admission_fee,
         ]);
         $this->dispatchBrowserEvent('open-fee-structure-modal');
     }
@@ -150,6 +153,7 @@ class FeeStructureComponent extends Component
             'fee_head' => $data['fee_head'], 'amount' => $data['amount'], 'due_type' => $data['due_type'],
             'due_date' => $fixed ? $data['due_date'] : null, 'due_days' => $fixed ? 0 : (int) $data['due_days'],
             'sort_order' => $data['sort_order'], 'status' => (bool) $data['status'],
+            'admission_fee' => (bool) $data['admission_fee'],
         ];
 
         $wasActive = false;
@@ -204,7 +208,7 @@ class FeeStructureComponent extends Component
     protected function resetForm()
     {
         $this->resetValidation();
-        $this->reset(['editingId', 'fee_head', 'amount', 'due_date']);
+        $this->reset(['editingId', 'fee_head', 'amount', 'due_date', 'admission_fee']);
         $this->due_type = CourseFee::DUE_JOINING;
         if (Auth::user()->isSuperAdmin() && !$this->instituteId && $this->filterInstitute) {
             $this->instituteId = (int) $this->filterInstitute;
@@ -275,6 +279,8 @@ class FeeStructureComponent extends Component
         $groupTotals = CourseFee::selectRaw("institute_id, course_id, COUNT(*) as line_count,
                 SUM(CASE WHEN status = 1 THEN amount ELSE 0 END) as active_total,
                 SUM(CASE WHEN status = 1 AND due_type = 'joining' AND due_days = 0 THEN amount ELSE 0 END) as joining_total,
+                SUM(CASE WHEN status = 1 AND admission_fee = 1 THEN amount ELSE 0 END) as admission_total,
+                SUM(CASE WHEN status = 1 AND admission_fee = 1 THEN 1 ELSE 0 END) as admission_count,
                 SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) as inactive_count,
                 MIN(CASE WHEN status = 1 AND due_type = 'fixed' AND due_date >= CURDATE() THEN due_date END) as next_fixed_due")
             ->groupBy('institute_id', 'course_id')->get()
