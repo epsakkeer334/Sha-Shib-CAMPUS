@@ -27,7 +27,7 @@ class FeeStructureComponent extends Component
 
     protected $paginationTheme = 'bootstrap';
 
-    const PER_PAGE = 25;
+    const PER_PAGE = 12; // courses (cards) per page — each card holds all its fee lines
 
     // filters
     public $search = '';
@@ -248,18 +248,35 @@ class FeeStructureComponent extends Component
         $user = Auth::user();
         $isSuperAdmin = $user->isSuperAdmin();
 
-        // Rows grouped by institute → course → display order
-        $fees = $this->feeQuery()
-            ->with(['course', 'institute'])
-            ->withCount('dues')
+        // One card per institute course (paged by course, so a course's fees are never split across pages)
+        $groups = $this->feeQuery()
             ->join('courses', 'courses.id', '=', 'course_fees.course_id')
             ->join('institutes', 'institutes.id', '=', 'course_fees.institute_id')
-            ->orderBy('institutes.name')->orderBy('courses.code')->orderBy('course_fees.sort_order')
-            ->select('course_fees.*')
+            ->selectRaw('course_fees.institute_id, course_fees.course_id, MAX(institutes.name) as institute_name, MAX(courses.code) as course_code')
+            ->groupBy('course_fees.institute_id', 'course_fees.course_id')
+            ->orderBy('institute_name')->orderBy('course_code')
             ->paginate(self::PER_PAGE);
 
-        // Per-course totals for the group headers (whole structure, not just this page)
-        $groupTotals = CourseFee::selectRaw('institute_id, course_id, COUNT(*) as line_count, SUM(CASE WHEN status = 1 THEN amount ELSE 0 END) as active_total')
+        // The (filtered) fee lines of the courses on this page
+        $pageKeys = $groups->getCollection();
+        $feesByGroup = $pageKeys->isEmpty() ? collect() : $this->feeQuery()
+            ->with(['course', 'institute'])
+            ->withCount('dues')
+            ->where(function ($q) use ($pageKeys) {
+                foreach ($pageKeys as $key) {
+                    $q->orWhere(fn ($w) => $w->where('course_fees.institute_id', $key->institute_id)->where('course_fees.course_id', $key->course_id));
+                }
+            })
+            ->orderBy('course_fees.sort_order')->orderBy('course_fees.id')
+            ->get()
+            ->groupBy(fn ($fee) => "{$fee->institute_id}-{$fee->course_id}");
+
+        // Per-course summary for the card headers (whole structure, not only the filtered lines)
+        $groupTotals = CourseFee::selectRaw("institute_id, course_id, COUNT(*) as line_count,
+                SUM(CASE WHEN status = 1 THEN amount ELSE 0 END) as active_total,
+                SUM(CASE WHEN status = 1 AND due_type = 'joining' AND due_days = 0 THEN amount ELSE 0 END) as joining_total,
+                SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) as inactive_count,
+                MIN(CASE WHEN status = 1 AND due_type = 'fixed' AND due_date >= CURDATE() THEN due_date END) as next_fixed_due")
             ->groupBy('institute_id', 'course_id')->get()
             ->keyBy(fn ($r) => "{$r->institute_id}-{$r->course_id}");
 
@@ -281,7 +298,11 @@ class FeeStructureComponent extends Component
             : collect();
 
         return view('livewire.admin.onboarding.fee-structure-component', [
-            'fees' => $fees,
+            'groups' => $groups,
+            'feesByGroup' => $feesByGroup,
+            'lineCount' => $this->feeQuery()->count(),
+            // open the cards straight away when the list is narrowed down (one course, a search, or few courses)
+            'autoOpen' => $this->filterCourse || trim($this->search) !== '' || $groups->total() <= 2,
             'groupTotals' => $groupTotals,
             'missing' => $missing,
             'stats' => [
