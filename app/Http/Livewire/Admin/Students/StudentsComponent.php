@@ -32,6 +32,7 @@ class StudentsComponent extends Component
     public $docsGate = '';
     public $feesGate = '';
     public $payment = '';
+    public $overdue = false; // onboarding deadline passed without an ER number
     public $perPage = 15;
     public $sortField = 'id';
     public $sortDirection = 'desc';
@@ -46,11 +47,12 @@ class StudentsComponent extends Component
         'docsGate' => ['except' => '', 'as' => 'docs'],
         'feesGate' => ['except' => '', 'as' => 'fees'],
         'payment' => ['except' => ''],
+        'overdue' => ['except' => false],
         'sortField' => ['except' => 'id', 'as' => 'sort'],
         'sortDirection' => ['except' => 'desc', 'as' => 'dir'],
     ];
 
-    const SORTABLE = ['id', 'first_name', 'er_number', 'joining_date'];
+    const SORTABLE = ['id', 'first_name', 'er_number', 'joining_date', 'onboarding_deadline'];
 
     const GATE_FILTERS = ['not_submitted' => 'Not submitted', 'pending' => 'Pending', 'approved' => 'Approved', 'rejected' => 'Rejected'];
 
@@ -68,7 +70,7 @@ class StudentsComponent extends Component
 
     public function updating($property)
     {
-        if (in_array($property, ['search', 'institute', 'course', 'status', 'docsGate', 'feesGate', 'payment', 'perPage'], true)) {
+        if (in_array($property, ['search', 'institute', 'course', 'status', 'docsGate', 'feesGate', 'payment', 'overdue', 'perPage'], true)) {
             $this->resetPage();
         }
     }
@@ -90,6 +92,12 @@ class StudentsComponent extends Component
 
     public function clearFilter($filter)
     {
+        if ($filter === 'overdue') {
+            $this->overdue = false;
+            $this->resetPage();
+
+            return;
+        }
         if (in_array($filter, ['search', 'institute', 'course', 'status', 'docsGate', 'feesGate', 'payment'], true)) {
             $this->{$filter} = '';
             if ($filter === 'institute') {
@@ -101,16 +109,26 @@ class StudentsComponent extends Component
 
     public function clearAll()
     {
-        $this->reset(['search', 'institute', 'course', 'status', 'docsGate', 'feesGate', 'payment']);
+        $this->reset(['search', 'institute', 'course', 'status', 'docsGate', 'feesGate', 'payment', 'overdue']);
         $this->resetPage();
     }
 
     /**
      * Summary card → filter (one at a time).
      */
-    public function quickFilter($key)
+    /** Header pill: students whose onboarding deadline passed without an ER number, most overdue first. */
+    public function showOverdue()
     {
         $this->reset(['status', 'docsGate', 'feesGate', 'payment']);
+        $this->overdue = true;
+        $this->sortField = 'onboarding_deadline';
+        $this->sortDirection = 'asc';
+        $this->resetPage();
+    }
+
+    public function quickFilter($key)
+    {
+        $this->reset(['status', 'docsGate', 'feesGate', 'payment', 'overdue']);
         match ($key) {
             'pending_approval' => $this->status = 'pending_approval',
             'er_issued' => $this->status = 'er_issued',
@@ -140,6 +158,10 @@ class StudentsComponent extends Component
         $this->applyGateFilter($query, EnrollmentApproval::DOCUMENTS, $this->docsGate);
         $this->applyGateFilter($query, EnrollmentApproval::FEES, $this->feesGate);
         $this->applyPaymentFilter($query, $this->payment);
+
+        if ($this->overdue) {
+            $query->whereNull('er_number')->where('status', '!=', 'rejected')->whereDate('onboarding_deadline', '<', today());
+        }
 
         if ($term = trim($this->search)) {
             $query->where(fn ($q) => $q->where('first_name', 'like', "%{$term}%")
@@ -240,6 +262,9 @@ class StudentsComponent extends Component
             'pending_approval' => $base()->where('status', 'pending_approval')->count(),
             'er_issued' => $base()->whereIn('status', ['er_issued', 'active'])->count(),
             'unpaid' => $base()->whereHas('dues', fn ($q) => $q->whereIn('status', ['pending', 'partial']))->count(),
+            'this_month' => $base()->where('created_at', '>=', now()->startOfMonth())->count(),
+            // onboarding not finished (no ER number yet) and the deadline has passed
+            'overdue' => $base()->whereNull('er_number')->where('status', '!=', 'rejected')->whereDate('onboarding_deadline', '<', today())->count(),
         ];
 
         $filters = array_filter([
@@ -250,6 +275,7 @@ class StudentsComponent extends Component
             'docsGate' => $this->docsGate ? 'Docs: ' . (self::GATE_FILTERS[$this->docsGate] ?? '') : null,
             'feesGate' => $this->feesGate ? 'Fees gate: ' . (self::GATE_FILTERS[$this->feesGate] ?? '') : null,
             'payment' => $this->payment ? 'Payment: ' . (self::PAYMENT_FILTERS[$this->payment] ?? '') : null,
+            'overdue' => $this->overdue ? 'Past deadline' : null,
         ]);
 
         return view('livewire.admin.students.students-component', [

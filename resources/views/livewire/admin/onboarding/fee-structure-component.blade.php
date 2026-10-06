@@ -12,14 +12,14 @@
     {{-- Header --}}
     <div class="fs-hero mb-3">
         <div class="min-w-0">
+            <h2 class="mb-1 fw-bold">Fee structure</h2>
             <nav>
-                <ol class="breadcrumb mb-1">
+                <ol class="breadcrumb mb-1 sl-crumb">
                     <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}"><i class="ti ti-smart-home"></i></a></li>
                     <li class="breadcrumb-item">Institute Management</li>
                     <li class="breadcrumb-item active">Fee structure</li>
                 </ol>
             </nav>
-            <h2 class="mb-1 fw-bold">Fee structure</h2>
             <div class="text-muted small">Fees charged for each course. Student dues are generated from these lines on admission.</div>
         </div>
         <button type="button" class="fs-hero-cta" wire:click="create"><i class="ti ti-circle-plus"></i> Add fee</button>

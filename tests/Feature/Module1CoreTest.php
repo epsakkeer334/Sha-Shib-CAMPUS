@@ -170,6 +170,32 @@ class Module1CoreTest extends TestCase
         $this->assertSame('SSA', $institute->fresh()->code_prefix);
     }
 
+    public function test_institutes_list_highlights_code_and_toggles_status()
+    {
+        $this->actingAs($this->makeUser('super-admin'));
+        $this->makeUser('accounts', $this->instA);
+
+        [$prefix, $year, $number] = explode('/', $this->instA->code);
+        $this->get(route('admin.institutes'))->assertOk()
+            ->assertSee('Institutes Management')
+            ->assertSee('<span class="in-code-prefix">' . $prefix . '</span>', false)
+            ->assertSee('<span class="in-code-num">' . $number . '</span>', false);
+
+        // Search, status filter and quick on/off
+        Livewire::test(\App\Http\Livewire\Admin\Institutes\InstitutesComponent::class)
+            ->set('search', $this->instA->code)->assertSee($this->instA->name)->assertDontSee($this->instB->name);
+        Livewire::test(\App\Http\Livewire\Admin\Institutes\InstitutesComponent::class)
+            ->call('toggleStatus', $this->instB->id)
+            ->set('filter', 'Inactive')->assertSee($this->instB->name)->assertDontSee($this->instA->name);
+        $this->assertFalse($this->instB->fresh()->status);
+        $this->assertTrue(AuditTrail::where('module', 'institutes')->where('reference_id', $this->instB->id)->where('meta', 'like', '%Deactivated institute%')->exists());
+
+        // Staff count excludes student logins
+        $page = Livewire::test(\App\Http\Livewire\Admin\Institutes\InstitutesComponent::class)->set('search', $this->instA->code);
+        $row = $page->viewData('institutes')->firstWhere('id', $this->instA->id);
+        $this->assertSame(\App\Models\User::where('institute_id', $this->instA->id)->whereDoesntHave('roles', fn ($r) => $r->where('name', 'student'))->count(), (int) $row->staff_count);
+    }
+
     public function test_institute_admin_creates_staff_only_in_own_institute()
     {
         $this->actingAs($this->makeUser('institute-admin', $this->instA));
@@ -269,7 +295,8 @@ class Module1CoreTest extends TestCase
         $this->assertSame(['Institutes', 'Institute Courses', 'Fee Structure', 'Payment Settings'], array_column($instituteGroup['children'], 'label'));
         $this->assertSame(['Students', 'Onboarding'], array_column($groups['Admissions']['items'], 'label'));
         $this->assertSame(['Document Verification', 'Payment Verification', 'ER & ID Cards'], array_column($groups['Admissions']['items'][1]['children'], 'label'));
-        $this->assertSame(['Users & Permissions', 'Master Data', 'Monitoring'], array_column($groups['Administration']['items'], 'label')); // System: no page built yet
+        $this->assertSame(['Dashboard', 'Master Data'], array_column($groups['Main']['items'], 'label')); // Master Data at the top
+        $this->assertSame(['Users & Permissions', 'Monitoring'], array_column($groups['Administration']['items'], 'label')); // System: no page built yet
         $group = $groups['Administration']['items'][0];
         $this->assertSame(['Users', 'Roles & Permissions'], array_column($group['children'], 'label'));
 

@@ -35,17 +35,17 @@
         <div class="d-flex align-items-center gap-3 min-w-0">
             <span class="so-avatar">{!! $student ? e($student->initials) : '<i class="ti ti-user-plus"></i>' !!}</span>
             <div class="min-w-0">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <h2 class="mb-0 fw-bold">{{ $student ? $student->full_name : 'Add Student' }}</h2>
+                    @if($student) {!! $student->status_html !!} @endif
+                </div>
                 <nav>
-                    <ol class="breadcrumb mb-1">
+                    <ol class="breadcrumb mb-1 sl-crumb">
                         <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}"><i class="ti ti-smart-home"></i></a></li>
                         <li class="breadcrumb-item"><a href="{{ route('admin.students') }}">Students</a></li>
                         <li class="breadcrumb-item active">{{ $student ? 'Onboarding' : 'Add Student' }}</li>
                     </ol>
                 </nav>
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <h2 class="mb-0 fw-bold">{{ $student ? $student->full_name : 'Add Student' }}</h2>
-                    @if($student) {!! $student->status_html !!} @endif
-                </div>
                 @if($student)
                     <div class="so-meta">
                         @if($student->course)<span><span class="so-code">{{ $student->course->code }}</span> {{ $student->course->name }}</span>@endif

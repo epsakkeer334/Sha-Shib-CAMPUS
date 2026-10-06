@@ -179,6 +179,11 @@ class Institute extends BaseModel
         return $this->hasMany(\App\Models\User::class);
     }
 
+    public function students()
+    {
+        return $this->hasMany(Student::class);
+    }
+
     public function instituteCourses()
     {
         return $this->hasMany(InstituteCourse::class);

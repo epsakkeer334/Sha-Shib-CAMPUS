@@ -107,3 +107,32 @@
 .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active i {
     color: #374151;
 }
+
+/* ------------------------------------------------------------------
+   Breadcrumbs (all admin pages): Home tile › Section › Current page
+   ------------------------------------------------------------------ */
+.breadcrumb { display: flex; flex-wrap: wrap; align-items: center; row-gap: 4px; padding: 0; background: transparent; font-size: 12.5px; line-height: 1.4; }
+.breadcrumb.sl-crumb { margin-top: 3px; }
+.breadcrumb .breadcrumb-item { display: inline-flex; align-items: center; color: #6B7280; }
+.breadcrumb .breadcrumb-item a { display: inline-flex; align-items: center; color: #6B7280; text-decoration: none; transition: color .15s; }
+.breadcrumb .breadcrumb-item a:hover { color: #F26522; }
+.breadcrumb .breadcrumb-item.active { color: #111827; font-weight: 600; }
+/* Home icon in a small rounded tile */
+.breadcrumb .breadcrumb-item:first-child a { width: 22px; height: 22px; justify-content: center; border-radius: 6px; background: rgba(17, 24, 39, .05); }
+.breadcrumb .breadcrumb-item:first-child a:hover { background: #FEF0E7; }
+.breadcrumb .breadcrumb-item:first-child i { font-size: 14px; line-height: 1; }
+/* Separator: small chevron with equal space on both sides */
+.breadcrumb .breadcrumb-item + .breadcrumb-item { padding-left: 0; }
+.breadcrumb .breadcrumb-item + .breadcrumb-item::before {
+    content: "\f054";
+    font-family: "Font Awesome 6 Free", "FontAwesome" !important;
+    font-weight: 900;
+    font-size: 8px;
+    line-height: 1;
+    color: #9CA3AF;
+    opacity: 1;
+    float: none;
+    display: inline-block;
+    padding: 0;
+    margin: 0 9px;
+}

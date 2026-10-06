@@ -7,8 +7,9 @@
     {{-- Header --}}
     <div class="ps-hero mb-3">
         <div class="min-w-0">
+            <h2 class="mb-1 fw-bold">Payment settings</h2>
             <nav>
-                <ol class="breadcrumb mb-1">
+                <ol class="breadcrumb mb-1 sl-crumb">
                     <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}"><i class="ti ti-smart-home"></i></a></li>
                     <li class="breadcrumb-item">Institute Management</li>
                     @if($isSuperAdmin && $currentInstitute)
@@ -19,7 +20,6 @@
                     @endif
                 </ol>
             </nav>
-            <h2 class="mb-1 fw-bold">Payment settings</h2>
             <div class="text-muted small">Choose how students can pay their fees. Enabled methods appear on the payment step of the admissions portal.</div>
         </div>
         @if($currentInstitute)

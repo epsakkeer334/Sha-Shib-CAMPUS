@@ -1,53 +1,230 @@
-<div class="content">
-    <!-- Page Header -->
-    <div class="d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3">
-        <div class="my-auto mb-2">
-            <h2 class="mb-1 fw-semibold">Institutes Management</h2>
+<div class="content in-ui">
+    {{-- Header --}}
+    <div class="in-hero mb-3">
+        <div class="min-w-0">
+            <h2 class="mb-1 fw-bold">Institutes Management</h2>
             <nav>
-                <ol class="breadcrumb mb-0">
-                    <li class="breadcrumb-item"><a href="#"><i class="ti ti-smart-home"></i></a></li>
-                    <li class="breadcrumb-item">Admin</li>
-                    <li class="breadcrumb-item">General Management</li>
+                <ol class="breadcrumb mb-1 sl-crumb">
+                    <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}"><i class="ti ti-smart-home"></i></a></li>
+                    <li class="breadcrumb-item">Institute Management</li>
                     <li class="breadcrumb-item active">Institutes</li>
                 </ol>
             </nav>
+            <div class="text-muted small">Every institute of the group — its code, contacts, courses, staff and students.</div>
         </div>
+        <button type="button" wire:click="openModal" class="in-hero-cta"><i class="ti ti-circle-plus"></i> Add Institute</button>
+    </div>
 
-        <div class="d-flex align-items-center flex-wrap gap-3">
-            <button type="button" wire:click="openModal" class="btn btn-primary d-flex align-items-center shadow-sm">
-                <i class="ti ti-circle-plus me-2"></i> Add Institute
+    {{-- Summary (click to filter) --}}
+    <div class="in-cards mb-3">
+        @foreach([
+            ['All', 'Institutes', $stats['total'], 'ti ti-building-community', 'all', 'In the group'],
+            ['Active', 'Active', $stats['active'], 'ti ti-circle-check', 'ok', 'Open for admission'],
+            ['Inactive', 'Inactive', $stats['inactive'], 'ti ti-circle-off', 'muted', 'Logins & admission closed'],
+        ] as [$key, $label, $count, $icon, $tone, $hint])
+            <button type="button" class="in-card in-card-{{ $tone }} {{ $filter === $key ? 'is-active' : '' }}" wire:click="$set('filter', '{{ $key }}')" aria-pressed="{{ $filter === $key ? 'true' : 'false' }}">
+                <span class="in-card-top"><span class="in-card-label">{{ $label }}</span><span class="in-card-icon"><i class="{{ $icon }}"></i></span></span>
+                <span class="in-card-count">{{ number_format($count) }}</span>
+                <span class="in-card-hint">{{ $hint }}</span>
             </button>
-
-            <a href="javascript:void(0);" class="btn btn-outline-light border d-flex align-items-center justify-content-center p-2"
-               data-bs-toggle="tooltip" data-bs-placement="top" title="Collapse Header" id="collapse-header">
-                <i class="ti ti-chevrons-up text-secondary"></i>
-            </a>
+        @endforeach
+        <div class="in-card in-card-info is-static">
+            <span class="in-card-top"><span class="in-card-label">Students</span><span class="in-card-icon"><i class="ti ti-school"></i></span></span>
+            <span class="in-card-count">{{ number_format($stats['students']) }}</span>
+            <span class="in-card-hint">Across all institutes</span>
         </div>
     </div>
 
-    <!-- Data Table using common component -->
-    <div class="card shadow-sm border-0">
-        <livewire:admin.components.table.data-table
-            :model-class="\App\Models\Admin\Institute::class"
-            :columns="[
-                ['label' => '#', 'field' => 'id', 'sortable' => true],
-                ['label' => 'Logo', 'field' => 'logo_url', 'type' => 'image-url', 'sortable' => false],
-                ['label' => 'Institute Name', 'field' => 'name', 'sortable' => true],
-                ['label' => 'Code', 'field' => 'code', 'sortable' => true],
-                ['label' => 'City', 'field' => 'city', 'sortable' => true],
-                ['label' => 'State', 'field' => 'state.name', 'sortable' => false],
-                ['label' => 'Country', 'field' => 'country.name', 'sortable' => false],
-                ['label' => 'Contact Person', 'field' => 'contact_person', 'sortable' => true],
-                ['label' => 'Email', 'field' => 'email', 'sortable' => false],
-                ['label' => 'Phone', 'field' => 'phone', 'sortable' => false],
-                ['label' => 'Status', 'field' => 'status', 'type' => 'status', 'sortable' => true],
-                ['label' => 'Created At', 'field' => 'formatted_created_at', 'type' => 'datetime', 'format' => 'd M Y', 'sortable' => true],
-                ['label' => 'Actions', 'field' => 'actions', 'type' => 'actions', 'actions' => ['edit', 'delete', ['route' => 'admin.institute-users.institute', 'parameter' => 'institute', 'parameter_value' => 'id', 'icon' => 'ti ti-users', 'class' => 'btn-outline-info', 'label' => 'Users', 'show_label' => false], ['route' => 'admin.institute-courses.institute', 'parameter' => 'institute', 'parameter_value' => 'id', 'icon' => 'ti ti-books', 'class' => 'btn-outline-primary', 'label' => 'Courses', 'show_label' => false]]]
-            ]"
-            :filters="['All' => 'All', 'Active' => 'Active', 'Inactive' => 'Inactive']"
-            title="Institutes List"
-        />
+    <div class="in-panel">
+        {{-- Toolbar --}}
+        <div class="in-toolbar">
+            <div class="in-search">
+                <i class="ti ti-search"></i>
+                <input type="search" class="form-control form-control-sm" placeholder="Name, code, city, email, phone…" wire:model.debounce.400ms="search" aria-label="Search institutes">
+            </div>
+            <div class="in-seg" role="group" aria-label="Status">
+                @foreach(['All', 'Active', 'Inactive'] as $f)
+                    <button type="button" class="{{ $filter === $f ? 'is-active' : '' }}" wire:click="$set('filter', '{{ $f }}')">{{ $f }}</button>
+                @endforeach
+            </div>
+            <select class="form-select form-select-sm in-per-page" wire:model="perPage" aria-label="Rows per page">
+                @foreach([10, 25, 50] as $n)<option value="{{ $n }}">{{ $n }} / page</option>@endforeach
+            </select>
+            <span class="ms-auto small text-muted">{{ number_format($institutes->total()) }} {{ \Illuminate\Support\Str::plural('institute', $institutes->total()) }}</span>
+        </div>
+
+        @php
+            $sortIcon = fn ($field) => $sortField === $field ? ($sortDirection === 'asc' ? 'ti ti-arrow-up' : 'ti ti-arrow-down') : 'ti ti-arrows-sort';
+        @endphp
+        <div class="table-responsive position-relative">
+            <div class="in-loading" wire:loading.delay.flex wire:target="search, filter, perPage, sortBy, gotoPage, nextPage, previousPage, toggleStatus, delete">
+                <span class="spinner-border spinner-border-sm text-secondary"></span>
+            </div>
+            <table class="table align-middle mb-0 in-table">
+                <thead>
+                    <tr>
+                        <th><button type="button" class="in-sort" wire:click="sortBy('name')">Institute <i class="{{ $sortIcon('name') }}"></i></button></th>
+                        <th><button type="button" class="in-sort" wire:click="sortBy('code')">Code <i class="{{ $sortIcon('code') }}"></i></button></th>
+                        <th class="text-center"><button type="button" class="in-sort" wire:click="sortBy('established_year')">Established <i class="{{ $sortIcon('established_year') }}"></i></button></th>
+                        <th>Contact</th>
+                        <th class="text-center">Courses</th>
+                        <th class="text-center">Staff</th>
+                        <th class="text-center">Students</th>
+                        <th><button type="button" class="in-sort" wire:click="sortBy('status')">Status <i class="{{ $sortIcon('status') }}"></i></button></th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($institutes as $inst)
+                        @php [$codePrefix, $codeYear, $codeNumber] = array_pad(explode('/', (string) $inst->code, 3), 3, null); @endphp
+                        <tr wire:key="inst-{{ $inst->id }}" class="{{ $inst->status ? '' : 'in-row-off' }}">
+                            <td>
+                                <div class="d-flex align-items-center gap-3">
+                                    @if($inst->logo)
+                                        <img src="{{ $inst->logo_url }}" alt="" class="in-logo" loading="lazy">
+                                    @else
+                                        <span class="in-logo in-logo-text">{{ mb_strtoupper(mb_substr($inst->name, 0, 1)) }}</span>
+                                    @endif
+                                    <div class="min-w-0">
+                                        <div class="in-name text-truncate" title="{{ $inst->name }}">{{ $inst->name }}</div>
+                                        <div class="in-sub">
+                                            <i class="ti ti-map-pin"></i>
+                                            {{ collect([$inst->city, optional($inst->state)->name, optional($inst->country)->name])->filter()->implode(', ') ?: '—' }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                @if($inst->code)
+                                    <span class="in-code" title="Prefix / established year / number">
+                                        <span class="in-code-prefix">{{ $codePrefix }}</span><span class="in-code-sep">/</span><span class="in-code-year">{{ $codeYear }}</span><span class="in-code-sep">/</span><span class="in-code-num">{{ $codeNumber }}</span>
+                                    </span>
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
+                            <td class="text-center">
+                                @if($inst->established_year)
+                                    <span class="in-year"><i class="ti ti-calendar-event"></i> {{ $inst->established_year }}</span>
+                                    <div class="in-sub justify-content-center mt-1">{{ now()->year - $inst->established_year }} {{ \Illuminate\Support\Str::plural('year', now()->year - $inst->established_year) }}</div>
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
+                            <td>
+                                <div class="in-contact">
+                                    @if($inst->contact_person)<div class="fw-medium text-truncate"><i class="ti ti-user"></i> {{ $inst->contact_person }}</div>@endif
+                                    <div class="text-truncate"><i class="ti ti-mail"></i> <a href="mailto:{{ $inst->email }}">{{ $inst->email }}</a></div>
+                                    <div><i class="ti ti-phone"></i> {{ $inst->phone }}</div>
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                <a href="{{ route('admin.institute-courses.institute', $inst->id) }}" class="in-count in-count-indigo" title="Manage courses"><i class="ti ti-books"></i> {{ $inst->courses_count }}</a>
+                            </td>
+                            <td class="text-center">
+                                <a href="{{ route('admin.institute-users.institute', $inst->id) }}" class="in-count in-count-sky" title="Manage users"><i class="ti ti-users"></i> {{ $inst->staff_count }}</a>
+                            </td>
+                            <td class="text-center">
+                                <a href="{{ route('admin.students', ['institute' => $inst->id]) }}" class="in-count in-count-green" title="View students"><i class="ti ti-school"></i> {{ $inst->students_count }}</a>
+                            </td>
+                            <td>
+                                <div class="form-check form-switch m-0 d-flex align-items-center gap-2">
+                                    <input class="form-check-input in-switch" type="checkbox" role="switch" id="instStatus{{ $inst->id }}" @checked($inst->status)
+                                           wire:click="toggleStatus({{ $inst->id }})" aria-label="{{ $inst->status ? 'Deactivate' : 'Activate' }} {{ $inst->name }}">
+                                    <label class="small {{ $inst->status ? 'text-success fw-semibold' : 'text-muted' }}" for="instStatus{{ $inst->id }}">{{ $inst->status ? 'Active' : 'Inactive' }}</label>
+                                </div>
+                            </td>
+                            <td class="text-end text-nowrap">
+                                <button type="button" class="btn btn-sm btn-outline-warning" wire:click="edit({{ $inst->id }})" data-bs-toggle="tooltip" title="Edit"><i class="ti ti-edit"></i></button>
+                                <a href="{{ route('admin.institute-payment-settings', ['institute' => $inst->id]) }}" class="btn btn-sm btn-outline-secondary" data-bs-toggle="tooltip" title="Payment settings"><i class="ti ti-qrcode"></i></a>
+                                <button type="button" class="btn btn-sm btn-outline-danger" wire:click="confirmDelete({{ $inst->id }})" data-bs-toggle="tooltip" title="Delete"><i class="ti ti-trash"></i></button>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="9" class="in-empty">
+                                <i class="ti ti-building-off"></i>
+                                <div class="fw-semibold">{{ $search || $filter !== 'All' ? 'No institutes match these filters' : 'No institutes yet' }}</div>
+                                @unless($search || $filter !== 'All')
+                                    <button type="button" class="btn btn-sm btn-primary mt-2" wire:click="openModal"><i class="ti ti-circle-plus me-1"></i> Add the first institute</button>
+                                @endunless
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+        @if($institutes->hasPages())<div class="in-foot">{{ $institutes->links() }}</div>@endif
     </div>
+
+    <style>
+        .in-ui { --in-border: #E5E7EB; --in-soft: #F1F2F4; --in-ink: #111827; --in-muted: #6B7280; --in-accent: #F26522; }
+        .in-ui .min-w-0 { min-width: 0; }
+        .in-ui .in-hero { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 18px 22px; border-radius: 14px; border: 1px solid var(--in-border);
+            background: radial-gradient(circle at 100% 0, rgba(242, 101, 34, .12), transparent 45%), linear-gradient(135deg, #FFFFFF 0%, #FFF8F3 100%); }
+        .in-ui .in-hero h2 { font-size: 22px; color: var(--in-ink); }
+        .in-ui .in-hero-cta { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 999px; border: 0; background: var(--in-accent); color: #fff; font-size: 14px; font-weight: 500; box-shadow: 0 6px 16px rgba(242, 101, 34, .3); transition: transform .15s; }
+        .in-ui .in-hero-cta:hover { transform: translateY(-1px); }
+        /* cards */
+        .in-ui .in-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+        .in-ui .in-card { --tone: #4338CA; --tone-soft: #EEF2FF; position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 14px 16px 16px; background: #fff; border: 1px solid var(--in-border); border-radius: 14px; text-align: left; box-shadow: 0 1px 2px rgba(16, 24, 40, .04); transition: box-shadow .15s, transform .15s, border-color .15s; }
+        .in-ui .in-card::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--tone); opacity: 0; }
+        .in-ui button.in-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(16, 24, 40, .08); }
+        .in-ui .in-card.is-active { border-color: var(--tone); background: linear-gradient(180deg, var(--tone-soft) 0%, #fff 70%); }
+        .in-ui .in-card.is-active::after { opacity: 1; }
+        .in-ui .in-card-top { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+        .in-ui .in-card-label { font-size: 13px; font-weight: 600; color: #374151; }
+        .in-ui .in-card-icon { width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font-size: 19px; background: var(--tone-soft); color: var(--tone); }
+        .in-ui .in-card-count { font-size: 26px; font-weight: 700; line-height: 1.15; color: var(--in-ink); }
+        .in-ui .in-card-hint { font-size: 12px; color: var(--in-muted); }
+        .in-ui .in-card-all { --tone: #4338CA; --tone-soft: #EEF2FF; } .in-ui .in-card-ok { --tone: #16A34A; --tone-soft: #DCFCE7; }
+        .in-ui .in-card-muted { --tone: #6B7280; --tone-soft: #F3F4F6; } .in-ui .in-card-info { --tone: #0284C7; --tone-soft: #E0F2FE; }
+        /* panel & toolbar */
+        .in-ui .in-panel { background: #fff; border: 1px solid var(--in-border); border-radius: 14px; box-shadow: 0 1px 2px rgba(16, 24, 40, .04); overflow: hidden; }
+        .in-ui .in-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--in-soft); background: #FCFCFD; }
+        .in-ui .in-search { position: relative; width: 300px; max-width: 100%; }
+        .in-ui .in-search i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #9CA3AF; }
+        .in-ui .in-search input { padding-left: 32px; border-radius: 8px; }
+        .in-ui .in-seg { display: inline-flex; gap: 2px; padding: 3px; background: #F3F4F6; border-radius: 9px; }
+        .in-ui .in-seg button { border: 0; background: transparent; padding: 4px 12px; border-radius: 7px; font-size: 13px; color: #4B5563; font-weight: 500; }
+        .in-ui .in-seg button.is-active { background: #fff; color: var(--in-ink); box-shadow: 0 1px 2px rgba(16, 24, 40, .1); }
+        .in-ui .in-per-page { width: auto; border-radius: 8px; }
+        .in-ui .in-foot { padding: 12px 16px; border-top: 1px solid var(--in-soft); }
+        .in-ui .in-foot .pagination { margin: 0; }
+        /* table */
+        .in-ui .in-table thead th { background: #F9FAFB; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--in-muted); border-bottom: 1px solid var(--in-border); padding: 10px 14px; white-space: nowrap; }
+        .in-ui .in-sort { border: 0; background: transparent; padding: 0; font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; display: inline-flex; align-items: center; gap: 4px; }
+        .in-ui .in-sort i { font-size: 13px; opacity: .7; }
+        .in-ui .in-table td { padding: 14px; border-color: var(--in-soft); font-size: 14px; vertical-align: middle; }
+        .in-ui .in-table tbody tr:hover td { background: #FAFAFB; }
+        .in-ui .in-table tbody tr:last-child td { border-bottom: 0; }
+        .in-ui .in-row-off td { background: #FAFAFA; }
+        .in-ui .in-row-off .in-name, .in-ui .in-row-off .in-logo { opacity: .6; }
+        .in-ui .in-logo { width: 46px; height: 46px; border-radius: 12px; object-fit: contain; background: #fff; border: 1px solid var(--in-border); padding: 4px; flex-shrink: 0; }
+        .in-ui .in-logo-text { display: inline-flex; align-items: center; justify-content: center; background: #FEF0E7; color: var(--in-accent); font-weight: 700; font-size: 18px; border-color: #FDDCC6; }
+        .in-ui .in-name { font-weight: 600; color: var(--in-ink); max-width: 280px; }
+        .in-ui .in-sub { font-size: 12px; color: var(--in-muted); display: flex; align-items: center; gap: 4px; }
+        /* highlighted institute code: PREFIX / YEAR / NUMBER */
+        .in-ui .in-code { display: inline-flex; align-items: center; padding: 5px 12px; border-radius: 9px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13.5px; font-weight: 600; letter-spacing: .02em; white-space: nowrap;
+            background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%); border: 1px solid #C7D2FE; color: #3730A3; box-shadow: 0 1px 2px rgba(67, 56, 202, .12); }
+        .in-ui .in-code-prefix { color: #F26522; font-weight: 700; }
+        .in-ui .in-code-sep { color: #A5B4FC; margin: 0 3px; }
+        .in-ui .in-code-year { color: #4338CA; }
+        .in-ui .in-code-num { color: #111827; font-weight: 700; }
+        .in-ui .in-year { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 8px; background: #FFF7ED; border: 1px solid #FED7AA; color: #9A3412; font-weight: 600; font-size: 13px; font-variant-numeric: tabular-nums; }
+        .in-ui .in-contact { font-size: 12.5px; color: #4B5563; max-width: 240px; display: flex; flex-direction: column; gap: 2px; }
+        .in-ui .in-contact i { color: #9CA3AF; font-size: 13px; }
+        .in-ui .in-contact a { color: inherit; }
+        .in-ui .in-count { display: inline-flex; align-items: center; gap: 5px; min-width: 52px; justify-content: center; padding: 4px 10px; border-radius: 999px; font-weight: 600; font-size: 13px; text-decoration: none; transition: transform .12s; }
+        .in-ui .in-count:hover { transform: translateY(-1px); }
+        .in-ui .in-count-indigo { background: #EEF2FF; color: #4338CA; } .in-ui .in-count-sky { background: #E0F2FE; color: #0369A1; } .in-ui .in-count-green { background: #DCFCE7; color: #15803D; }
+        .in-ui .in-switch { width: 2.4em; height: 1.3em; cursor: pointer; }
+        .in-ui .in-switch:checked { background-color: #16A34A; border-color: #16A34A; }
+        .in-ui .in-empty { text-align: center; color: var(--in-muted); padding: 48px 12px !important; }
+        .in-ui .in-empty > i { font-size: 36px; color: #D1D5DB; display: block; margin-bottom: 6px; }
+        .in-ui .in-loading { display: none; position: absolute; inset: 0; z-index: 2; background: rgba(255, 255, 255, .6); align-items: center; justify-content: center; }
+        @media (max-width: 575.98px) { .in-ui .in-search { width: 100%; } }
+    </style>
 
     <!-- Add/Edit Modal -->
     <div class="modal fade" id="instituteModal" tabindex="-1" aria-hidden="true" wire:ignore.self>

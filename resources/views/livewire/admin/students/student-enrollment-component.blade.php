@@ -34,17 +34,17 @@
                 <span class="er-profile-photo er-profile-initials">{{ $student->initials }}</span>
             @endif
             <div class="min-w-0">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <h2 class="mb-0 fw-bold">{{ $student->full_name }}</h2>
+                    {!! $student->status_html !!}
+                </div>
                 <nav>
-                    <ol class="breadcrumb mb-1">
+                    <ol class="breadcrumb mb-1 sl-crumb">
                         <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}"><i class="ti ti-smart-home"></i></a></li>
                         <li class="breadcrumb-item"><a href="{{ $backUrl }}">{{ $backLabel }}</a></li>
                         <li class="breadcrumb-item active">ER &amp; ID card</li>
                     </ol>
                 </nav>
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <h2 class="mb-0 fw-bold">{{ $student->full_name }}</h2>
-                    {!! $student->status_html !!}
-                </div>
                 <div class="er-meta">
                     @if($student->course)<span><span class="er-code">{{ $student->course->code }}</span> {{ $student->course->name }}</span>@endif
                     @if($student->institute)<span><i class="ti ti-building"></i> {{ $student->institute->name }} @if($student->institute->code)<span class="er-inst-code ms-1">{{ $student->institute->code }}</span>@endif</span>@endif

@@ -226,6 +226,11 @@ class InstitutesComponent extends Component
         $this->resetPage();
     }
 
+    public function updatingPerPage()
+    {
+        $this->resetPage();
+    }
+
     public function sortBy($field)
     {
         if ($this->sortField === $field) {
@@ -462,9 +467,27 @@ class InstitutesComponent extends Component
         $this->dispatchBrowserEvent('close-delete-modal');
     }
 
+    /** Quick on/off from the list. */
+    public function toggleStatus($id)
+    {
+        $institute = Institute::findOrFail($id);
+        $old = ['status' => $institute->status];
+        $institute->update(['status' => !$institute->status]);
+        $this->auditUpdate($institute, 'institutes', $old, ['status' => $institute->status],
+            ($institute->status ? 'Activated' : 'Deactivated') . " institute: {$institute->name} ({$institute->code})");
+        $this->dispatchBrowserEvent('show-toast', [
+            'type' => $institute->status ? 'success' : 'warning',
+            'message' => "{$institute->name} is now " . ($institute->status ? 'active' : 'inactive') . '.',
+        ]);
+    }
+
     public function getInstitutesProperty()
     {
-        $query = Institute::with(['country', 'state']);
+        $query = Institute::with(['country', 'state'])->withCount([
+            'instituteCourses as courses_count' => fn ($q) => $q->where('status', true),
+            'users as staff_count' => fn ($q) => $q->whereDoesntHave('roles', fn ($r) => $r->where('name', 'student')),
+            'students',
+        ]);
 
         // Filter by status
         if ($this->filter !== 'All') {
@@ -490,8 +513,9 @@ class InstitutesComponent extends Component
             });
         }
 
-        // Sort
-        $query->orderBy($this->sortField, $this->sortDirection);
+        // Sort (only real columns)
+        $sortField = in_array($this->sortField, ['name', 'code', 'city', 'established_year', 'created_at', 'status'], true) ? $this->sortField : 'name';
+        $query->orderBy($sortField, $this->sortDirection === 'desc' ? 'desc' : 'asc');
 
         return $query->paginate($this->perPage);
     }
@@ -500,6 +524,12 @@ class InstitutesComponent extends Component
     {
         return view('livewire.admin.institutes.institutes-component', [
             'institutes' => $this->institutes,
+            'stats' => [
+                'total' => Institute::count(),
+                'active' => Institute::where('status', true)->count(),
+                'inactive' => Institute::where('status', false)->count(),
+                'students' => \App\Models\Admin\Student::count(),
+            ],
         ])->layout('layouts.admin.master');
     }
 }

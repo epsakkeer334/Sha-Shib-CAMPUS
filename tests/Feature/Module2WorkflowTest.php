@@ -282,6 +282,27 @@ class Module2WorkflowTest extends TestCase
         $this->assertStringContainsString('Approved', $student->fresh()->documents_gate_html);
     }
 
+    public function test_students_header_shows_month_and_past_deadline_counts()
+    {
+        $late = $this->submittedStudent();
+        $late->update(['first_name' => 'Latecomer', 'onboarding_deadline' => now()->subDays(3)]);
+        $onTime = $this->submittedStudent();
+        $onTime->update(['first_name' => 'Ontime', 'onboarding_deadline' => now()->addDays(10)]);
+
+        $this->actingAs($this->admin);
+        $page = Livewire::test(\App\Http\Livewire\Admin\Students\StudentsComponent::class)
+            ->assertSee('Students')->assertSee('this month')->assertSee('1 past deadline')
+            ->assertSee('Latecomer Menon')->assertSee('Ontime Menon');
+
+        // Pill → only the overdue student, most overdue first; shown as a removable filter chip
+        $page->call('showOverdue')->assertSet('overdue', true)->assertSet('sortField', 'onboarding_deadline')
+            ->assertSee('Latecomer Menon')->assertDontSee('Ontime Menon')->assertSee('Past deadline');
+        $page->call('clearFilter', 'overdue')->assertSet('overdue', false)->assertSee('Ontime Menon');
+
+        // Quick filter cards switch the overdue filter off again
+        $page->call('showOverdue')->call('quickFilter', 'all')->assertSet('overdue', false);
+    }
+
     public function test_students_list_filters_search_and_sort()
     {
         $fees = app(\App\Services\FeeService::class);

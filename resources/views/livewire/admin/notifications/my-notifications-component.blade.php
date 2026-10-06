@@ -2,13 +2,13 @@
     {{-- Header --}}
     <div class="nt-hero mb-3">
         <div class="min-w-0">
+            <h2 class="mb-1 fw-bold">Notifications</h2>
             <nav>
-                <ol class="breadcrumb mb-1">
+                <ol class="breadcrumb mb-1 sl-crumb">
                     <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}"><i class="ti ti-smart-home"></i></a></li>
                     <li class="breadcrumb-item active">Notifications</li>
                 </ol>
             </nav>
-            <h2 class="mb-1 fw-bold">Notifications</h2>
             <div class="text-muted small">Workflow updates about students in your institute — registrations, documents, payments, gates, ER numbers and ID cards.</div>
         </div>
         @if($counts['unread'])

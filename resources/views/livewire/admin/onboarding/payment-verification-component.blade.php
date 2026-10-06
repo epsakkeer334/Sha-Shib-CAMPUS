@@ -29,14 +29,14 @@
     {{-- Header --}}
     <div class="pv-hero mb-3">
         <div class="min-w-0">
+            <h2 class="mb-1 fw-bold">Payment verification</h2>
             <nav>
-                <ol class="breadcrumb mb-1">
+                <ol class="breadcrumb mb-1 sl-crumb">
                     <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}"><i class="ti ti-smart-home"></i></a></li>
                     <li class="breadcrumb-item">Student Onboarding</li>
                     <li class="breadcrumb-item active">Gate 2</li>
                 </ol>
             </nav>
-            <h2 class="mb-1 fw-bold">Payment verification</h2>
             <div class="text-muted small">Confirm student payments, issue receipts and clear the fee gate.</div>
         </div>
         @if($counts['pending'])
