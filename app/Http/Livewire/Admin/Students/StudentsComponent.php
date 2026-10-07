@@ -169,6 +169,7 @@ class StudentsComponent extends Component
                 ->orWhere('email', 'like', "%{$term}%")
                 ->orWhere('phone', 'like', "%{$term}%")
                 ->orWhere('er_number', 'like', "%{$term}%")
+                ->orWhereHas('batch', fn ($b) => $b->where('code', 'like', "%{$term}%")->orWhere('name', 'like', "%{$term}%"))
                 ->orWhereHas('course', fn ($c) => $c->where('code', 'like', "%{$term}%")->orWhere('name', 'like', "%{$term}%")));
         }
 
@@ -247,7 +248,7 @@ class StudentsComponent extends Component
         $isSuperAdmin = $user->isSuperAdmin();
 
         $students = $this->query()
-            ->with(['course', 'institute', 'approvals', 'dues', 'payments', 'erRequest'])
+            ->with(['course', 'institute', 'batch', 'approvals', 'dues', 'payments', 'erRequest'])
             ->orderBy(in_array($this->sortField, self::SORTABLE, true) ? $this->sortField : 'id', $this->sortDirection === 'asc' ? 'asc' : 'desc')
             ->paginate(in_array((int) $this->perPage, [10, 15, 25, 50], true) ? (int) $this->perPage : 15);
 

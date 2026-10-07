@@ -17,7 +17,7 @@ class StatusPage extends Component
 
     public function render()
     {
-        $student = $this->student()->load(['course', 'documents', 'approvals', 'dues.payments', 'payments', 'erRequest', 'idCard']);
+        $student = $this->student()->load(['course', 'batch', 'documents', 'approvals', 'dues.payments', 'payments', 'erRequest', 'idCard']);
 
         $docGate = $student->gate(EnrollmentApproval::DOCUMENTS);
         $feeGate = $student->gate(EnrollmentApproval::FEES);

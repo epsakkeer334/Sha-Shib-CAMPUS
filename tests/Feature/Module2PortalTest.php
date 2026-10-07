@@ -578,6 +578,110 @@ class Module2PortalTest extends TestCase
         Livewire::test(\App\Http\Livewire\Admin\Onboarding\FeeStructureComponent::class)->assertSee('No admission fee');
     }
 
+    protected function batch(array $attrs = []): \App\Models\Admin\Batch
+    {
+        return \App\Models\Admin\Batch::withoutGlobalScopes()->create($attrs + [
+            'institute_id' => $this->inst->id, 'course_id' => $this->course->id, 'name' => 'June 2026', 'code' => 'B-' . strtoupper(uniqid()), 'status' => true,
+        ]);
+    }
+
+    public function test_batches_are_managed_per_institute_course_with_unique_codes()
+    {
+        $admin = $this->staffUser('institute-admin', $this->inst);
+        $otherInst = Institute::create(['name' => 'Batchless Aero ' . uniqid(), 'established_year' => 2001, 'code' => Institute::generateCode('BAT', 2001),
+            'email' => uniqid() . '@inst.test', 'phone' => (string) random_int(1000000000, 9999999999), 'status' => true]);
+        $foreign = \App\Models\Admin\Batch::withoutGlobalScopes()->create(['institute_id' => $otherInst->id, 'course_id' => $this->course->id,
+            'name' => 'Foreign', 'code' => 'FOREIGN-' . strtoupper(uniqid()), 'status' => true]);
+
+        $this->actingAs($admin);
+        $this->get(route('admin.batches'))->assertOk()->assertSee('Batches')->assertDontSee($foreign->code);   // own institute only
+
+        $page = Livewire::test(\App\Http\Livewire\Admin\Institutes\BatchesComponent::class)
+            ->call('create', $this->course->id)->assertSet('instituteId', $this->inst->id)
+            ->set('name', 'June 2026 Batch')->set('start_date', '2026-06-01');
+        $page->call('suggestCode');
+        $suggested = $page->get('code');
+        $this->assertStringContainsString('2026', $suggested);
+
+        // Duplicate code (any institute, any case) is refused while typing and on save
+        $page->set('code', strtolower($foreign->code))->assertSet('code', $foreign->code)->assertHasErrors(['code' => 'unique']);
+        $page->set('code', 'BAD CODE!')->assertHasErrors(['code' => 'regex']);
+        $page->set('code', 'KAP-B11-2026')->assertHasNoErrors()->assertSee('Available')
+            ->set('capacity', 2)->call('save')->assertHasNoErrors();
+        $batch = \App\Models\Admin\Batch::where('code', 'KAP-B11-2026')->firstOrFail();
+        $this->assertSame($this->inst->id, $batch->institute_id);
+
+        // A forged institute is ignored for institute admins
+        Livewire::test(\App\Http\Livewire\Admin\Institutes\BatchesComponent::class)->call('create', $this->course->id, $otherInst->id)
+            ->set('name', 'Sneaky')->set('code', 'SNEAKY-' . strtoupper(uniqid()))->call('save');
+        $this->assertSame(0, \App\Models\Admin\Batch::withoutGlobalScopes()->where('name', 'Sneaky')->where('institute_id', $otherInst->id)->count());
+
+        // Batch with students: cannot be deleted; can be closed
+        $student = $this->staffRegisteringStudent();
+        $student->update(['batch_id' => $batch->id]);
+        $this->actingAs($admin);
+        Livewire::test(\App\Http\Livewire\Admin\Institutes\BatchesComponent::class)->call('confirmDelete', $batch->id)->call('delete')
+            ->assertDispatchedBrowserEvent('show-toast', fn ($n, $d) => str_contains($d['message'], 'cannot be deleted'));
+        $this->assertNotSoftDeleted($batch);
+        Livewire::test(\App\Http\Livewire\Admin\Institutes\BatchesComponent::class)->call('toggleStatus', $batch->id);
+        $this->assertFalse($batch->fresh()->status);
+
+        // Accounts has no access
+        $this->actingAs($this->staffUser('accounts', $this->inst));
+        $this->get(route('admin.batches'))->assertForbidden();
+    }
+
+    public function test_portal_batch_field_without_batches_and_on_the_status_page()
+    {
+        // No batches yet: the field is shown (disabled) and registration still works
+        Livewire::test(DetailsPage::class)->set('institute_id', $this->inst->id)->set('course_id', $this->course->id)
+            ->assertSee('No batch open for this course yet')->assertSee('the admissions office will assign your batch');
+        $this->register()->assertHasNoErrors();
+        $student = Auth::user()->student;
+        $this->assertNull($student->batch_id);
+
+        // Once a batch is assigned, the status page shows it
+        $batch = $this->batch(['code' => 'STAT-' . strtoupper(uniqid())]);
+        $student->update(['batch_id' => $batch->id]);
+        $this->get(route('portal.status'))->assertOk()->assertSee($batch->code);
+    }
+
+    public function test_students_choose_a_batch_when_registering()
+    {
+        $open = $this->batch(['name' => 'June 2026', 'code' => 'JUN-' . strtoupper(uniqid()), 'capacity' => 1]);
+        $closed = $this->batch(['name' => 'Old batch', 'code' => 'OLD-' . strtoupper(uniqid()), 'status' => false]);
+        $later = $this->batch(['name' => 'Sept 2026', 'code' => 'SEP-' . strtoupper(uniqid())]);
+
+        // Portal: batch required once the course has open batches; closed batches are not offered
+        $form = Livewire::test(DetailsPage::class)->set('institute_id', $this->inst->id)->set('course_id', $this->course->id)
+            ->assertSee($open->code)->assertSee('1 seat left')->assertDontSee($closed->code);
+        $this->register()->assertHasErrors(['batch_id' => 'required']);
+        $this->register(['batch_id' => $closed->id])->assertHasErrors(['batch_id']);
+        $this->register(['batch_id' => $open->id])->assertHasNoErrors();
+        $student = Auth::user()->student;
+        $this->assertSame($open->id, $student->batch_id);
+
+        // Changing the course clears the batch
+        Livewire::test(DetailsPage::class)->set('course_id', $this->course->id)->assertSet('batch_id', null);
+
+        // The batch is now full (capacity 1): another applicant cannot take it, the next batch is fine
+        Auth::logout();
+        $this->register(['batch_id' => $open->id, 'email' => uniqid() . '@mail.test', 'phone' => '+9197' . random_int(10000000, 99999999)])
+            ->assertHasErrors(['batch_id']);
+
+        // Admin side: same rule; the student list shows the batch code and finds students by it
+        $admin = $this->staffUser('institute-admin', $this->inst);
+        $this->actingAs($admin);
+        $onboarding = Livewire::test(\App\Http\Livewire\Admin\Students\StudentOnboardingComponent::class, ['student' => $student->id])
+            ->assertSet('batch_id', $open->id)->assertSee($open->code);   // full, but the student keeps their seat
+        $onboarding->call('saveBasic')->assertHasNoErrors();
+        $onboarding->call('goTo', 'basic')->set('batch_id', $later->id)->call('saveBasic')->assertHasNoErrors();
+        $this->assertSame($later->id, $student->fresh()->batch_id);
+
+        Livewire::test(\App\Http\Livewire\Admin\Students\StudentsComponent::class)->set('search', $later->code)
+            ->assertSee($student->full_name)->assertSee($later->code);
+    }
+
     public function test_workflow_notifications_reach_the_right_people()
     {
         $admin = $this->staffUser('institute-admin', $this->inst);

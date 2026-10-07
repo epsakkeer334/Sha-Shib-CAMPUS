@@ -45,6 +45,42 @@ class StudentRules
                 Rule::exists('categories', 'id')->where('religion_id', $in['religion_id'] ?? null)->where('status', true)->whereNull('deleted_at'),
             ],
             'joining_date' => ['required', 'date', 'after:2000-01-01'],
+            'batch_id' => self::batch($in, $original),
+        ];
+    }
+
+    /**
+     * Batch of the chosen institute course: required when that course has open batches, must belong
+     * to it, and a full batch is refused (a student already in the batch keeps their seat).
+     */
+    public static function batch(array $in, ?Student $original = null): array
+    {
+        $instituteId = $in['institute_id'] ?? null;
+        $courseId = $in['course_id'] ?? null;
+        $keepsSeat = fn ($value) => $original && (int) $original->batch_id === (int) $value;
+        $hasBatches = $instituteId && $courseId && \App\Models\Admin\Batch::withoutGlobalScopes()->openFor($instituteId, $courseId)->exists();
+
+        return [
+            $hasBatches ? 'required' : 'nullable',
+            function ($attribute, $value, $fail) use ($instituteId, $courseId, $keepsSeat) {
+                if (!$value) {
+                    return;
+                }
+                $batch = \App\Models\Admin\Batch::withoutGlobalScopes()->find($value);
+                if (!$batch || (int) $batch->institute_id !== (int) $instituteId || (int) $batch->course_id !== (int) $courseId) {
+                    $fail('Choose a batch of the selected course.');
+
+                    return;
+                }
+                if ($keepsSeat($value)) {
+                    return;
+                }
+                if (!$batch->status || ($batch->end_date && $batch->end_date->isPast())) {
+                    $fail('This batch is closed for admission.');
+                } elseif ($batch->isFull()) {
+                    $fail('This batch is full. Choose another batch.');
+                }
+            },
         ];
     }
 
@@ -91,6 +127,7 @@ class StudentRules
     public static function messages(): array
     {
         return [
+            'batch_id.required' => 'Choose the batch for this course.',
             'first_name.regex' => 'Only letters, spaces, dots, apostrophes and hyphens are allowed.',
             'last_name.regex' => 'Only letters, spaces, dots, apostrophes and hyphens are allowed.',
             'phone.regex' => 'Enter a valid phone number (10–15 digits, optional +).',

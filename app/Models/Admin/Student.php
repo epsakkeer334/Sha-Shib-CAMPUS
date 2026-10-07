@@ -16,7 +16,7 @@ class Student extends BaseModel
     const EDITABLE_STATUSES = ['draft', 'pending_docs', 'pending_approval', 'rejected'];
 
     protected $fillable = [
-        'institute_id', 'user_id', 'course_id', 'er_number',
+        'institute_id', 'user_id', 'course_id', 'batch_id', 'er_number',
         'first_name', 'last_name', 'dob', 'gender', 'qualification_id', 'email', 'phone', 'emergency_contact',
         'religion_id', 'category_id', 'joining_date', 'onboarding_deadline',
         'address', 'country_id', 'state_id', 'city', 'pincode',
@@ -34,6 +34,11 @@ class Student extends BaseModel
     protected $appends = ['full_name', 'status_html', 'formatted_joining_date', 'formatted_onboarding_deadline'];
 
     // Relations
+    public function batch()
+    {
+        return $this->belongsTo(Batch::class);
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -239,6 +244,10 @@ class Student extends BaseModel
     {
         $course = $this->relationLoaded('course') ? $this->course : $this->course()->first();
         $html = "<div class='fw-medium' title='" . e(optional($course)->name) . "'>" . e(optional($course)->code ?? '—') . '</div>';
+        $batch = $this->relationLoaded('batch') ? $this->batch : ($this->batch_id ? $this->batch()->first() : null);
+        if ($batch) {
+            $html .= "<span class='batch-code' title='Batch: " . e($batch->name) . "'>" . e($batch->code) . '</span>';
+        }
 
         $user = auth()->user();
         if ($user && $user->isSuperAdmin()) {

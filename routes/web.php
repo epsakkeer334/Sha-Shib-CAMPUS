@@ -65,6 +65,7 @@ Route::prefix('admin')->middleware(['auth', 'staff', 'active.user'])->group(func
     // Institute Management — payment methods per institute (UPI ID / QR shown on the portal)
     Route::middleware('permission:fees.manage')->group(function () {
         Route::get('/payment-settings', Admin\Institutes\PaymentSettingsComponent::class)->name('admin.institute-payment-settings');
+        Route::get('/batches', Admin\Institutes\BatchesComponent::class)->name('admin.batches')->middleware('permission:batches.manage');
         Route::get('/payment-settings/{setting}/qr', [PortalController::class, 'paymentQr'])->name('admin.institute-payment-settings.qr');
     });
 

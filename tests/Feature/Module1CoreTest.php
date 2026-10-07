@@ -292,7 +292,7 @@ class Module1CoreTest extends TestCase
         $this->assertSame(['Main', 'Institute', 'Admissions', 'Administration'], $groups->keys()->all()); // sections without built pages stay hidden
         $instituteGroup = $groups['Institute']['items'][0];
         $this->assertSame('Institute Management', $instituteGroup['label']);
-        $this->assertSame(['Institutes', 'Institute Courses', 'Fee Structure', 'Payment Settings'], array_column($instituteGroup['children'], 'label'));
+        $this->assertSame(['Institutes', 'Institute Courses', 'Batches', 'Fee Structure', 'Payment Settings'], array_column($instituteGroup['children'], 'label'));
         $this->assertSame(['Students', 'Onboarding'], array_column($groups['Admissions']['items'], 'label'));
         $this->assertSame(['Document Verification', 'Payment Verification', 'ER & ID Cards'], array_column($groups['Admissions']['items'][1]['children'], 'label'));
         $this->assertSame(['Dashboard', 'Master Data'], array_column($groups['Main']['items'], 'label')); // Master Data at the top

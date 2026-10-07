@@ -352,7 +352,7 @@ class Module1AMasterDataTest extends TestCase
         $instAdminSections = collect(MenuService::for($this->makeUser('institute-admin', $this->institute)))->keyBy('title');
         $this->assertNotContains('Master Data', array_column($instAdminSections['Main']['items'], 'label'));
         // Institute Admin sees Institute Management without Institutes (permission-based).
-        $this->assertSame(['Institute Courses', 'Fee Structure', 'Payment Settings'], array_column($instAdminSections['Institute']['items'][0]['children'], 'label'));
+        $this->assertSame(['Institute Courses', 'Batches', 'Fee Structure', 'Payment Settings'], array_column($instAdminSections['Institute']['items'][0]['children'], 'label'));
 
         // Rendered sidebar contains the nested markup
         $this->actingAs($this->super);

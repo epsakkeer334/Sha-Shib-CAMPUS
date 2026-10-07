@@ -135,7 +135,11 @@
                             @include('livewire.admin.students.partials.select', ['name' => 'course_id', 'label' => 'Course', 'required' => true, 'icon' => 'ti ti-books',
                                 'options' => $courses->mapWithKeys(fn ($c) => [$c->id => "{$c->name} ({$c->code})"]),
                                 'placeholder' => $institute_id ? ($courses->isEmpty() ? 'No active courses at this institute' : 'Select course') : 'Select institute first',
-                                'help' => $institute_id && $courses->isEmpty() ? 'Assign courses under Institute Management → Institute Courses.' : null])
+                                'help' => $institute_id && $courses->isEmpty() ? 'Assign courses under Institute Management → Institute Courses.' : null, 'live' => true])
+                            @include('livewire.admin.students.partials.select', ['name' => 'batch_id', 'label' => 'Batch', 'required' => $batches->isNotEmpty(), 'icon' => 'ti ti-users-group', 'col' => 6,
+                                'options' => $batches,
+                                'placeholder' => !$course_id ? 'Select course first' : ($batches->isEmpty() ? 'No open batches for this course' : 'Select batch'),
+                                'help' => $course_id && $batches->isEmpty() ? 'Add batches under Institute Management → Batches (optional).' : null])
                             @include('livewire.admin.students.partials.input', ['name' => 'joining_date', 'label' => 'Joining date', 'type' => 'date', 'required' => true, 'col' => 4, 'icon' => 'ti ti-calendar-event',
                                 'help' => 'Onboarding deadline: ' . config('camp.onboarding_days') . ' days after joining.'])
                         </div>

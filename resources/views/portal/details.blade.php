@@ -48,6 +48,10 @@
                 @endif
                 @include('portal.partials.field', ['name' => 'course_id', 'label' => 'Course you are applying for', 'type' => 'select', 'required' => true, 'live' => true, 'options' => $courses,
                     'placeholder' => $institute_id ? 'Select course' : 'Choose the institute first', 'disabled' => !$institute_id])
+                @include('portal.partials.field', ['name' => 'batch_id', 'label' => 'Batch', 'type' => 'select', 'required' => $batches->isNotEmpty(), 'options' => $batches,
+                    'placeholder' => !$course_id ? 'Choose the course first' : ($batches->isNotEmpty() ? 'Select your batch' : 'No batch open for this course yet'),
+                    'disabled' => !$course_id || $batches->isEmpty(),
+                    'hint' => $course_id && $batches->isEmpty() ? 'You can continue — the admissions office will assign your batch.' : 'The batch you are joining for this course'])
                 @include('portal.partials.field', ['name' => 'joining_date', 'label' => 'Joining date', 'type' => 'date', 'required' => true,
                     'hint' => 'Complete all steps within ' . config('camp.onboarding_days') . ' days of this date'])
             </div>

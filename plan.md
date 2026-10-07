@@ -393,6 +393,21 @@ Default permissions (editable on Roles & Permissions): Institute Admin — stude
 
 Rules in place ✅: a new or re-activated fee line is charged straight away to every current student of that institute + course (all statuses except rejected / alumni), never twice, and the student is notified; editing a line changes it only for students charged from then on. The Fee Structure screen lists one collapsible card per course (accordion) with fees count, on-joining amount, next fixed due date and course total.
 
+`batches` ✅ (batches of an institute course — Institute Management → Batches; `batches.manage`: Institute Admin own institute, Super Admin all)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| institute_id, course_id | bigint FK | fixed once students are in the batch |
+| name | string | e.g. "June 2026 Batch" |
+| code | string(30), **unique** | across all institutes (deleted batches keep theirs); checked while typing; suggestion = institute prefix-course code-start year, e.g. `SHA-B11-2026` |
+| start_date, end_date | date nullable | after `end_date` the batch is no longer offered at registration |
+| capacity | int nullable | seats; a full batch is refused (students already in it keep their seat) |
+| status | boolean | open / closed for admission |
+| remarks | text nullable |  |
+
+`students.batch_id` ✅ — chosen at registration on the portal (Step 1) and in the admin Add / Edit Student form: **required when the chosen course has open batches**, must belong to that institute course; changing the course clears it. Shown under the course in the students list (searchable by batch code / name). A batch with students cannot be deleted — close it instead. *(Batch details are still to be confirmed by management; extra fields can be added later.)*
+
 `student_dues` ✅ (data source for the Accounts gate)
 
 | Field | Type | Notes |

@@ -77,6 +77,7 @@ return [
                 'children' => [
                     ['label' => 'Institutes', 'icon' => 'ti ti-building-community', 'route' => 'admin.institutes', 'permission' => 'institutes.manage', 'roles' => ['super-admin'], 'active' => ['admin.institutes', 'admin.institute-users*']],
                     ['label' => 'Institute Courses', 'icon' => 'ti ti-books', 'route' => 'admin.institute-courses', 'permission' => 'institute_courses.view', 'active' => ['admin.institute-courses*']],
+                    ['label' => 'Batches', 'icon' => 'ti ti-users-group', 'route' => 'admin.batches', 'permission' => 'batches.manage'],
                     ['label' => 'Fee Structure', 'icon' => 'ti ti-receipt-2', 'route' => 'admin.onboarding.fee-structure', 'permission' => 'fees.manage'],
                     ['label' => 'Payment Settings', 'icon' => 'ti ti-qrcode', 'route' => 'admin.institute-payment-settings', 'permission' => 'fees.manage'],
                 ],

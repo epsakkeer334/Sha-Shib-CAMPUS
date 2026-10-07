@@ -173,6 +173,7 @@
                             <td>
                                 <div class="fw-medium">{{ optional($student->course)->code ?? '—' }}</div>
                                 <div class="small text-muted text-truncate" style="max-width: 180px;" title="{{ optional($student->course)->name }}">{{ optional($student->course)->name }}</div>
+                                @if($student->batch)<span class="batch-code" title="Batch: {{ $student->batch->name }}"><i class="ti ti-users-group"></i> {{ $student->batch->code }}</span>@endif
                             </td>
                             <td>{!! $student->er_cell_html !!}</td>
                             <td>{!! $student->status_html !!}</td>
@@ -277,6 +278,7 @@
         .students-list .sl-card-hint { font-size: 12px; color: #6B7280; }
         .students-list .sl-card-all { --tone: #4338CA; --tone-soft: #EEF2FF; } .students-list .sl-card-warn { --tone: #D97706; --tone-soft: #FEF3C7; }
         .students-list .sl-card-ok { --tone: #16A34A; --tone-soft: #DCFCE7; } .students-list .sl-card-bad { --tone: #DC2626; --tone-soft: #FEE2E2; }
+        .students-list .batch-code { display: inline-flex; align-items: center; gap: 3px; margin-top: 3px; padding: 1px 7px; border-radius: 6px; background: #FFF7ED; border: 1px solid #FED7AA; color: #C2410C; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; font-weight: 600; }
         .students-list .institute-code { display: inline-block; margin-top: 3px; padding: 1px 8px; border-radius: 6px; background: #EEF2FF; color: #4338CA; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11.5px; font-weight: 500; letter-spacing: .02em; }
         .students-list .min-w-0 { min-width: 0; max-width: 240px; }
         /* Hidden by default. While a request runs, Livewire sets an inline display:flex (wire:loading.delay.flex),

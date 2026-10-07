@@ -44,7 +44,7 @@ class StudentOnboardingComponent extends Component
     public $activeTab = 'basic';
 
     // Basic details
-    public $institute_id, $course_id, $first_name, $last_name, $dob, $gender, $qualification_id;
+    public $institute_id, $course_id, $batch_id, $first_name, $last_name, $dob, $gender, $qualification_id;
     public $email, $phone, $emergency_contact, $religion_id, $category_id, $joining_date;
 
     // Student portal login (users row with role "student"), created / reset from the Basic tab
@@ -91,7 +91,7 @@ class StudentOnboardingComponent extends Component
         $this->studentId = $student->id;
         $this->create_login = false; // existing students: adding a login is opt-in
         $this->fill($student->only([
-            'institute_id', 'course_id', 'first_name', 'last_name', 'gender', 'qualification_id', 'email', 'phone',
+            'institute_id', 'course_id', 'batch_id', 'first_name', 'last_name', 'gender', 'qualification_id', 'email', 'phone',
             'emergency_contact', 'religion_id', 'category_id', 'address', 'country_id', 'state_id', 'city', 'pincode',
             'parent_name', 'parent_phone', 'parent_email', 'parent_occupation',
         ]));
@@ -141,7 +141,30 @@ class StudentOnboardingComponent extends Component
     public function updatedInstituteId()
     {
         $this->course_id = null;
+        $this->batch_id = null;
     }
+
+    public function updatedCourseId()
+    {
+        $this->batch_id = null; // batches belong to a course
+    }
+
+    /**
+     * Batches to choose from: open batches of the institute course, plus the student's current one.
+     */
+    protected function batchOptions($instituteId, $courseId, $currentBatchId = null)
+    {
+        if (!$instituteId || !$courseId) {
+            return collect();
+        }
+        $batches = \App\Models\Admin\Batch::withoutGlobalScopes()->openFor($instituteId, $courseId)->orderBy('start_date')->orderBy('code')->get();
+        if ($currentBatchId && !$batches->contains('id', (int) $currentBatchId) && ($current = \App\Models\Admin\Batch::withoutGlobalScopes()->find($currentBatchId))) {
+            $batches->prepend($current);
+        }
+
+        return $batches->mapWithKeys(fn ($b) => [$b->id => $b->optionLabel()]);
+    }
+
 
     public function updatedReligionId()
     {
@@ -449,6 +472,7 @@ class StudentOnboardingComponent extends Component
                 ? Institute::active()->orderBy('name')->get(['id', 'name', 'code'])
                 : Institute::whereKey($user->institute_id)->get(['id', 'name', 'code']),
             'courses' => $courses,
+            'batches' => $this->batchOptions($this->institute_id, $this->course_id, optional($student)->batch_id),
             'qualifications' => $this->withCurrent(Qualification::active()->orderBy('name')->pluck('name', 'id'), Qualification::class, $this->qualification_id),
             'religions' => $this->withCurrent(Religion::active()->orderBy('name')->pluck('name', 'id'), Religion::class, $this->religion_id),
             'categories' => $this->religion_id
