@@ -66,6 +66,7 @@ Route::prefix('admin')->middleware(['auth', 'staff', 'active.user'])->group(func
     Route::middleware('permission:fees.manage')->group(function () {
         Route::get('/payment-settings', Admin\Institutes\PaymentSettingsComponent::class)->name('admin.institute-payment-settings');
         Route::get('/batches', Admin\Institutes\BatchesComponent::class)->name('admin.batches')->middleware('permission:batches.manage');
+        Route::get('/academic-periods', Admin\Institutes\AcademicPeriodsComponent::class)->name('admin.academic-periods')->middleware('permission:periods.manage');
         Route::get('/payment-settings/{setting}/qr', [PortalController::class, 'paymentQr'])->name('admin.institute-payment-settings.qr');
     });
 
@@ -116,6 +117,7 @@ Route::prefix('admin')->middleware(['auth', 'staff', 'active.user'])->group(func
     Route::prefix('masters')->name('admin.masters.')->middleware(['role:super-admin', 'permission:masters.manage'])->group(function () {
         Route::get('/qualifications', Masters\QualificationsManager::class)->name('qualifications');
         Route::get('/courses', Masters\CoursesManager::class)->name('courses');
+        Route::get('/academic-years', Masters\AcademicYearsManager::class)->name('academic-years');
         Route::get('/matriculation-boards', Masters\MatriculationBoardsManager::class)->name('matriculation-boards');
         Route::get('/higher-secondary-boards', Masters\HigherSecondaryBoardsManager::class)->name('higher-secondary-boards');
         Route::get('/religions', Masters\ReligionsManager::class)->name('religions');

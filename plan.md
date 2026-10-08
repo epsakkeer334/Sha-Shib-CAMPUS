@@ -382,8 +382,10 @@ Default permissions (editable on Roles & Permissions): Institute Admin — stude
 | --- | --- | --- |
 | id | bigint PK |  |
 | institute_id, course_id | bigint FK |  |
-| fee_head | string | unique per institute + course |
+| fee_head | string | unique per institute + course + academic year + period ✅ (Module 2B) |
 | amount | decimal(10,2) |  |
+| academic_year_id | bigint FK nullable ✅ (Module 2B) | the academic year the fee line applies to (fees can change year to year) |
+| period_no | int nullable ✅ (Module 2B) | null = one-time fee (e.g. admission fee); 1…`courses.total_periods` = fee of that semester / term / module |
 | admission_fee | boolean ✅ | **admission fee**: the only line(s) charged and paid during registration; the other lines are added automatically when the ER number is issued (a course with no admission fee charges every line at registration) |
 | due_type | enum(joining,fixed) ✅ | `joining`: due = joining date + `due_days`; `fixed`: same calendar date for every student |
 | due_date | date nullable ✅ | used when `due_type = fixed` |
@@ -419,6 +421,7 @@ Rules in place ✅: a new or re-activated fee line is charged straight away to e
 | amount_due, amount_paid | decimal |  |
 | due_date | date |  |
 | course_fee_id | bigint FK nullable | null = added by hand |
+| period_no, academic_year_id | nullable ✅ (Module 2B) | copied from the fee line; dues grouped per period |
 | status | enum(pending,partial,cleared,waived) | "no dues" = all rows cleared or waived; recalculated from successful `student_payments` |
 | remarks | text nullable | waiver reason |
 
@@ -537,6 +540,101 @@ Payment rules:
 
 **Later:** real-time push (broadcasting) instead of polling; per-user notification preferences; email digests for staff.
 
+### Module 2B — Academic Years, Academic Periods (Semesters) & Period-wise Fee Structure ✅ built
+
+**Status (built):** migrations `2026_10_13_000001_create_academic_periods` + `2026_10_13_000002_widen_course_fees_due_type`; `AcademicYear`, `CoursePeriod`, `StudentPeriod` models; `PeriodService` (generate / update / delete calendar, student calendar, `startFirstPeriod` at ER issue); `FeeService::appliesTo()` decides which lines a student gets now; screens Master Data → Academic Years, Courses (period fields), Institute Management → Academic Periods, Batches (intake year), Fee Structure (academic year filter, period field, grouped by period, copy from previous year); current period shown on the students list (with a period filter), onboarding and ER pages and the portal; dues grouped per period on the admin Fees page and the portal Payment page; `AcademicYearSeeder`; tests `Module2BPeriodsTest`. Implementation notes:
+- The number of periods is the existing `courses.total_semesters` column (labelled "Number of periods"); `Course::total_periods` is an accessor for it — no extra column.
+- `course_periods` stores both `intake_academic_year_id` (academic year of period 1 — identifies the calendar) and `academic_year_id` (the year the period starts in).
+- A student's calendar = their batch's periods, else the institute course periods of the intake year of their joining date.
+- A fee line's academic year: for a one-time line it is the student's **intake** year; for a period line it is the year the period **starts** in. Blank = every year.
+
+**Purpose:** manage the fee structure **per academic period** (semester, term, module, year …), where every period is defined by **Institute + Course + Academic Year**. Built before / alongside Module 3 so exams, attendance and results can refer to periods. Promotion between periods belongs to **Module 5** (see "Promotion to the next period" there).
+
+**Decisions (agreed)**
+- (a) Courses do **not** all follow two semesters a year: the academic period structure is **configurable per course** — e.g. 6-month semesters, 3-month terms, a 3-month or 6-month short course with a single period, or yearly periods.
+- (b) Promotion requires **75 % in every subject** of the period — the pass criterion of Module 5.
+- (c) Promotion is confirmed by **both the Institute Admin and the Examination Manager**.
+- (d) Period fees are **due on the period start date**.
+- Fee structure and periods are managed by **Super Admin** (all institutes) and **Institute Admin** (own institute). Students move to the next period **only through promotion** (Module 5) — never automatically by date.
+
+**Course period structure (Master Data → Courses, Super Admin)** — new fields on `courses`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| period_label | string | how the course names its periods: `Semester`, `Term`, `Module`, `Year` … |
+| period_months | int | length of one period, e.g. 6 (semester), 3 (term), 12 (year) |
+| total_semesters | int (existing) | number of periods in the course (shown as "Number of periods"; `total_periods` accessor) |
+| | | `duration_months` stays the overall length (e.g. 3-month course → 1 period of 3 months; 4-year course → 8 semesters of 6 months; 1-year course → 4 terms of 3 months) |
+
+- Derived: `periods_per_year = 12 / period_months` (2 for semesters, 4 for terms, 1 for yearly), `year_of_study = ceil(period_no / periods_per_year)`. A period belongs to the academic year in which it **starts**, so short or off-cycle courses (e.g. a 3-month course starting in February) work too.
+
+**Tables**
+
+`academic_years` (Master Data, Super Admin)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| name | string unique | e.g. `2026-27` |
+| start_date, end_date | date | default 1 June – 31 May (`config('camp.academic_year_start_month')`); years may not overlap |
+| status | boolean | a seeder creates the current year and the next ones |
+
+`course_periods` (period definitions — Institute + Course + Academic Year)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| institute_id, course_id | bigint FK |  |
+| intake_academic_year_id | bigint FK | academic year of period 1 — identifies the calendar |
+| academic_year_id | bigint FK nullable | academic year in which the period starts |
+| batch_id | bigint FK nullable | when an institute runs different calendars per batch / intake |
+| period_no | int | 1…`courses.total_periods` |
+| label | string | e.g. "Semester 3", "Term 2", "Module 1" (from `period_label`) |
+| year_of_study | int | derived |
+| start_date, end_date | date | generated from the course's `period_months`, editable |
+| status | enum(planned, ongoing, completed) | `completed` once results are published (Module 5) |
+| | | unique: institute + course + academic year (+ batch) + period_no |
+
+- **Generate** for an institute course (and batch / intake): creates every period of the course from the start date using `period_months` (e.g. 4-year course from 1 Jun 2026 → 8 semesters; 1-year course → 4 terms; 3-month course → 1 period). Dates can be adjusted afterwards.
+
+`batches` ✅ (Module 2) gains `academic_year_id` (intake year, filled from the start date) ✅; the batch start date is the start of period 1.
+
+`student_periods` (each student's period history)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| student_id | bigint FK |  |
+| course_period_id | bigint FK | institute + course + academic year + period |
+| period_no | int |  |
+| status | enum(current, completed, detained) | one `current` row per student |
+| started_on, completed_on | date |  |
+| promotion_id | FK nullable | the Module 5 promotion that closed it |
+| remarks | text nullable | e.g. detention reason |
+
+- The period 1 row is created when the ER number is issued (admission confirmed), in the period 1 of the student's batch / intake.
+
+**Period-wise fee structure** (extends `course_fees` — Module 2)
+- New columns `academic_year_id` and `period_no` (null = one-time fee such as the **admission fee**, which stays as built: paid during registration).
+- A fee line = Institute + Course + Academic Year + Period (+ fee head), e.g. *AME B1.1 · 2026-27 · Semester 1 · Tuition ₹42,000*, *Cabin Crew (1-year) · 2026-27 · Term 3 · ₹18,000*.
+- **Due date** of a period fee = **the period start date** (`course_periods.start_date`) — new due rule `period_start` (the default for period fees). One-time fees keep the existing rules (on joining / after joining / fixed date).
+- **Charging (`FeeService`)**:
+  - Registration: admission fee only (as built).
+  - ER number issued: one-time fees + **period 1** fees (due on period 1's start date).
+  - Promotion to period *N* (Module 5, after both approvals): the fees of period *N* for the academic year it starts in, charged automatically, due on its start date (or at once if it has already started); the student is notified (`fees_added`).
+  - New / re-activated period fee line: charged to students whose **current** period is that course period; never charged twice; edits apply to future charges only (as built).
+- `student_dues.period_no` / `academic_year_id` copied from the line — dues are grouped per period on the student's Fees page and the portal Payment step, and the exam dues gate (Module 3) checks dues **up to the exam's period**.
+
+**Screens**
+- Master Data → **Academic Years** (Super Admin); Master Data → **Courses** gets the period structure fields.
+- Institute Management → **Academic Periods** (Super Admin / Institute Admin): per institute course (and batch) — generate, see and adjust period dates and status.
+- Institute Management → **Fee Structure** (existing course cards): an **academic year** selector; inside each course card the fees are grouped **One-time · Semester 1 · Semester 2 …** (or Term / Module …, from the course's label) with a subtotal per period; Add/Edit fee gets *Academic year* and *Period* fields; "Copy fees from another academic year / period" helper.
+- Student: current period and academic year on the student pages and the portal status page; students list filter by period.
+
+**Permissions (new)**: `periods.manage` (Super Admin, Institute Admin); fee structure stays on `fees.manage` (Institute Admin — Super Admin passes every check).
+
+**Migration (as built)**: existing courses got `period_label = Semester`, `period_months = duration_months / total_semesters`; existing fee lines stay one-time lines for every academic year (`period_no` and `academic_year_id` null), so nothing changes until periods and period fees are set up. Students with an ER number but no period row count as period 1 for fees; their `student_periods` row is created at ER issue from now on. No guessing from fee names.
+
 ### Module 3 — Examination Lifecycle
 
 **Purpose:** implements Phase 2 — Trigger → Approval → Execution.
@@ -555,7 +653,7 @@ Courses come from the Master Data module (`courses` + `institute_courses`); ther
 | institute_id | bigint FK nullable | null = central/master subject (used by master question bank) |
 | course_id | bigint FK nullable | null for central subjects |
 | name, code | string |  |
-| semester_no | int |  |
+| period_no | int | academic period of the course (semester / term / module — Module 2B) |
 | syllabus_topics | json | list of topics used for % mapping |
 
 `syllabus_mapping`
@@ -578,7 +676,7 @@ Courses come from the Master Data module (`courses` + `institute_courses`); ther
 | institute_id | bigint FK |  |
 | course_id | bigint FK |  |
 | exam_type | enum(mid_sem,semester) |  |
-| semester_no | int |  |
+| period_no | int | academic period the exam belongs to (Module 2B) |
 | scheduled_date | date |  |
 | mode | enum(online,offline) |  |
 | status | enum(scheduled,ongoing,completed,cancelled) |  |
@@ -771,6 +869,29 @@ Courses come from the Master Data module (`courses` + `institute_courses`); ther
 
 ---
 
+#### Promotion to the next period (uses Module 2B academic periods)
+
+Once a period (semester / term / module) is completed and its results are published, students are **promoted** to the next period. Promotion is the only way a student's period changes.
+
+**Eligibility rules**
+- Results of the period **published** (`course_periods.status = completed`).
+- **75 % or more in every subject** of the period — the Module 5 pass criterion (`config('camp.pass_percent')`, default 75). A subject below 75 % → not eligible (re-exam / repeat per the exam rules).
+- **Attendance** at or above the threshold (Module 3, `attendance_threshold`).
+- **No dues** up to the period (configurable `promotion.require_no_dues`, default on) — from `student_dues`.
+- Not on hold / not rejected.
+
+**Approval — Institute Admin + Examination Manager (both required)**
+1. **Promotion list** for an institute + course + academic year + period: every student with *Eligible* / *Not eligible* and the reasons (subjects below 75 %, attendance %, dues).
+2. The **Examination Manager** confirms the results-based list (bulk or per student) and can mark students *detained* with a reason.
+3. The **Institute Admin** confirms the same list (bulk or per student). Either can send a student back with a remark; the order of the two confirmations does not matter.
+4. When **both** have confirmed a student, the promotion is carried out: the current `student_periods` row → `completed`, a new row for period *N + 1* (in the course period of the academic year it starts in), **period *N + 1* fees charged** (Module 2B, due on its start date), student notified (`period_promoted`), audit entry.
+5. **Super Admin override**: promote a not-eligible student with a mandatory reason (still recorded with both roles' status), audit trail.
+6. After the **last period** of the course: student status → `alumni` (course completed); consolidated marksheet available.
+
+**Table**: `promotions` — `student_id`, `from_course_period_id`, `to_course_period_id`, `from_period_no`, `to_period_no`, `eligibility` json (subjects / attendance / dues checked), `decision` enum(pending, promoted, detained, override), `exam_manager_status` / `exam_manager_by` / `exam_manager_at`, `institute_admin_status` / `institute_admin_by` / `institute_admin_at`, `override_by`, `override_reason`, `completed_at`.
+
+**Permissions (new)**: `promotions.confirm_exam` (Examination Manager), `promotions.confirm_institute` (Institute Admin); Super Admin passes both and can override.
+
 ### Module 6 — Document Management System (DMS)
 
 **Purpose:** Part 2, Section 1–2 — MTOE/SOP drafting, HoT approval, external submission tracking, 7-day rule, final repository.
@@ -909,9 +1030,10 @@ Export feature: a queued job zips the `document_final_records` of all `documents
 | **Sprint 0 — Foundation (Module 1)** | ✅ Done | Laravel/Livewire setup, auth, roles & permissions (seeder + matrix screen), institutes CRUD with auto code, user management, role-based side menu, audit trail + viewer, notification log, `users.institute_id`, `BelongsToInstitute`, `SerialNumberService`, `config/camp.php` |
 | **Sprint 1a — Master Data (Module 1A)** | ✅ Done (per-institute gateway settings → Sprint 1) | Super Admin CRUD for qualifications, courses (+ institute_courses), countries, states, religions, categories, matriculation & higher secondary boards, payment gateways (+ per-institute gateway settings) |
 | **Sprint 1 — Student Onboarding** | ✅ done (2.1–2.6, admin side + admissions portal) | Student registration (+ user account, academic information), document upload wizard, student dues & payments (online gateways, GPay/UPI, offline + Accounts verification, receipts), dual-gate approval (Admin + Accounts), ER generation, ID card issuance |
+| **Sprint 1b — Academic Years, Academic Periods & Period-wise Fees (Module 2B)** ✅ | 1–2 weeks | Academic years master + seeder, course period structure (semester / term / module / year, length, number of periods), course periods per institute / course / academic year (generate & edit), batches → intake year, period-wise fee structure (academic year + period on fee lines, due on the period start date, period 1 fees at ER issue), dues grouped per period |
 | **Sprint 2 — Exam Application & Approval** | 2 weeks | Subjects per course/syllabus mapping, exam appearance requests, Accounts dues gate + BiC bypass, TM attendance gate, admit card generation |
 | **Sprint 3 — Question Bank & Paper Setup** | 1–2 weeks | Question bank CRUD (Super Admin + Institute), exam paper builder |
-| **Sprint 4 — Grading & Results** | 2 weeks | Marks entry (all three modes), result computation (configurable pass %), Super Admin correction workflow, marksheet + consolidated marksheet generation with unique serials |
+| **Sprint 4 — Grading & Results** | 2 weeks | Marks entry (all three modes), result computation (configurable pass %), Super Admin correction workflow, marksheet + consolidated marksheet generation with unique serials, **promotion to the next period** (75 % per subject eligibility list, Examination Manager + Institute Admin approval, detain / Super Admin override, next-period fees) |
 | **Sprint 5 — Document Management System** | 2 weeks | Document upload → HoT review → external submission tracking → final repository, 7-day rule scheduled job |
 | **Sprint 6 — MoU Tracker** | 1 week | MoU CRUD, institute-scoped visibility, 60-day expiry alert job |
 | **Sprint 7 — Compliance Dashboard & Reporting** | 1–2 weeks | Heatmap widgets, pending approvals list, revision-due list, audit-ready bulk export |
@@ -972,6 +1094,7 @@ database/
 6. Attendance threshold for the TM gate — what % counts as green (e.g. 75% / 80%), and is it per subject or overall?
 7. Serial numbering: should ER/marksheet/admit card counters run per institute per year, or one global running series?
 8. Payment gateways: which online gateway(s) to integrate first (Razorpay / PayU / PhonePe ...)? For GPay — UPI QR + manual UTR verification by Accounts (as planned), or GPay through a gateway's UPI intent so it is confirmed automatically? Does each institute have its own merchant account?
+9. ~~Semesters & promotion~~ — **resolved**: academic periods configurable per course (semester / term / module / year, e.g. 3- or 6-month courses); promotion needs 75 % in every subject (Module 5 pass criterion); confirmed by both the Institute Admin and the Examination Manager; period fees are due on the period start date.
 
 ---
 

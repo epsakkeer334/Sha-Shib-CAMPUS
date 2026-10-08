@@ -499,7 +499,8 @@ class OnboardingService
 
         $this->inApp->notify('er_issued', $student);
 
-        // Admission confirmed → the course's other fees (beyond the admission fee) are added now
+        // Admission confirmed → period 1 starts (when periods are set up), then the one-time + period 1 fees
+        app(PeriodService::class)->startFirstPeriod($student->fresh());
         $this->fees->generateDues($student->fresh());
 
         $this->notifications->send($student, 'er_issued', "Your ER number: {$student->er_number}",

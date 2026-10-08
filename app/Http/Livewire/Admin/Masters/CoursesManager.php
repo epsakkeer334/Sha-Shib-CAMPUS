@@ -58,11 +58,27 @@ class CoursesManager extends MasterCrudComponent
                 'rules' => ['required', 'integer', 'min:1', 'max:120'],
                 'placeholder' => 'e.g. 48',
             ],
-            'total_semesters' => [
-                'label' => 'Total Semesters',
+            // Academic period structure (Module 2B): label × length × number of periods
+            'period_label' => [
+                'label' => 'Period type',
+                'type' => 'select',
+                'options' => fn () => config('camp.period_labels'),
+                'rules' => ['required', \Illuminate\Validation\Rule::in(array_keys(config('camp.period_labels')))],
+                'col' => 4,
+            ],
+            'period_months' => [
+                'label' => 'Period length (months)',
                 'type' => 'number',
-                'rules' => ['required', 'integer', 'min:1', 'max:20'],
-                'placeholder' => 'e.g. 8',
+                'rules' => ['nullable', 'integer', 'min:1', 'max:24'],
+                'placeholder' => 'Blank = duration ÷ number of periods',
+                'col' => 4,
+            ],
+            'total_semesters' => [
+                'label' => 'Number of periods',
+                'type' => 'number',
+                'rules' => ['required', 'integer', 'min:1', 'max:40'],
+                'placeholder' => 'e.g. 8 semesters, or 1 for a 3-month course',
+                'col' => 4,
             ],
             'description' => [
                 'label' => 'Description',
@@ -79,7 +95,23 @@ class CoursesManager extends MasterCrudComponent
             ['label' => 'Course Name', 'field' => 'name', 'sortable' => true],
             ['label' => 'Code', 'field' => 'code', 'sortable' => true],
             ['label' => 'Duration (months)', 'field' => 'duration_months', 'sortable' => true],
-            ['label' => 'Semesters', 'field' => 'total_semesters', 'sortable' => true],
+            ['label' => 'Periods', 'field' => 'period_summary', 'sortable' => false],
         ];
+    }
+
+    protected function resetForm()
+    {
+        parent::resetForm();
+        $this->form['period_label'] = 'Semester';
+    }
+
+    public function save()
+    {
+        // blank period length: work it out from the course duration
+        if (empty($this->form['period_months']) && !empty($this->form['duration_months']) && !empty($this->form['total_semesters'])) {
+            $this->form['period_months'] = max(1, (int) round($this->form['duration_months'] / max(1, (int) $this->form['total_semesters'])));
+        }
+
+        return parent::save();
     }
 }

@@ -39,6 +39,28 @@ class Student extends BaseModel
         return $this->belongsTo(Batch::class);
     }
 
+    public function periods()
+    {
+        return $this->hasMany(StudentPeriod::class);
+    }
+
+    /** The student's current academic period (Module 2B), if periods are set up. */
+    public function currentPeriod()
+    {
+        return $this->hasOne(StudentPeriod::class)->where('status', 'current')->latestOfMany();
+    }
+
+    /** "Semester 2 · 2026-27" for display */
+    public function getCurrentPeriodLabelAttribute(): ?string
+    {
+        $period = $this->relationLoaded('currentPeriod') ? $this->currentPeriod : $this->currentPeriod()->with('coursePeriod.academicYear')->first();
+        if (!$period || !$period->coursePeriod) {
+            return null;
+        }
+
+        return $period->coursePeriod->label . (optional($period->coursePeriod->academicYear)->name ? ' · ' . $period->coursePeriod->academicYear->name : '');
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);

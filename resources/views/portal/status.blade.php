@@ -25,7 +25,7 @@
     <div style="display: flex; flex-direction: column; gap: 8px;">
         <span class="eyebrow">Application status</span>
         <h1 class="title">{{ $headline }}</h1>
-        <p class="lead">{{ optional($student->course)->name }}@if($student->batch) · batch <span class="mono" style="font-weight: 600;">{{ $student->batch->code }}</span>@endif @if($student->submitted_at) · submitted {{ $student->submitted_at->format('d M Y') }}@endif</p>
+        <p class="lead">{{ optional($student->course)->name }}@if($student->batch) · batch <span class="mono" style="font-weight: 600;">{{ $student->batch->code }}</span>@endif @if($student->current_period_label) · <span style="font-weight: 600;">{{ $student->current_period_label }}</span>@endif @if($student->submitted_at) · submitted {{ $student->submitted_at->format('d M Y') }}@endif</p>
     </div>
 
     {{-- Action needed --}}

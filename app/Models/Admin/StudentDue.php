@@ -13,7 +13,7 @@ class StudentDue extends BaseModel
     use BelongsToInstitute;
 
     protected $fillable = [
-        'institute_id', 'student_id', 'course_fee_id', 'fee_head', 'amount_due', 'amount_paid', 'due_date', 'status', 'remarks',
+        'institute_id', 'student_id', 'course_fee_id', 'academic_year_id', 'period_no', 'fee_head', 'amount_due', 'amount_paid', 'due_date', 'status', 'remarks',
         'created_by', 'updated_by',
     ];
 
@@ -21,7 +21,19 @@ class StudentDue extends BaseModel
         'amount_due' => 'decimal:2',
         'amount_paid' => 'decimal:2',
         'due_date' => 'date',
+        'period_no' => 'integer',
     ];
+
+    /** "Semester 2" / "One-time" — the course's period name for this due. */
+    public function getPeriodNameAttribute(): ?string
+    {
+        if ($this->period_no === null) {
+            return null;
+        }
+        $course = optional($this->student)->course;
+
+        return $course ? $course->periodName($this->period_no) : 'Period ' . $this->period_no;
+    }
 
     public function student()
     {

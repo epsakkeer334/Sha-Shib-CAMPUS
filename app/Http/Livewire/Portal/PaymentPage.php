@@ -115,7 +115,8 @@ class PaymentPage extends Component
     public function render()
     {
         $student = $this->student();
-        $dues = StudentDue::where('student_id', $student->id)->with('payments')->orderBy('due_date')->get();
+        $dues = StudentDue::where('student_id', $student->id)->with('payments')
+            ->orderByRaw('period_no IS NOT NULL, period_no')->orderBy('due_date')->get();
         $setting = $this->setting_id ? $this->upiSettings()->firstWhere('id', (int) $this->setting_id) : null;
 
         return view('portal.payment', [

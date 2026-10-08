@@ -13,12 +13,14 @@ class CourseFee extends BaseModel
 
     const DUE_JOINING = 'joining'; // due N days after the student's joining date
     const DUE_FIXED = 'fixed';     // due on a fixed calendar date
+    const DUE_PERIOD_START = 'period_start'; // due on the start date of the student's academic period (period fees)
 
-    protected $fillable = ['institute_id', 'course_id', 'fee_head', 'amount', 'admission_fee', 'due_type', 'due_date', 'due_days', 'sort_order', 'status', 'created_by', 'updated_by'];
+    protected $fillable = ['institute_id', 'course_id', 'academic_year_id', 'period_no', 'fee_head', 'amount', 'admission_fee', 'due_type', 'due_date', 'due_days', 'sort_order', 'status', 'created_by', 'updated_by'];
 
     protected $casts = [
         'amount' => 'decimal:2',
         'admission_fee' => 'boolean',
+        'period_no' => 'integer',
         'due_date' => 'date',
         'due_days' => 'integer',
         'sort_order' => 'integer',
@@ -35,6 +37,16 @@ class CourseFee extends BaseModel
     public function institute()
     {
         return $this->belongsTo(Institute::class);
+    }
+
+    public function academicYear()
+    {
+        return $this->belongsTo(AcademicYear::class);
+    }
+
+    public function isOneTime(): bool
+    {
+        return $this->period_no === null;
     }
 
     public function dues()
@@ -77,6 +89,13 @@ class CourseFee extends BaseModel
      */
     public function dueDateFor(Student $student): \Carbon\Carbon
     {
+        if ($this->due_type === self::DUE_PERIOD_START && $this->period_no) {
+            // the start of that period in the student's calendar (joining date until periods are set up)
+            $start = optional(app(\App\Services\PeriodService::class)->periodFor($student, $this->period_no))->start_date;
+
+            return ($start ?: $student->joining_date)->copy();
+        }
+
         return $this->isFixedDue()
             ? $this->due_date->copy()
             : $student->joining_date->copy()->addDays((int) $this->due_days);
@@ -85,6 +104,9 @@ class CourseFee extends BaseModel
     /** Human label: "On joining", "14 days after joining" or "Due 15 Jan 2027". */
     public function getDueLabelAttribute(): string
     {
+        if ($this->due_type === self::DUE_PERIOD_START && $this->period_no) {
+            return 'On the period start date';
+        }
         if ($this->isFixedDue()) {
             return 'Due ' . $this->due_date->format('d M Y');
         }

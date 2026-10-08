@@ -27,8 +27,13 @@
                 <h2>Your fees</h2>
                 <span style="color: var(--ink-2);">Still to pay <b class="mono" style="font-size: 20px; color: var(--ink);">{{ money_inr($outstanding, false) }}</b></span>
             </div>
+            @php $splitDues = $dues->whereNotNull('period_no')->isNotEmpty(); $lastPeriod = -1; @endphp
             @forelse($dues as $due)
                 @php [$cls, $label] = $dueBadge($due); @endphp
+                @if($splitDues && (int) $due->period_no !== $lastPeriod)
+                    @php $lastPeriod = (int) $due->period_no; @endphp
+                    <div style="padding: 10px 28px; background: var(--line-2, #F3F4F6); font-weight: 600; font-size: 14px; color: var(--ink-2);">{{ $lastPeriod ? $due->period_name : 'One-time fees' }}</div>
+                @endif
                 <div class="feerow">
                     <span style="display: flex; flex-direction: column;">
                         <span style="font-weight: 600;">{{ $due->fee_head }}</span>

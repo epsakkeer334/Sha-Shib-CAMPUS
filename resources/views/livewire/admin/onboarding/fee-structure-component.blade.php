@@ -18,7 +18,7 @@
                     <li class="breadcrumb-item active">Fee structure</li>
                 </ol>
             </nav>
-            <div class="text-muted small">Fees charged for each course. Student dues are generated from these lines on admission.</div>
+            <div class="text-muted small">Fees charged for each course: one-time fees, and period fees (semester / term) charged when the student reaches that period.</div>
         </div>
         <button type="button" class="fs-hero-cta" wire:click="create"><i class="ti ti-circle-plus"></i> Add fee</button>
     </div>
@@ -64,6 +64,10 @@
     <div class="fs-panel">
         {{-- Filters --}}
         <div class="fs-filters">
+            <select class="form-select form-select-sm fs-year-select" wire:model="filterYear" aria-label="Academic year">
+                <option value="">All academic years</option>
+                @foreach($academicYears as $ay)<option value="{{ $ay->id }}">{{ $ay->name }}{{ $ay->is_current ? ' (current)' : '' }}</option>@endforeach
+            </select>
             <div class="fs-search">
                 <i class="ti ti-search"></i>
                 <input type="search" class="form-control form-control-sm" placeholder="Fee name or course" wire:model.debounce.400ms="search" aria-label="Search">
@@ -83,6 +87,7 @@
                 <option value="joining">Due on joining</option>
                 <option value="later">Due after joining</option>
                 <option value="fixed">Fixed due date</option>
+                <option value="period">On period start</option>
             </select>
             <select class="form-select form-select-sm" wire:model="filterStatus" aria-label="Status">
                 <option value="">Any status</option>
@@ -91,6 +96,12 @@
             </select>
             @if($hasFilters)
                 <button type="button" class="btn btn-sm btn-light" wire:click="clearFilters"><i class="ti ti-x me-1"></i> Clear</button>
+            @endif
+            @if($canCopyPrevious)
+                <button type="button" class="btn btn-sm btn-outline-primary" wire:click="copyPreviousYear"
+                        onclick="confirm('Copy the fees of {{ $previousYear->name }} into {{ $selectedYear->name }}? Fees that already exist are skipped.') || event.stopImmediatePropagation()">
+                    <i class="ti ti-copy me-1"></i> Copy from {{ $previousYear->name }}
+                </button>
             @endif
             <span class="ms-auto d-inline-flex align-items-center gap-2">
                 <span class="small text-muted">{{ number_format($groups->total()) }} {{ \Illuminate\Support\Str::plural('course', $groups->total()) }} · {{ number_format($lineCount) }} {{ \Illuminate\Support\Str::plural('fee', $lineCount) }}</span>
@@ -102,7 +113,7 @@
         </div>
 
         <div class="fs-groups position-relative">
-            <div class="fs-loading" wire:loading.delay.flex wire:target="search, filterInstitute, filterCourse, filterStatus, filterDue, clearFilters, toggleStatus, delete, gotoPage, nextPage, previousPage">
+            <div class="fs-loading" wire:loading.delay.flex wire:target="search, filterInstitute, filterCourse, filterStatus, filterDue, filterYear, copyPreviousYear, clearFilters, toggleStatus, delete, gotoPage, nextPage, previousPage">
                 <span class="spinner-border spinner-border-sm text-secondary"></span>
             </div>
 
@@ -114,6 +125,9 @@
                     $sum = $groupTotals->get($key);
                     $nextDue = $sum && $sum->next_fixed_due ? \Carbon\Carbon::parse($sum->next_fixed_due) : null;
                     $collapseId = 'fsGroup' . $g->institute_id . '_' . $g->course_id;
+                    $courseModel = optional($first)->course;
+                    $byPeriod = $lines->groupBy(fn ($f) => (int) $f->period_no);
+                    $splitPeriods = $byPeriod->count() > 1 || $byPeriod->keys()->first() !== 0;
                 @endphp
                 <section class="fs-course" wire:key="course-{{ $key }}">
                     {{-- Card header: click to open / close --}}
@@ -143,11 +157,12 @@
                         </div>
                         <div class="fs-course-stats">
                             <span class="fs-stat"><span>Fees</span><strong>{{ $sum->line_count ?? $lines->count() }}</strong></span>
+                            @if($courseModel)<span class="fs-stat" title="{{ $courseModel->period_summary }}"><span>Periods</span><strong>{{ $courseModel->total_periods }} × {{ \Illuminate\Support\Str::limit($courseModel->period_label ?: 'Semester', 10, '') }}</strong></span>@endif
                             <span class="fs-stat" title="Paid during registration; the other fees are added with the ER number">
                                 <span>Admission fee</span><strong>{{ ($sum->admission_count ?? 0) ? money_inr($sum->admission_total, false) : '—' }}</strong>
                             </span>
                             <span class="fs-stat"><span>Next fixed due</span><strong>{{ $nextDue ? $nextDue->format('d M Y') : '—' }}</strong></span>
-                            <span class="fs-stat fs-stat-total"><span>Course total</span><strong>{{ money_inr($sum->active_total ?? 0, false) }}</strong></span>
+                            <span class="fs-stat fs-stat-total"><span>{{ $selectedYear ? $selectedYear->name . ' total' : 'Course total' }}</span><strong>{{ money_inr($sum->active_total ?? 0, false) }}</strong></span>
                         </div>
                         <button type="button" class="btn btn-sm btn-outline-primary fs-group-add" wire:click="create({{ $g->course_id }}, {{ $g->institute_id }})"
                                 onclick="event.stopPropagation()" title="Add a fee to this course">
@@ -171,7 +186,19 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @foreach($lines as $fee)
+                                    @foreach($byPeriod as $periodNo => $periodLines)
+                                        @if($splitPeriods)
+                                            <tr class="fs-period-row" wire:key="period-{{ $key }}-{{ $periodNo }}">
+                                                <td colspan="2">
+                                                    <i class="ti ti-{{ $periodNo ? 'calendar-time' : 'receipt' }}"></i>
+                                                    {{ $periodNo ? ($courseModel ? $courseModel->periodName($periodNo) : 'Period ' . $periodNo) : 'One-time fees' }}
+                                                    @if($periodNo && $courseModel)<span class="fs-period-sub">Year {{ $courseModel->yearOfStudy($periodNo) }}</span>@endif
+                                                </td>
+                                                <td class="text-end"><span class="fs-period-total">{{ money_inr($periodLines->where('status', true)->sum('amount'), false) }}</span></td>
+                                                <td colspan="4" class="small text-muted">{{ $periodLines->count() }} {{ \Illuminate\Support\Str::plural('fee', $periodLines->count()) }}</td>
+                                            </tr>
+                                        @endif
+                                    @foreach($periodLines as $fee)
                                         <tr class="{{ $fee->status ? '' : 'fs-row-inactive' }}" wire:key="fee-{{ $fee->id }}">
                                             <td><span class="fs-order">{{ $fee->sort_order }}</span></td>
                                             <td>
@@ -179,10 +206,15 @@
                                                 @if($fee->admission_fee)
                                                     <span class="fs-chip fs-chip-adm ms-1" title="Paid during registration"><i class="ti ti-user-check"></i> Admission fee</span>
                                                 @endif
+                                                @if($fee->academicYear)
+                                                    <span class="fs-chip fs-chip-year ms-1" title="Only for academic year {{ $fee->academicYear->name }}">{{ $fee->academicYear->name }}</span>
+                                                @endif
                                             </td>
                                             <td class="text-end"><span class="fs-amount">{{ money_inr($fee->amount, false) }}</span></td>
                                             <td>
-                                                @if($fee->isFixedDue())
+                                                @if($fee->due_type === \App\Models\Admin\CourseFee::DUE_PERIOD_START && $fee->period_no)
+                                                    <span class="fs-chip fs-chip-period" title="Due on the start date of the student's period"><i class="ti ti-calendar-time"></i> On period start</span>
+                                                @elseif($fee->isFixedDue())
                                                     <span class="fs-chip {{ $fee->due_date->isPast() ? 'fs-chip-bad' : 'fs-chip-fixed' }}" title="Fixed due date for every student">
                                                         <i class="ti ti-calendar-event"></i> {{ $fee->due_label }}
                                                     </span>
@@ -215,6 +247,7 @@
                                                 @endif
                                             </td>
                                         </tr>
+                                    @endforeach
                                     @endforeach
                                 </tbody>
                                 @if($lines->count() > 1)
@@ -275,9 +308,30 @@
                             </select>
                             @error('courseId') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-medium small" for="feeYear">Academic year</label>
+                            <select id="feeYear" class="form-select @error('academic_year_id') is-invalid @enderror" wire:model="academic_year_id">
+                                <option value="">Every academic year</option>
+                                @foreach($academicYears as $ay)<option value="{{ $ay->id }}">{{ $ay->name }}</option>@endforeach
+                            </select>
+                            @error('academic_year_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            <small class="text-muted">One-time fees: students who joined in that year. Period fees: periods running in that year.</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-medium small" for="feePeriod">Period</label>
+                            <select id="feePeriod" class="form-select @error('period_no') is-invalid @enderror" wire:model="period_no" @disabled(!$modalCourse)>
+                                <option value="">One-time fee</option>
+                                @if($modalCourse)
+                                    @for($n = 1; $n <= $modalCourse->total_periods; $n++)<option value="{{ $n }}">{{ $modalCourse->periodName($n) }} (Year {{ $modalCourse->yearOfStudy($n) }})</option>@endfor
+                                @endif
+                            </select>
+                            @error('period_no') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            <small class="text-muted">{{ $modalCourse ? $modalCourse->period_summary : 'Select a course first' }}</small>
+                        </div>
                         @include('livewire.admin.students.partials.input', ['name' => 'fee_head', 'label' => 'Fee', 'required' => true, 'col' => 12, 'placeholder' => 'e.g. Admission fee'])
                         @include('livewire.admin.students.partials.input', ['name' => 'amount', 'label' => 'Amount (₹)', 'type' => 'number', 'step' => '0.01', 'required' => true])
                         @include('livewire.admin.students.partials.input', ['name' => 'sort_order', 'label' => 'Display order', 'type' => 'number', 'required' => true])
+                        @if(!$period_no)
                         <div class="col-12">
                             <label class="fs-adm-toggle {{ $admission_fee ? 'is-on' : '' }}">
                                 <input class="form-check-input" type="checkbox" wire:model="admission_fee">
@@ -287,16 +341,23 @@
                                 </span>
                             </label>
                         </div>
+                        @endif
                         <div class="col-12">
                             <label class="form-label fw-medium small d-block">Due date <span class="text-danger">*</span></label>
-                            <div class="fs-due-switch" role="radiogroup" aria-label="Due date type">
+                            <div class="fs-due-switch {{ $period_no ? 'fs-due-3' : '' }}" role="radiogroup" aria-label="Due date type">
+                                @if($period_no)
+                                    <input type="radio" class="btn-check" name="due_type" id="duePeriod" value="period_start" wire:model="due_type">
+                                    <label class="fs-due-option" for="duePeriod"><i class="ti ti-calendar-stats"></i><span><strong>Period start</strong><small>When the student's period begins</small></span></label>
+                                @endif
                                 <input type="radio" class="btn-check" name="due_type" id="dueJoining" value="joining" wire:model="due_type">
                                 <label class="fs-due-option" for="dueJoining"><i class="ti ti-calendar-time"></i><span><strong>After joining</strong><small>Each student's joining date + days</small></span></label>
                                 <input type="radio" class="btn-check" name="due_type" id="dueFixed" value="fixed" wire:model="due_type">
                                 <label class="fs-due-option" for="dueFixed"><i class="ti ti-calendar-event"></i><span><strong>Fixed date</strong><small>Same date for every student</small></span></label>
                             </div>
                         </div>
-                        @if($due_type === 'fixed')
+                        @if($due_type === 'period_start')
+                            <div class="col-md-6"><div class="fs-period-note"><i class="ti ti-info-circle"></i> Charged when the student enters this period; due on its start date (Institute Management → Academic Periods).</div></div>
+                        @elseif($due_type === 'fixed')
                             @include('livewire.admin.students.partials.input', ['name' => 'due_date', 'label' => 'Due on', 'type' => 'date', 'required' => true, 'help' => 'e.g. semester or lab fee due date'])
                         @else
                             @include('livewire.admin.students.partials.input', ['name' => 'due_days', 'label' => 'Days after joining', 'type' => 'number', 'required' => true, 'help' => '0 = due on the joining date'])
@@ -320,6 +381,15 @@
     <style>
         .fs-ui { --fs-border: #E5E7EB; --fs-soft: #F1F2F4; --fs-ink: #111827; --fs-muted: #6B7280; --fs-accent: #F26522; }
         .fs-ui .min-w-0 { min-width: 0; }
+        .fs-ui .fs-year-select { min-width: 170px; font-weight: 600; border-color: #FDBA8C; background-color: #FFF7F2; }
+        .fs-ui .fs-period-row td { background: #F8FAFC; font-weight: 600; font-size: 12.5px; color: #334155; padding-top: 7px; padding-bottom: 7px; }
+        .fs-ui .fs-period-row i { color: #F26522; }
+        .fs-ui .fs-period-sub { margin-left: 6px; font-weight: 500; color: #94A3B8; font-size: 11.5px; }
+        .fs-ui .fs-period-total { font-weight: 700; color: #0F172A; }
+        .fs-ui .fs-chip-year { background: #F3F4F6; color: #374151; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+        .fs-ui .fs-chip-period { background: #EDE9FE; color: #6D28D9; }
+        .fs-ui .fs-due-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+        .fs-ui .fs-period-note { font-size: 12.5px; color: #6D28D9; background: #F5F3FF; border: 1px solid #DDD6FE; border-radius: 10px; padding: 9px 12px; }
         .fs-ui .fs-hero { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 18px 22px; border-radius: 14px; border: 1px solid var(--fs-border);
             background: radial-gradient(circle at 100% 0, rgba(242, 101, 34, .12), transparent 45%), linear-gradient(135deg, #FFFFFF 0%, #FFF8F3 100%); }
         .fs-ui .fs-hero h2 { font-size: 22px; color: var(--fs-ink); }

@@ -37,29 +37,49 @@ class FeeService
     // ------------------------------------------------------------------ dues
 
     /**
-     * Add the institute's active fee-structure lines for the student's course that are not added yet.
+     * Does this fee line apply to the student right now?
+     *  - during registration (no ER number) and the course has an admission fee → only the admission fee
+     *  - one-time line (no period): its academic year is empty or the student's intake year
+     *  - period line: the student's current period (1 until promotion — Module 5), and its academic year is
+     *    empty or the academic year that period runs in
      */
+    public function appliesTo(CourseFee $fee, Student $student): bool
+    {
+        if (!$fee->status || (int) $fee->institute_id !== (int) $student->institute_id || (int) $fee->course_id !== (int) $student->course_id) {
+            return false;
+        }
+        if (!$student->er_number && CourseFee::courseHasAdmissionFee((int) $student->institute_id, (int) $student->course_id)) {
+            return (bool) $fee->admission_fee;
+        }
+
+        $periods = app(PeriodService::class);
+        if ($fee->isOneTime()) {
+            return !$fee->academic_year_id || (int) $fee->academic_year_id === (int) $periods->intakeAcademicYearId($student);
+        }
+
+        return (int) $fee->period_no === $periods->currentPeriodNo($student)
+            && (!$fee->academic_year_id || (int) $fee->academic_year_id === (int) $periods->currentAcademicYearId($student));
+    }
+
     /**
-     * Add the course's active fee lines the student does not have yet.
-     * During registration (no ER number yet) only the admission fee line(s) are added — the other
-     * lines follow when the ER number is issued. A course without a admission fee keeps the old
-     * behaviour (every line at registration).
+     * Add the course's fee lines that apply to the student now (see appliesTo) and they do not have yet.
+     *  - registration: the admission fee (or, for a course without one, the one-time + period 1 lines)
+     *  - ER number issued: one-time lines + period 1 lines
+     *  - promotion to period N (Module 5): period N lines
      */
     public function generateDues(Student $student): int
     {
-        $admissionFeeOnly = !$student->er_number
-            && CourseFee::courseHasAdmissionFee((int) $student->institute_id, (int) $student->course_id);
-
         $fees = CourseFee::active()
             ->where('institute_id', $student->institute_id)
             ->where('course_id', $student->course_id)
-            ->when($admissionFeeOnly, fn ($q) => $q->admissionFee())
             ->whereNotIn('id', $student->dues()->whereNotNull('course_fee_id')->pluck('course_fee_id'))
-            ->orderBy('sort_order')
-            ->get();
+            ->orderByRaw('period_no IS NOT NULL')->orderBy('period_no')->orderBy('sort_order')
+            ->get()
+            ->filter(fn ($fee) => $this->appliesTo($fee, $student))
+            ->values();
 
         foreach ($fees as $fee) {
-            $this->createDue($student, $fee->fee_head, (float) $fee->amount, $fee->dueDateFor($student), $fee->id);
+            $this->createDue($student, $fee->fee_head, (float) $fee->amount, $fee->dueDateFor($student), $fee->id, $fee);
         }
 
         if ($fees->isNotEmpty()) {
@@ -86,8 +106,9 @@ class FeeService
                 continue;
             }
 
-            if (!$due->courseFee || (int) $due->courseFee->course_id !== (int) $student->course_id) {
-                $this->deleteDue($due); // fee of the previous course
+            if (!$due->courseFee || (int) $due->courseFee->course_id !== (int) $student->course_id
+                || (!$student->er_number && !$this->appliesTo($due->courseFee, $student))) {
+                $this->deleteDue($due); // fee of the previous course / of another academic year
                 continue;
             }
 
@@ -114,21 +135,19 @@ class FeeService
             return 0;
         }
 
-        // Admission fee → students still registering (no ER number). Other fees → admitted students
-        // (ER issued); students still registering get them with their ER number — unless the course has
-        // no admission fee, where every fee is charged at registration.
-        $admissionFeeMode = CourseFee::courseHasAdmissionFee((int) $fee->institute_id, (int) $fee->course_id);
-
+        // Charged to the current students it applies to right now (admission fee → still registering;
+        // one-time / period lines → by intake year / current period — see appliesTo)
         $students = Student::where('institute_id', $fee->institute_id)
             ->where('course_id', $fee->course_id)
             ->whereNotIn('status', self::CURRENT_STUDENT_EXCLUDED)
             ->when($fee->admission_fee, fn ($q) => $q->whereNull('er_number'))
-            ->when(!$fee->admission_fee && $admissionFeeMode, fn ($q) => $q->whereNotNull('er_number'))
             ->whereDoesntHave('dues', fn ($q) => $q->where('course_fee_id', $fee->id))
-            ->get();
+            ->get()
+            ->filter(fn ($student) => $this->appliesTo($fee, $student))
+            ->values();
 
         foreach ($students as $student) {
-            DB::transaction(fn () => $this->createDue($student, $fee->fee_head, (float) $fee->amount, $fee->dueDateFor($student), $fee->id));
+            DB::transaction(fn () => $this->createDue($student, $fee->fee_head, (float) $fee->amount, $fee->dueDateFor($student), $fee->id, $fee));
             $this->inApp->notify('fees_added', $student, ['count' => "{$fee->fee_head} was", 'amount' => money_inr($fee->amount)]);
         }
 
@@ -147,12 +166,15 @@ class FeeService
         return $due;
     }
 
-    protected function createDue(Student $student, string $feeHead, float $amount, Carbon $dueDate, ?int $courseFeeId = null): StudentDue
+    protected function createDue(Student $student, string $feeHead, float $amount, Carbon $dueDate, ?int $courseFeeId = null, ?CourseFee $line = null): StudentDue
     {
         $due = StudentDue::create([
             'institute_id' => $student->institute_id,
             'student_id' => $student->id,
             'course_fee_id' => $courseFeeId,
+            // period dues remember their period / academic year (grouping, exam dues gate)
+            'period_no' => optional($line)->period_no,
+            'academic_year_id' => $line && $line->period_no ? app(PeriodService::class)->currentAcademicYearId($student) : optional($line)->academic_year_id,
             'fee_head' => $feeHead,
             'amount_due' => $amount,
             'amount_paid' => 0,

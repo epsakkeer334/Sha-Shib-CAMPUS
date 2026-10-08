@@ -28,6 +28,7 @@ class StudentsComponent extends Component
     public $search = '';
     public $institute = '';
     public $course = '';
+    public $period = ''; // current academic period no. (with a course)
     public $status = '';
     public $docsGate = '';
     public $feesGate = '';
@@ -43,6 +44,7 @@ class StudentsComponent extends Component
         'search' => ['except' => ''],
         'institute' => ['except' => ''],
         'course' => ['except' => ''],
+        'period' => ['except' => ''],
         'status' => ['except' => ''],
         'docsGate' => ['except' => '', 'as' => 'docs'],
         'feesGate' => ['except' => '', 'as' => 'fees'],
@@ -70,7 +72,7 @@ class StudentsComponent extends Component
 
     public function updating($property)
     {
-        if (in_array($property, ['search', 'institute', 'course', 'status', 'docsGate', 'feesGate', 'payment', 'overdue', 'perPage'], true)) {
+        if (in_array($property, ['search', 'institute', 'course', 'period', 'status', 'docsGate', 'feesGate', 'payment', 'overdue', 'perPage'], true)) {
             $this->resetPage();
         }
     }
@@ -78,6 +80,12 @@ class StudentsComponent extends Component
     public function updatedInstitute()
     {
         $this->course = '';
+        $this->period = '';
+    }
+
+    public function updatedCourse()
+    {
+        $this->period = '';
     }
 
     public function sortBy($field)
@@ -98,8 +106,11 @@ class StudentsComponent extends Component
 
             return;
         }
-        if (in_array($filter, ['search', 'institute', 'course', 'status', 'docsGate', 'feesGate', 'payment'], true)) {
+        if (in_array($filter, ['search', 'institute', 'course', 'period', 'status', 'docsGate', 'feesGate', 'payment'], true)) {
             $this->{$filter} = '';
+            if (in_array($filter, ['institute', 'course'], true)) {
+                $this->period = '';
+            }
             if ($filter === 'institute') {
                 $this->course = '';
             }
@@ -109,7 +120,7 @@ class StudentsComponent extends Component
 
     public function clearAll()
     {
-        $this->reset(['search', 'institute', 'course', 'status', 'docsGate', 'feesGate', 'payment', 'overdue']);
+        $this->reset(['search', 'institute', 'course', 'period', 'status', 'docsGate', 'feesGate', 'payment', 'overdue']);
         $this->resetPage();
     }
 
@@ -150,6 +161,9 @@ class StudentsComponent extends Component
         }
         if ($this->course) {
             $query->where('course_id', $this->course);
+            if ((int) $this->period > 0) {
+                $query->whereHas('currentPeriod', fn ($q) => $q->where('period_no', (int) $this->period));
+            }
         }
         if ($this->status && isset(config('camp.student_statuses')[$this->status])) {
             $query->where('status', $this->status);
@@ -248,7 +262,7 @@ class StudentsComponent extends Component
         $isSuperAdmin = $user->isSuperAdmin();
 
         $students = $this->query()
-            ->with(['course', 'institute', 'batch', 'approvals', 'dues', 'payments', 'erRequest'])
+            ->with(['course', 'institute', 'batch', 'approvals', 'dues', 'payments', 'erRequest', 'currentPeriod.coursePeriod.academicYear'])
             ->orderBy(in_array($this->sortField, self::SORTABLE, true) ? $this->sortField : 'id', $this->sortDirection === 'asc' ? 'asc' : 'desc')
             ->paginate(in_array((int) $this->perPage, [10, 15, 25, 50], true) ? (int) $this->perPage : 15);
 
@@ -272,6 +286,7 @@ class StudentsComponent extends Component
             'search' => $this->search !== '' ? 'Search: “' . $this->search . '”' : null,
             'institute' => $isSuperAdmin && $this->institute ? optional(Institute::find($this->institute))->name : null,
             'course' => $this->course ? optional(Course::find($this->course))->code : null,
+            'period' => $this->course && (int) $this->period > 0 ? optional(Course::find($this->course))->periodName((int) $this->period) : null,
             'status' => $this->status ? 'Status: ' . config("camp.student_statuses.{$this->status}.0") : null,
             'docsGate' => $this->docsGate ? 'Docs: ' . (self::GATE_FILTERS[$this->docsGate] ?? '') : null,
             'feesGate' => $this->feesGate ? 'Fees gate: ' . (self::GATE_FILTERS[$this->feesGate] ?? '') : null,
@@ -285,7 +300,8 @@ class StudentsComponent extends Component
             'activeFilters' => $filters,
             'isSuperAdmin' => $isSuperAdmin,
             'institutes' => $isSuperAdmin ? Institute::orderBy('name')->pluck('name', 'id') : collect(),
-            'courses' => Course::whereIn('id', $courseIds)->orderBy('code')->get(['id', 'code', 'name']),
+            'courses' => Course::whereIn('id', $courseIds)->orderBy('code')->get(),
+            'selectedCourse' => $this->course ? Course::find($this->course) : null,
             'statuses' => collect(config('camp.student_statuses'))->map(fn ($s) => $s[0]),
             'canDelete' => $user->can('students.delete'),
             'canFees' => $user->can('fees.manage') || $user->can('payments.collect') || $user->can('payments.verify'),

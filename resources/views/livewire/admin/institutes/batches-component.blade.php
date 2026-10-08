@@ -102,6 +102,7 @@
                                 @else
                                     <span class="text-muted">Not set</span>
                                 @endif
+                                @if($batch->academicYear)<div class="bt-sub"><i class="ti ti-calendar-stats"></i> Intake {{ $batch->academicYear->name }}</div>@endif
                             </td>
                             <td style="min-width: 130px;">
                                 @if($batch->capacity)
@@ -190,7 +191,7 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-medium small" for="btStart">Start date</label>
-                            <input id="btStart" type="date" class="form-control @error('start_date') is-invalid @enderror" wire:model.defer="start_date">
+                            <input id="btStart" type="date" class="form-control @error('start_date') is-invalid @enderror" wire:model.lazy="start_date">
                             @error('start_date') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
                         <div class="col-md-6">
@@ -200,11 +201,20 @@
                             <small class="text-muted">After this date the batch is no longer offered at registration.</small>
                         </div>
                         <div class="col-md-6">
+                            <label class="form-label fw-medium small" for="btYear">Intake academic year</label>
+                            <select id="btYear" class="form-select @error('academicYearId') is-invalid @enderror" wire:model.defer="academicYearId">
+                                <option value="">From the start date</option>
+                                @foreach($academicYears as $ay)<option value="{{ $ay->id }}">{{ $ay->name }}</option>@endforeach
+                            </select>
+                            @error('academicYearId') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            <small class="text-muted">Used for the batch's academic periods and fees.</small>
+                        </div>
+                        <div class="col-md-6">
                             <label class="form-label fw-medium small" for="btCapacity">Capacity (seats)</label>
                             <input id="btCapacity" type="number" min="1" class="form-control @error('capacity') is-invalid @enderror" wire:model.defer="capacity" placeholder="No limit">
                             @error('capacity') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
-                        <div class="col-md-6 d-flex align-items-end">
+                        <div class="col-12">
                             <div class="form-check form-switch">
                                 <input class="form-check-input" type="checkbox" id="btStatus" wire:model="status" value="1">
                                 <label class="form-check-label" for="btStatus">{{ $status ? 'Open for admission' : 'Closed' }}</label>
@@ -218,7 +228,7 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-light me-2" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-primary" wire:click="save" wire:loading.attr="disabled"><i class="ti ti-check me-1"></i> Save</button>
                 </div>
             </div>

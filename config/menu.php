@@ -33,6 +33,7 @@ return [
                         'label' => 'Academic',
                         'icon' => 'ti ti-school',
                         'children' => [
+                            ['label' => 'Academic Years', 'icon' => 'ti ti-calendar-stats', 'route' => 'admin.masters.academic-years', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
                             ['label' => 'Courses', 'icon' => 'ti ti-books', 'route' => 'admin.masters.courses', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
                             ['label' => 'Qualifications', 'icon' => 'ti ti-certificate-2', 'route' => 'admin.masters.qualifications', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
                             ['label' => 'Matriculation Boards', 'icon' => 'ti ti-building-bank', 'route' => 'admin.masters.matriculation-boards', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
@@ -78,6 +79,7 @@ return [
                     ['label' => 'Institutes', 'icon' => 'ti ti-building-community', 'route' => 'admin.institutes', 'permission' => 'institutes.manage', 'roles' => ['super-admin'], 'active' => ['admin.institutes', 'admin.institute-users*']],
                     ['label' => 'Institute Courses', 'icon' => 'ti ti-books', 'route' => 'admin.institute-courses', 'permission' => 'institute_courses.view', 'active' => ['admin.institute-courses*']],
                     ['label' => 'Batches', 'icon' => 'ti ti-users-group', 'route' => 'admin.batches', 'permission' => 'batches.manage'],
+                    ['label' => 'Academic Periods', 'icon' => 'ti ti-calendar-time', 'route' => 'admin.academic-periods', 'permission' => 'periods.manage'],
                     ['label' => 'Fee Structure', 'icon' => 'ti ti-receipt-2', 'route' => 'admin.onboarding.fee-structure', 'permission' => 'fees.manage'],
                     ['label' => 'Payment Settings', 'icon' => 'ti ti-qrcode', 'route' => 'admin.institute-payment-settings', 'permission' => 'fees.manage'],
                 ],

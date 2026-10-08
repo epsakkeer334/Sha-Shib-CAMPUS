@@ -50,6 +50,7 @@
                     @if($student->institute)<span><i class="ti ti-building"></i> {{ $student->institute->name }} @if($student->institute->code)<span class="er-inst-code ms-1">{{ $student->institute->code }}</span>@endif</span>@endif
                     <span><i class="ti ti-phone"></i> {{ $student->phone ?: '—' }}</span>
                     <span><i class="ti ti-calendar"></i> Joined {{ $student->formatted_joining_date }}</span>
+                    @if($student->current_period_label)<span><i class="ti ti-calendar-time"></i> {{ $student->current_period_label }}</span>@endif
                 </div>
             </div>
         </div>

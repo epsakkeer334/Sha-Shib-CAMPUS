@@ -49,6 +49,7 @@ return [
             'institute_courses.view' => 'View courses offered by the institute',
             'institute_courses.manage' => 'Assign / activate / remove institute courses',
             'batches.manage' => 'Manage batches of institute courses (code, dates, capacity)',
+            'periods.manage' => 'Manage academic periods (semesters / terms) of institute courses',
         ],
         'Students' => [
             'students.view' => 'View students',
@@ -90,7 +91,7 @@ return [
 
     // Default permissions per role (super-admin gets everything through Gate::before).
     'default_role_permissions' => [
-        'institute-admin' => ['users.view', 'users.create', 'users.update', 'users.delete', 'audit.view', 'notifications.view', 'institute_courses.view', 'institute_courses.manage', 'batches.manage', 'students.view', 'students.create', 'students.update', 'students.delete', 'onboarding.verify_documents', 'enrollment.manage', 'fees.manage', 'payments.collect'],
+        'institute-admin' => ['users.view', 'users.create', 'users.update', 'users.delete', 'audit.view', 'notifications.view', 'institute_courses.view', 'institute_courses.manage', 'batches.manage', 'periods.manage', 'students.view', 'students.create', 'students.update', 'students.delete', 'onboarding.verify_documents', 'enrollment.manage', 'fees.manage', 'payments.collect'],
         'accounts' => ['students.view', 'fees.manage', 'payments.collect', 'payments.verify'],
         'training-manager' => ['students.view', 'enrollment.manage'],
         'bic' => [],
@@ -171,6 +172,11 @@ return [
     'pass_percentage' => 75,
     'attendance_threshold' => 75,
     'onboarding_days' => 30,
+
+    // Module 2B — academic year runs from the 1st of this month (6 = June → "2026-27" = 1 Jun 2026 – 31 May 2027)
+    'academic_year_start_month' => 6,
+    // How a course names its academic periods (Master Data → Courses)
+    'period_labels' => ['Semester' => 'Semester', 'Term' => 'Term', 'Trimester' => 'Trimester', 'Module' => 'Module', 'Year' => 'Year'],
     'deadline_warning_days' => 7, // students list: deadline shown in dark yellow this many days before it
     'mou_alert_days' => 60,
     'seven_day_rule_days' => 7,

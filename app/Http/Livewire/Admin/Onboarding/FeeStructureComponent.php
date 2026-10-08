@@ -2,6 +2,7 @@
 
 namespace App\Http\Livewire\Admin\Onboarding;
 
+use App\Models\Admin\AcademicYear;
 use App\Models\Admin\Course;
 use App\Models\Admin\CourseFee;
 use App\Models\Admin\Institute;
@@ -19,6 +20,9 @@ use Livewire\WithPagination;
  * Semester 1 fee due 14 days after joining). Student dues are generated from it.
  * Every fee line is listed in one table, grouped by institute course, with a filter bar and summary
  * cards; courses offered without any fee yet are listed so they can be set up.
+ * Module 2B: a line can belong to an academic year (blank = every year) and to an academic period
+ * (blank = one-time fee); period fees are due on the period start date and are charged when the
+ * student is in that period.
  * Super Admin: any institute; others: own institute.
  */
 class FeeStructureComponent extends Component
@@ -35,10 +39,12 @@ class FeeStructureComponent extends Component
     public $filterCourse = '';
     public $filterStatus = '';
     public $filterDue = '';
+    public $filterYear = ''; // academic year: its own lines + lines for every year
 
     protected $queryString = [
         'search' => ['except' => ''], 'filterInstitute' => ['except' => '', 'as' => 'institute'], 'filterCourse' => ['except' => '', 'as' => 'course'],
         'filterStatus' => ['except' => '', 'as' => 'status'], 'filterDue' => ['except' => '', 'as' => 'due'],
+        'filterYear' => ['except' => '', 'as' => 'year'],
     ];
 
     // form (modal): target institute course + fee line
@@ -48,6 +54,8 @@ class FeeStructureComponent extends Component
     public $due_type = CourseFee::DUE_JOINING; // joining (N days after joining) | fixed (calendar date)
     public $due_date = null;
     public $admission_fee = false; // paid during registration; other fees follow with the ER number
+    public $academic_year_id = null; // null = every academic year
+    public $period_no = null;        // null = one-time fee
 
     public function mount()
     {
@@ -66,7 +74,7 @@ class FeeStructureComponent extends Component
 
     public function updated($property)
     {
-        if (in_array($property, ['search', 'filterInstitute', 'filterCourse', 'filterStatus', 'filterDue'], true)) {
+        if (in_array($property, ['search', 'filterInstitute', 'filterCourse', 'filterStatus', 'filterDue', 'filterYear'], true)) {
             $this->resetPage();
         }
         if ($property === 'filterInstitute') {
@@ -85,11 +93,26 @@ class FeeStructureComponent extends Component
         if (!$this->editingId) {
             $this->sort_order = $this->nextSortOrder();
         }
+        $this->period_no = null;
+    }
+
+    /** A period fee is due when the period starts and is never the admission fee. */
+    public function updatedPeriodNo()
+    {
+        $this->period_no = $this->period_no === '' ? null : $this->period_no;
+        if ($this->period_no) {
+            $this->admission_fee = false;
+            if (!$this->editingId) {
+                $this->due_type = CourseFee::DUE_PERIOD_START;
+            }
+        } elseif ($this->due_type === CourseFee::DUE_PERIOD_START) {
+            $this->due_type = CourseFee::DUE_JOINING;
+        }
     }
 
     public function clearFilters()
     {
-        $this->reset(['search', 'filterInstitute', 'filterCourse', 'filterStatus', 'filterDue']);
+        $this->reset(['search', 'filterInstitute', 'filterCourse', 'filterStatus', 'filterDue', 'filterYear']);
         $this->resetPage();
     }
 
@@ -102,10 +125,18 @@ class FeeStructureComponent extends Component
                     $fail('This course is not offered by the selected institute.');
                 }
             }],
+            // one line per fee name within the same course, academic year and period
             'fee_head' => ['required', 'string', 'max:150', Rule::unique('course_fees', 'fee_head')
-                ->where('institute_id', $this->instituteId)->where('course_id', $this->courseId)->whereNull('deleted_at')->ignore($this->editingId)],
+                ->where('institute_id', $this->instituteId)->where('course_id', $this->courseId)->whereNull('deleted_at')
+                ->where(fn ($q) => $this->academic_year_id ? $q->where('academic_year_id', $this->academic_year_id) : $q->whereNull('academic_year_id'))
+                ->where(fn ($q) => $this->period_no ? $q->where('period_no', $this->period_no) : $q->whereNull('period_no'))
+                ->ignore($this->editingId)],
+            'academic_year_id' => ['nullable', Rule::exists('academic_years', 'id')->whereNull('deleted_at')],
+            'period_no' => ['nullable', 'integer', 'min:1', 'max:' . max(1, (int) optional(Course::find($this->courseId))->total_periods)],
             'amount' => 'required|numeric|min:1|max:9999999',
-            'due_type' => ['required', Rule::in([CourseFee::DUE_JOINING, CourseFee::DUE_FIXED])],
+            'due_type' => ['required', Rule::in($this->period_no
+                ? [CourseFee::DUE_PERIOD_START, CourseFee::DUE_JOINING, CourseFee::DUE_FIXED]
+                : [CourseFee::DUE_JOINING, CourseFee::DUE_FIXED])],
             'due_days' => [$this->due_type === CourseFee::DUE_JOINING ? 'required' : 'nullable', 'integer', 'min:0', 'max:3650'],
             'due_date' => [$this->due_type === CourseFee::DUE_FIXED ? 'required' : 'nullable', 'date', 'after_or_equal:2000-01-01', 'before:2100-01-01'],
             'sort_order' => 'required|integer|min:0|max:999',
@@ -114,7 +145,10 @@ class FeeStructureComponent extends Component
         ];
     }
 
-    protected $validationAttributes = ['instituteId' => 'institute', 'courseId' => 'course', 'fee_head' => 'fee', 'due_date' => 'due date', 'due_days' => 'days after joining'];
+    protected $validationAttributes = ['instituteId' => 'institute', 'courseId' => 'course', 'fee_head' => 'fee', 'due_date' => 'due date', 'due_days' => 'days after joining',
+        'academic_year_id' => 'academic year', 'period_no' => 'period'];
+
+    protected $messages = ['fee_head.unique' => 'This fee already exists for this course, academic year and period.'];
 
     /**
      * Open the add modal, optionally for a given course (and institute, for Super Admin).
@@ -140,20 +174,24 @@ class FeeStructureComponent extends Component
             'editingId' => $fee->id, 'instituteId' => $fee->institute_id, 'courseId' => $fee->course_id, 'fee_head' => $fee->fee_head,
             'amount' => $fee->amount, 'due_days' => $fee->due_days, 'sort_order' => $fee->sort_order, 'status' => $fee->status ? 1 : 0,
             'due_type' => $fee->due_type ?: CourseFee::DUE_JOINING, 'due_date' => optional($fee->due_date)->toDateString(),
-            'admission_fee' => (bool) $fee->admission_fee,
+            'admission_fee' => (bool) $fee->admission_fee, 'academic_year_id' => $fee->academic_year_id, 'period_no' => $fee->period_no,
         ]);
         $this->dispatchBrowserEvent('open-fee-structure-modal');
     }
 
     public function save()
     {
+        $this->period_no = $this->period_no ?: null;
+        $this->academic_year_id = $this->academic_year_id ?: null;
         $data = $this->validate();
         $fixed = $data['due_type'] === CourseFee::DUE_FIXED;
+        $periodStart = $data['due_type'] === CourseFee::DUE_PERIOD_START;
         $line = [
             'fee_head' => $data['fee_head'], 'amount' => $data['amount'], 'due_type' => $data['due_type'],
-            'due_date' => $fixed ? $data['due_date'] : null, 'due_days' => $fixed ? 0 : (int) $data['due_days'],
+            'due_date' => $fixed ? $data['due_date'] : null, 'due_days' => ($fixed || $periodStart) ? 0 : (int) $data['due_days'],
             'sort_order' => $data['sort_order'], 'status' => (bool) $data['status'],
-            'admission_fee' => (bool) $data['admission_fee'],
+            'admission_fee' => $data['period_no'] ? false : (bool) $data['admission_fee'],
+            'academic_year_id' => $data['academic_year_id'] ?: null, 'period_no' => $data['period_no'] ? (int) $data['period_no'] : null,
         ];
 
         $wasActive = false;
@@ -205,10 +243,63 @@ class FeeStructureComponent extends Component
         $this->dispatchBrowserEvent('show-toast', ['type' => 'danger', 'message' => 'Fee removed from the structure.']);
     }
 
+    /**
+     * Copy the fee lines of the previous academic year into the selected year (respecting the
+     * institute / course filters). Lines that already exist in the selected year are skipped;
+     * fixed due dates move on by one year.
+     */
+    public function copyPreviousYear()
+    {
+        $target = $this->filterYear ? AcademicYear::find($this->filterYear) : null;
+        $source = $target ? $this->previousYearOf($target) : null;
+        if (!$target || !$source) {
+            return;
+        }
+
+        $copied = 0;
+        $this->scopedFees()->where('academic_year_id', $source->id)->orderBy('sort_order')->get()
+            ->each(function (CourseFee $fee) use ($target, &$copied) {
+                $exists = CourseFee::where('institute_id', $fee->institute_id)->where('course_id', $fee->course_id)
+                    ->where('academic_year_id', $target->id)->where('fee_head', $fee->fee_head)
+                    ->when($fee->period_no, fn ($q) => $q->where('period_no', $fee->period_no), fn ($q) => $q->whereNull('period_no'))
+                    ->exists();
+                if ($exists) {
+                    return;
+                }
+                $copy = $fee->replicate(['created_by', 'updated_by']);
+                $copy->academic_year_id = $target->id;
+                if ($copy->due_date) {
+                    $copy->due_date = $copy->due_date->copy()->addYear();
+                }
+                $copy->save();
+                $this->auditCreate($copy, 'course_fees', "Copied fee {$copy->fee_head} from {$fee->academicYear->name} to {$target->name}");
+                app(FeeService::class)->applyFeeToStudents($copy);
+                $copied++;
+            });
+
+        $this->dispatchBrowserEvent('show-toast', ['type' => $copied ? 'success' : 'info', 'message' => $copied
+            ? "{$copied} " . Str::plural('fee', $copied) . " copied from {$source->name} to {$target->name}."
+            : "Nothing to copy: {$target->name} already has the fees of {$source->name}."]);
+    }
+
+    protected function previousYearOf(AcademicYear $year): ?AcademicYear
+    {
+        return AcademicYear::whereDate('end_date', '<', $year->start_date)->orderByDesc('end_date')->first();
+    }
+
+    /** Fee lines within the institute / course filters (no other filters). */
+    protected function scopedFees()
+    {
+        return CourseFee::query()
+            ->when(Auth::user()->isSuperAdmin() && $this->filterInstitute, fn ($q) => $q->where('institute_id', $this->filterInstitute))
+            ->when($this->filterCourse, fn ($q) => $q->where('course_id', $this->filterCourse));
+    }
+
     protected function resetForm()
     {
         $this->resetValidation();
-        $this->reset(['editingId', 'fee_head', 'amount', 'due_date', 'admission_fee']);
+        $this->reset(['editingId', 'fee_head', 'amount', 'due_date', 'admission_fee', 'period_no']);
+        $this->academic_year_id = $this->filterYear ? (int) $this->filterYear : null;
         $this->due_type = CourseFee::DUE_JOINING;
         if (Auth::user()->isSuperAdmin() && !$this->instituteId && $this->filterInstitute) {
             $this->instituteId = (int) $this->filterInstitute;
@@ -237,7 +328,9 @@ class FeeStructureComponent extends Component
             ->when($this->filterStatus !== '', fn ($q) => $q->where('course_fees.status', $this->filterStatus === 'active'))
             ->when($this->filterDue === 'joining', fn ($q) => $q->where('course_fees.due_type', CourseFee::DUE_JOINING)->where('course_fees.due_days', 0))
             ->when($this->filterDue === 'later', fn ($q) => $q->where('course_fees.due_type', CourseFee::DUE_JOINING)->where('course_fees.due_days', '>', 0))
-            ->when($this->filterDue === 'fixed', fn ($q) => $q->where('course_fees.due_type', CourseFee::DUE_FIXED));
+            ->when($this->filterDue === 'fixed', fn ($q) => $q->where('course_fees.due_type', CourseFee::DUE_FIXED))
+            ->when($this->filterDue === 'period', fn ($q) => $q->where('course_fees.due_type', CourseFee::DUE_PERIOD_START))
+            ->when($this->filterYear, fn ($q) => $q->where(fn ($w) => $w->where('course_fees.academic_year_id', $this->filterYear)->orWhereNull('course_fees.academic_year_id')));
 
         if ($term = trim($this->search)) {
             $query->where(fn ($q) => $q->where('course_fees.fee_head', 'like', "%{$term}%")
@@ -264,14 +357,14 @@ class FeeStructureComponent extends Component
         // The (filtered) fee lines of the courses on this page
         $pageKeys = $groups->getCollection();
         $feesByGroup = $pageKeys->isEmpty() ? collect() : $this->feeQuery()
-            ->with(['course', 'institute'])
+            ->with(['course', 'institute', 'academicYear'])
             ->withCount('dues')
             ->where(function ($q) use ($pageKeys) {
                 foreach ($pageKeys as $key) {
                     $q->orWhere(fn ($w) => $w->where('course_fees.institute_id', $key->institute_id)->where('course_fees.course_id', $key->course_id));
                 }
             })
-            ->orderBy('course_fees.sort_order')->orderBy('course_fees.id')
+            ->orderByRaw('course_fees.period_no IS NOT NULL, course_fees.period_no')->orderBy('course_fees.sort_order')->orderBy('course_fees.id')
             ->get()
             ->groupBy(fn ($fee) => "{$fee->institute_id}-{$fee->course_id}");
 
@@ -282,7 +375,9 @@ class FeeStructureComponent extends Component
                 SUM(CASE WHEN status = 1 AND admission_fee = 1 THEN amount ELSE 0 END) as admission_total,
                 SUM(CASE WHEN status = 1 AND admission_fee = 1 THEN 1 ELSE 0 END) as admission_count,
                 SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) as inactive_count,
+                COUNT(DISTINCT period_no) as period_count,
                 MIN(CASE WHEN status = 1 AND due_type = 'fixed' AND due_date >= CURDATE() THEN due_date END) as next_fixed_due")
+            ->when($this->filterYear, fn ($q) => $q->where(fn ($w) => $w->where('academic_year_id', $this->filterYear)->orWhereNull('academic_year_id')))
             ->groupBy('institute_id', 'course_id')->get()
             ->keyBy(fn ($r) => "{$r->institute_id}-{$r->course_id}");
 
@@ -293,7 +388,8 @@ class FeeStructureComponent extends Component
             ->get()->filter(fn ($ic) => $ic->course);
         $missing = $offered->reject(fn ($ic) => $groupTotals->has("{$ic->institute_id}-{$ic->course_id}"))->values();
 
-        $base = fn () => CourseFee::when($isSuperAdmin && $this->filterInstitute, fn ($q) => $q->where('institute_id', $this->filterInstitute));
+        $base = fn () => CourseFee::when($isSuperAdmin && $this->filterInstitute, fn ($q) => $q->where('institute_id', $this->filterInstitute))
+            ->when($this->filterYear, fn ($q) => $q->where(fn ($w) => $w->where('academic_year_id', $this->filterYear)->orWhereNull('academic_year_id')));
         $configured = $offered->count() - $missing->count();
         $activeTotals = $groupTotals->filter(fn ($r, $key) => $offered->contains(fn ($ic) => "{$ic->institute_id}-{$ic->course_id}" === $key))->pluck('active_total');
 
@@ -303,7 +399,15 @@ class FeeStructureComponent extends Component
             ? InstituteCourse::with('course')->where('institute_id', $this->instituteId)->get()->pluck('course')->filter()->sortBy('code')
             : collect();
 
+        $selectedYear = $this->filterYear ? AcademicYear::find($this->filterYear) : null;
+        $previousYear = $selectedYear ? $this->previousYearOf($selectedYear) : null;
+
         return view('livewire.admin.onboarding.fee-structure-component', [
+            'academicYears' => AcademicYear::orderByDesc('start_date')->get(['id', 'name', 'start_date', 'end_date', 'status']),
+            'selectedYear' => $selectedYear,
+            'previousYear' => $previousYear,
+            'canCopyPrevious' => $previousYear && $this->scopedFees()->where('academic_year_id', $previousYear->id)->exists(),
+            'modalCourse' => $this->courseId ? Course::find($this->courseId) : null,
             'groups' => $groups,
             'feesByGroup' => $feesByGroup,
             'lineCount' => $this->feeQuery()->count(),
@@ -325,7 +429,7 @@ class FeeStructureComponent extends Component
             'filterCourses' => Course::whereIn('id', $filterCourseIds)->orderBy('code')->get(['id', 'code', 'name']),
             'modalCourses' => $modalCourses,
             'isSuperAdmin' => $isSuperAdmin,
-            'hasFilters' => $this->search || $this->filterInstitute || $this->filterCourse || $this->filterStatus !== '' || $this->filterDue,
+            'hasFilters' => $this->search || $this->filterInstitute || $this->filterCourse || $this->filterStatus !== '' || $this->filterDue || $this->filterYear,
         ])->layout('layouts.admin.master');
     }
 }

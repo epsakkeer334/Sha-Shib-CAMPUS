@@ -51,6 +51,7 @@
                         @if($student->course)<span><span class="so-code">{{ $student->course->code }}</span> {{ $student->course->name }}</span>@endif
                         <span><i class="ti ti-building"></i> {{ optional($student->institute)->name }}</span>
                         <span><i class="ti ti-calendar"></i> Joining {{ $student->formatted_joining_date }}</span>
+                        @if($student->current_period_label)<span class="so-period"><i class="ti ti-calendar-time"></i> {{ $student->current_period_label }}</span>@endif
                         @if(!$student->er_number)
                             <span class="so-deadline so-deadline-{{ $deadlineTone }}"><i class="ti ti-clock"></i> Deadline {{ $student->formatted_onboarding_deadline }}
                                 @if(!is_null($days)) · {{ $days < 0 ? abs($days) . ' days overdue' : ($days === 0 ? 'today' : $days . ' days left') }} @endif
@@ -549,6 +550,7 @@
     </div>
 
     <style>
+        .so-ui .so-period { display: inline-flex; align-items: center; gap: 4px; padding: 1px 9px; border-radius: 999px; background: #EDE9FE; color: #6D28D9; font-weight: 600; }
         .so-ui { --so-border: #E5E7EB; --so-soft: #F1F2F4; --so-ink: #111827; --so-muted: #6B7280; --so-accent: #F26522; }
         .so-ui .min-w-0 { min-width: 0; }
         /* hero */

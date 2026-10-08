@@ -15,6 +15,7 @@ class AdminSeeder extends Seeder
             CountrySeeder::class,
             StateSeeder::class,
             MasterDataSeeder::class,
+            \Database\Seeders\admin\AcademicYearSeeder::class,
         ]);
     }
 }

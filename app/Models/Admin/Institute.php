@@ -189,6 +189,11 @@ class Institute extends BaseModel
         return $this->hasMany(Batch::class);
     }
 
+    public function coursePeriods()
+    {
+        return $this->hasMany(CoursePeriod::class);
+    }
+
     public function instituteCourses()
     {
         return $this->hasMany(InstituteCourse::class);

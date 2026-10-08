@@ -2,6 +2,7 @@
 
 namespace App\Http\Livewire\Admin\Institutes;
 
+use App\Models\Admin\AcademicYear;
 use App\Models\Admin\Batch;
 use App\Models\Admin\Course;
 use App\Models\Admin\Institute;
@@ -40,6 +41,7 @@ class BatchesComponent extends Component
     public $editingId = null;
     public $instituteId = null, $courseId = null;
     public $name, $code, $start_date, $end_date, $capacity, $remarks;
+    public $academicYearId = null; // intake academic year (Module 2B)
     public $status = 1;
 
     public $confirmingDeleteId = null;
@@ -79,6 +81,13 @@ class BatchesComponent extends Component
             $this->code = Batch::normalizeCode($this->code);
             $this->validateOnly('code'); // duplicate / format check while typing
         }
+        if ($property === 'start_date' && $this->start_date) {
+            // intake year follows the start date
+            try {
+                $this->academicYearId = optional(AcademicYear::forDate($this->start_date))->id ?? $this->academicYearId;
+            } catch (\Throwable $e) {
+            }
+        }
     }
 
     public function clearFilters()
@@ -101,6 +110,7 @@ class BatchesComponent extends Component
             'code' => ['required', 'regex:' . Batch::CODE_PATTERN, Rule::unique('batches', 'code')->ignore($this->editingId)],
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            'academicYearId' => ['nullable', Rule::exists('academic_years', 'id')->whereNull('deleted_at')],
             'capacity' => ['nullable', 'integer', 'min:1', 'max:100000'],
             'remarks' => ['nullable', 'string', 'max:1000'],
             'status' => 'boolean',
@@ -112,7 +122,7 @@ class BatchesComponent extends Component
         'code.regex' => 'Use 2–30 capital letters, digits or - / _ . (e.g. SHA-B11-2026).',
     ];
 
-    protected $validationAttributes = ['instituteId' => 'institute', 'courseId' => 'course', 'name' => 'batch name', 'code' => 'batch code'];
+    protected $validationAttributes = ['instituteId' => 'institute', 'courseId' => 'course', 'academicYearId' => 'intake academic year', 'name' => 'batch name', 'code' => 'batch code'];
 
     public function create($courseId = null, $instituteId = null)
     {
@@ -134,7 +144,7 @@ class BatchesComponent extends Component
             'editingId' => $batch->id, 'instituteId' => $batch->institute_id, 'courseId' => $batch->course_id,
             'name' => $batch->name, 'code' => $batch->code, 'start_date' => optional($batch->start_date)->toDateString(),
             'end_date' => optional($batch->end_date)->toDateString(), 'capacity' => $batch->capacity,
-            'remarks' => $batch->remarks, 'status' => $batch->status ? 1 : 0,
+            'remarks' => $batch->remarks, 'status' => $batch->status ? 1 : 0, 'academicYearId' => $batch->academic_year_id,
         ]);
         $this->dispatchBrowserEvent('open-batch-modal');
     }
@@ -157,6 +167,7 @@ class BatchesComponent extends Component
         $values = [
             'institute_id' => $this->instituteId, 'course_id' => $this->courseId, 'name' => trim($data['name']), 'code' => $data['code'],
             'start_date' => $data['start_date'] ?: null, 'end_date' => $data['end_date'] ?: null,
+            'academic_year_id' => $data['academicYearId'] ?: ($data['start_date'] ? optional(AcademicYear::forDate($data['start_date']))->id : null),
             'capacity' => $data['capacity'] !== null && $data['capacity'] !== '' ? (int) $data['capacity'] : null,
             'remarks' => $data['remarks'] ?: null, 'status' => (bool) $data['status'],
         ];
@@ -218,6 +229,7 @@ class BatchesComponent extends Component
     {
         $this->resetValidation();
         $this->reset(['editingId', 'name', 'code', 'start_date', 'end_date', 'capacity', 'remarks']);
+        $this->academicYearId = optional(AcademicYear::current())->id;
         $this->status = 1;
         if (Auth::user()->isSuperAdmin()) {
             $this->instituteId = $this->filterInstitute ? (int) $this->filterInstitute : $this->instituteId;
@@ -231,7 +243,7 @@ class BatchesComponent extends Component
         $isSuperAdmin = $user->isSuperAdmin();
         $scopeInstitute = $isSuperAdmin ? $this->filterInstitute : $user->institute_id;
 
-        $batches = Batch::with(['institute', 'course'])
+        $batches = Batch::with(['institute', 'course', 'academicYear'])
             ->withCount(['students as seats_taken' => fn ($q) => $q->where('status', '!=', 'rejected')])
             ->when($scopeInstitute, fn ($q) => $q->where('batches.institute_id', $scopeInstitute))
             ->when($this->filterCourse, fn ($q) => $q->where('batches.course_id', $this->filterCourse))
@@ -254,6 +266,7 @@ class BatchesComponent extends Component
                 'students' => \App\Models\Admin\Student::whereNotNull('batch_id')->when($scopeInstitute, fn ($q) => $q->where('institute_id', $scopeInstitute))->count(),
             ],
             'isSuperAdmin' => $isSuperAdmin,
+            'academicYears' => AcademicYear::where(fn ($q) => $q->where('status', true)->orWhere('id', $this->academicYearId))->orderByDesc('start_date')->get(['id', 'name']),
             'institutes' => $isSuperAdmin ? Institute::orderBy('name')->get(['id', 'name', 'code']) : collect(),
             'filterCourses' => Course::whereIn('id', $courseIds)->orderBy('code')->get(['id', 'code', 'name']),
             'modalCourses' => $this->instituteId

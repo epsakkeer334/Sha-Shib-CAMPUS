@@ -15,7 +15,7 @@ class Batch extends BaseModel
 
     const CODE_PATTERN = '/^[A-Z0-9][A-Z0-9\/\-_.]{1,29}$/';
 
-    protected $fillable = ['institute_id', 'course_id', 'name', 'code', 'start_date', 'end_date', 'capacity', 'status', 'remarks', 'created_by', 'updated_by'];
+    protected $fillable = ['institute_id', 'course_id', 'academic_year_id', 'name', 'code', 'start_date', 'end_date', 'capacity', 'status', 'remarks', 'created_by', 'updated_by'];
 
     protected $casts = [
         'start_date' => 'date',
@@ -37,6 +37,12 @@ class Batch extends BaseModel
     public function students()
     {
         return $this->hasMany(Student::class);
+    }
+
+    /** Intake academic year */
+    public function academicYear()
+    {
+        return $this->belongsTo(AcademicYear::class);
     }
 
     public function scopeActive($query)

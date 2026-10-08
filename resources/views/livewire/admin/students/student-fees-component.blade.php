@@ -30,8 +30,17 @@
                             <tr><th>Fee</th><th>Due</th><th class="text-end">Amount</th><th class="text-end">Paid</th><th class="text-end">Balance</th><th>Status</th><th></th></tr>
                         </thead>
                         <tbody>
+                            @php $splitDues = $dues->whereNotNull('period_no')->isNotEmpty(); $lastPeriod = -1; @endphp
                             @forelse($dues as $due)
                                 @php $pending = $due->payments->where('status', 'pending_verification')->sum('amount'); @endphp
+                                @if($splitDues && (int) $due->period_no !== $lastPeriod)
+                                    @php $lastPeriod = (int) $due->period_no; $periodDues = $dues->filter(fn ($d) => (int) $d->period_no === $lastPeriod); @endphp
+                                    <tr class="table-light">
+                                        <td colspan="4" class="small fw-semibold"><i class="ti ti-{{ $lastPeriod ? 'calendar-time' : 'receipt' }} text-primary me-1"></i>{{ $lastPeriod ? $due->period_name : 'One-time fees' }}</td>
+                                        <td class="text-end small fw-semibold amount">{{ money_inr($periodDues->whereNotIn('status', ['cleared', 'waived'])->sum(fn ($d) => $d->balance), false) }}</td>
+                                        <td colspan="2" class="small text-muted">{{ $periodDues->count() }} {{ \Illuminate\Support\Str::plural('fee', $periodDues->count()) }}</td>
+                                    </tr>
+                                @endif
                                 <tr>
                                     <td>
                                         <span class="fw-semibold">{{ $due->fee_head }}</span>
