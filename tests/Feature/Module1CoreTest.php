@@ -320,6 +320,59 @@ class Module1CoreTest extends TestCase
         $this->get(route('admin.dashboard'))->assertRedirect(route('admin.login'));
     }
 
+    public function test_users_list_filters_by_institute_role_status_and_login()
+    {
+        $super = $this->makeUser('super-admin');
+        $adminA = $this->makeUser('institute-admin', $this->instA);
+        $accountsA = $this->makeUser('accounts', $this->instA);
+        $accountsA->update(['name' => 'Anitha Accounts', 'last_login_at' => now()->subMinutes(5), 'employee_code' => 'EMP-' . uniqid()]);
+        $tmB = $this->makeUser('training-manager', $this->instB);
+        $tmB->update(['name' => 'Bala Trainer', 'status' => false, 'last_login_at' => now()->subDays(45)]);
+        $facultyB = $this->makeUser('faculty', $this->instB);
+        $facultyB->update(['name' => 'Chitra Faculty']); // never logged in
+
+        $this->actingAs($super);
+        $page = Livewire::test(UsersComponent::class)
+            ->assertSee('Anitha Accounts')->assertSee('Bala Trainer')->assertSee('Never logged in');
+
+        $page->set('filterInstitute', $this->instB->id)->assertSee('Bala Trainer')->assertSee('Chitra Faculty')->assertDontSee('Anitha Accounts');
+        $page->set('filterInstitute', 'central')->assertSee($super->email)->assertDontSee('Bala Trainer');
+        $page->call('clearFilters')
+            ->set('filterRole', 'accounts')->assertSee('Anitha Accounts')->assertDontSee('Bala Trainer')
+            ->call('clearFilters')->set('filterStatus', 'inactive')->assertSee('Bala Trainer')->assertDontSee('Anitha Accounts')
+            ->call('clearFilters')->set('filterLogin', 'online')->assertSee('Anitha Accounts')->assertDontSee('Chitra Faculty')
+            ->call('clearFilters')->set('filterLogin', 'never')->assertSee('Chitra Faculty')->assertDontSee('Anitha Accounts')
+            ->call('clearFilters')->set('filterLogin', 'idle')->assertSee('Bala Trainer')->assertDontSee('Anitha Accounts')
+            ->call('clearFilters')->set('search', $accountsA->employee_code)->assertSee('Anitha Accounts')->assertDontSee('Bala Trainer');
+
+        // Institute Admin: own institute only, no institute filter
+        $this->actingAs($adminA);
+        Livewire::test(UsersComponent::class)
+            ->assertSee('Anitha Accounts')->assertDontSee('Bala Trainer')->assertDontSee('Central users')
+            ->set('filterInstitute', $this->instB->id)->assertDontSee('Bala Trainer'); // ignored for institute users
+    }
+
+    public function test_users_status_switch_follows_the_management_rules()
+    {
+        $super = $this->makeUser('super-admin');
+        $adminA = $this->makeUser('institute-admin', $this->instA);
+        $accountsA = $this->makeUser('accounts', $this->instA);
+        $otherAdminA = $this->makeUser('institute-admin', $this->instA);
+        $accountsB = $this->makeUser('accounts', $this->instB);
+
+        $this->actingAs($adminA);
+        $page = Livewire::test(UsersComponent::class);
+        $page->call('toggleStatus', $accountsA->id);
+        $this->assertFalse((bool) $accountsA->fresh()->status);
+        $this->assertTrue(AuditTrail::where('module', 'users')->where('reference_id', $accountsA->id)->where('meta', 'like', '%Deactivated user%')->exists());
+
+        $page->call('toggleStatus', $adminA->id)->assertDispatchedBrowserEvent('show-toast', fn ($n, $d) => $d['type'] === 'warning'); // self
+        $page->call('toggleStatus', $otherAdminA->id)->assertDispatchedBrowserEvent('show-toast', fn ($n, $d) => $d['type'] === 'danger'); // not assignable
+        $this->assertTrue((bool) $otherAdminA->fresh()->status);
+        $this->expectException(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
+        $page->call('toggleStatus', $accountsB->id); // other institute: not visible
+    }
+
     public function test_cannot_delete_self()
     {
         $super = $this->makeUser('super-admin');
@@ -342,6 +395,37 @@ class Module1CoreTest extends TestCase
 
         $this->assertTrue(\Spatie\Permission\Models\Role::findByName('hot')->hasPermissionTo('audit.view'));
         $this->assertTrue(AuditTrail::where('module', 'roles')->exists());
+    }
+
+    public function test_roles_page_is_grouped_per_role_with_group_switches_search_and_discard()
+    {
+        $this->actingAs($this->makeUser('super-admin'));
+        $hot = \Spatie\Permission\Models\Role::findByName('hot');
+        $hot->syncPermissions([]);
+
+        $page = Livewire::test(RolesComponent::class)
+            ->call('selectRole', 'hot')->assertSet('selectedRole', 'hot')
+            ->assertSee('Head of Training (HoT)')->assertSee('Fees &amp; Payments', false)
+            ->assertDontSee('masters.manage'); // Super Admin only, never listed
+
+        // group switch: grants the whole group, a second click revokes it
+        $page->call('toggleGroup', 'Students')
+            ->assertSet('matrix.hot.students__view', true)->assertSet('matrix.hot.students__delete', true)
+            ->assertSee('4 unsaved changes');
+        $page->call('toggleGroup', 'Students')->assertSet('matrix.hot.students__view', false)->assertSee('All changes saved');
+
+        // search narrows the list
+        $page->set('search', 'receipts')->assertSee('payments.verify')->assertDontSee('students.view')->set('search', '');
+
+        // grant all, then discard: nothing stored
+        $page->call('setAll', 1)->assertSet('matrix.hot.audit__view', true)->call('discard')->assertSet('matrix.hot.audit__view', false);
+        $this->assertCount(0, $hot->fresh()->permissions);
+
+        // group switch per role from the overview, then save
+        $page->call('setView', 'overview')->assertSee('All roles')
+            ->call('toggleGroup', 'Audit Trail', 'hot')->call('save');
+        $this->assertTrue($hot->fresh()->hasPermissionTo('audit.view'));
+        $this->assertSame(1, $hot->fresh()->permissions->count());
     }
 
     public function test_serial_numbers_are_sequential_per_series_and_year()

@@ -8,17 +8,56 @@ use App\Traits\RecordsAuditTrail;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\DB;
 use Livewire\Component;
+use Livewire\WithPagination;
 
 /**
  * User management.
  *  - Super Admin: any role, chooses the institute (none for Super Admin users).
  *  - Institute Admin: staff roles only (Accounts, TM, BiC, EM, HoT, Faculty), own institute only.
  * Rules come from config('camp.assignable_roles').
+ * List: summary cards, role chips and filters (search, institute, role, status, login activity).
  */
 class UsersComponent extends Component
 {
-    use RecordsAuditTrail;
+    use RecordsAuditTrail, WithPagination;
+
+    protected $paginationTheme = 'bootstrap';
+
+    const PER_PAGE = 15;
+
+    const SORTABLE = ['name', 'last_login_at', 'created_at'];
+
+    // login activity filter => label
+    const LOGIN_FILTERS = [
+        'online' => 'Online now (15 min)',
+        'today' => 'Logged in today',
+        '7d' => 'Last 7 days',
+        '30d' => 'Last 30 days',
+        'earlier' => 'More than 7 days ago',
+        'idle' => 'Not in 30+ days',
+        'never' => 'Never logged in',
+    ];
+
+    // List filters (kept in the URL)
+    public $search = '';
+    public $filterInstitute = '';
+    public $filterRole = '';
+    public $filterStatus = '';
+    public $filterLogin = '';
+    public $sortField = 'name';
+    public $sortDirection = 'asc';
+
+    protected $queryString = [
+        'search' => ['except' => ''],
+        'filterInstitute' => ['except' => '', 'as' => 'institute'],
+        'filterRole' => ['except' => '', 'as' => 'role'],
+        'filterStatus' => ['except' => '', 'as' => 'status'],
+        'filterLogin' => ['except' => '', 'as' => 'login'],
+        'sortField' => ['except' => 'name', 'as' => 'sort'],
+        'sortDirection' => ['except' => 'asc', 'as' => 'dir'],
+    ];
 
     // Form fields
     public $name, $email, $phone, $employee_code, $role, $institute_id, $password, $password_confirmation;
@@ -97,6 +136,75 @@ class UsersComponent extends Component
         return $actor->institute_id
             && (int) $target->institute_id === (int) $actor->institute_id
             &&$target->roles->pluck('name')->diff($actor->assignableRoles())->isEmpty();
+    }
+
+    public function updating($property)
+    {
+        if (in_array($property, ['search', 'filterInstitute', 'filterRole', 'filterStatus', 'filterLogin'], true)) {
+            $this->resetPage();
+        }
+    }
+
+    public function clearFilters()
+    {
+        $this->reset(['search', 'filterInstitute', 'filterRole', 'filterStatus', 'filterLogin']);
+        $this->resetPage();
+    }
+
+    public function sortBy($field)
+    {
+        if (!in_array($field, self::SORTABLE, true)) {
+            return;
+        }
+        $this->sortDirection = $this->sortField === $field && $this->sortDirection === 'asc' ? 'desc' : 'asc';
+        $this->sortField = $field;
+    }
+
+    /** Status switch in the list (same rules as editing). */
+    public function toggleStatus($id)
+    {
+        abort_unless(Auth::user()->can('users.update'), 403);
+        $user = User::visibleTo(Auth::user())->with('roles')->findOrFail($id);
+
+        if ($user->id === Auth::id()) {
+            return $this->toast('warning', 'You cannot deactivate your own account.');
+        }
+        if (!$this->canManage($user)) {
+            return $this->toast('danger', 'You are not allowed to change this user.');
+        }
+        if ($user->status && $user->isSuperAdmin() && User::role('super-admin')->where('status', true)->count() <= 1) {
+            return $this->toast('warning', 'The last active Super Admin cannot be deactivated.');
+        }
+
+        $old = ['status' => (bool) $user->status];
+        $user->update(['status' => !$user->status]);
+        $this->auditUpdate($user, 'users', $old, ['status' => (bool) $user->status], ($user->status ? 'Activated' : 'Deactivated') . " user: {$user->name} ({$user->email})");
+        $this->toast('success', "{$user->name} is now " . ($user->status ? 'active and can log in.' : 'inactive and cannot log in.'));
+    }
+
+    /** Users visible to the logged-in user, within the page's institute scope ('central' = no institute). */
+    protected function baseQuery()
+    {
+        $actor = Auth::user();
+        $institute = $this->scopeInstituteId ?: ($actor->isSuperAdmin() ? $this->filterInstitute : null);
+
+        return User::visibleTo($actor)
+            ->when($institute === 'central', fn ($q) => $q->whereNull('users.institute_id'))
+            ->when($institute && $institute !== 'central', fn ($q) => $q->where('users.institute_id', $institute));
+    }
+
+    protected function applyLoginFilter($query, $value)
+    {
+        match ($value) {
+            'online' => $query->where('users.last_login_at', '>=', now()->subMinutes(15)),
+            'today' => $query->where('users.last_login_at', '>=', today()),
+            '7d' => $query->where('users.last_login_at', '>=', now()->subDays(7)),
+            '30d' => $query->where('users.last_login_at', '>=', now()->subDays(30)),
+            'earlier' => $query->where('users.last_login_at', '<', now()->subDays(7)),
+            'idle' => $query->where('users.last_login_at', '<', now()->subDays(30)),
+            'never' => $query->whereNull('users.last_login_at'),
+            default => null,
+        };
     }
 
     public function updatedRole($value)
@@ -277,13 +385,51 @@ class UsersComponent extends Component
     {
         $actor = Auth::user();
         $roles = $this->isEditingSelf() ? [$this->role] : $actor->assignableRoles();
+        $isSuperAdmin = $actor->isSuperAdmin();
+
+        $users = $this->baseQuery()
+            ->with(['roles', 'institute'])
+            ->when(trim($this->search), fn ($q, $term) => $q->where(fn ($w) => $w->where('users.name', 'like', "%{$term}%")
+                ->orWhere('users.email', 'like', "%{$term}%")->orWhere('users.phone', 'like', "%{$term}%")
+                ->orWhere('users.employee_code', 'like', "%{$term}%")))
+            ->when($this->filterRole, fn ($q) => $q->whereHas('roles', fn ($r) => $r->where('name', $this->filterRole)))
+            ->when($this->filterStatus !== '', fn ($q) => $q->where('users.status', $this->filterStatus === 'active'))
+            ->when($this->filterLogin, fn ($q) => $this->applyLoginFilter($q, $this->filterLogin))
+            ->orderBy(in_array($this->sortField, self::SORTABLE, true) ? 'users.' . $this->sortField : 'users.name', $this->sortDirection === 'desc' ? 'desc' : 'asc')
+            ->orderBy('users.id')
+            ->paginate(self::PER_PAGE);
+
+        // summary cards and role chips: the whole scope (institute only), not the other filters
+        $base = fn () => $this->baseQuery();
+        $roleCounts = DB::table('model_has_roles')
+            ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->where('model_has_roles.model_type', User::class)
+            ->whereIn('model_has_roles.model_id', $base()->select('users.id'))
+            ->groupBy('roles.name')
+            ->selectRaw('roles.name as role, COUNT(*) as total')
+            ->pluck('total', 'role');
 
         return view('livewire.admin.users.users-component', [
+            'users' => $users,
+            'stats' => [
+                'total' => $base()->count(),
+                'active' => $base()->where('users.status', true)->count(),
+                'online' => $base()->where('users.last_login_at', '>=', now()->subMinutes(15))->count(),
+                'week' => $base()->where('users.last_login_at', '>=', now()->subDays(7))->count(),
+                'never' => $base()->whereNull('users.last_login_at')->count(),
+            ],
+            'roleChips' => collect(config('camp.roles'))->except('student')
+                ->map(fn ($label, $slug) => ['label' => $label, 'count' => (int) ($roleCounts[$slug] ?? 0)])
+                ->filter(fn ($chip, $slug) => $chip['count'] > 0 || $slug === $this->filterRole),
+            'filterInstitutes' => $isSuperAdmin && !$this->scopeInstituteId ? Institute::orderBy('name')->get(['id', 'name', 'code']) : collect(),
+            'loginFilters' => self::LOGIN_FILTERS,
+            'canManageRow' => fn (User $u) => $this->canManage($u),
+            'hasFilters' => trim($this->search) !== '' || $this->filterInstitute || $this->filterRole || $this->filterStatus !== '' || $this->filterLogin,
             'roleOptions' => collect($roles)->mapWithKeys(fn ($r) => [$r => config("camp.roles.{$r}", $r)])->all(),
             'instituteOptions' => $actor->isSuperAdmin()
                 ? Institute::active()->orderBy('name')->get(['id', 'name', 'code'])
                 : Institute::whereKey($actor->institute_id)->get(['id', 'name', 'code']),
-            'isSuperAdmin' => $actor->isSuperAdmin(),
+            'isSuperAdmin' => $isSuperAdmin,
             'editingSelf' => $this->isEditingSelf(),
         ])->layout('layouts.admin.master');
     }
