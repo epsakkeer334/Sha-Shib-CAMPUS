@@ -48,9 +48,11 @@
                 <div class="er-meta">
                     @if($student->course)<span><span class="er-code">{{ $student->course->code }}</span> {{ $student->course->name }}</span>@endif
                     @if($student->institute)<span><i class="ti ti-building"></i> {{ $student->institute->name }} @if($student->institute->code)<span class="er-inst-code ms-1">{{ $student->institute->code }}</span>@endif</span>@endif
-                    <span><i class="ti ti-phone"></i> {{ $student->phone ?: '—' }}</span>
-                    <span><i class="ti ti-calendar"></i> Joined {{ $student->formatted_joining_date }}</span>
-                    @if($student->current_period_label)<span><i class="ti ti-calendar-time"></i> {{ $student->current_period_label }}</span>@endif
+                </div>
+                <div class="er-hchips">
+                    <span class="er-hchip"><i class="ti ti-phone"></i> {{ $student->phone ?: '—' }}</span>
+                    <span class="er-hchip"><i class="ti ti-calendar"></i> Joined {{ $student->formatted_joining_date }}</span>
+                    @if($student->current_period_label)<span class="er-hchip er-hchip-period"><i class="ti ti-calendar-time"></i> {{ $student->current_period_label }}</span>@endif
                 </div>
             </div>
         </div>
@@ -298,7 +300,14 @@
     @include('livewire.admin.onboarding.partials.styles')
     @include('livewire.admin.onboarding.partials.enrollment-styles')
     <style>
-        .er-detail .er-profile { align-items: center; }
+        /* header: details on the left, ER number card always on the right */
+        .er-detail .er-profile { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px 24px; }
+        .er-detail .er-profile .er-number-card { justify-self: end; }
+        .er-detail .er-hchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .er-detail .er-hchip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; background: #fff; border: 1px solid #E5E7EB; font-size: 12.5px; color: #374151; white-space: nowrap; }
+        .er-detail .er-hchip i { color: #9CA3AF; }
+        .er-detail .er-hchip-period { background: #EDE9FE; border-color: #DDD6FE; color: #6D28D9; font-weight: 600; }
+        .er-detail .er-hchip-period i { color: #7C3AED; }
         .er-detail .er-profile-photo { width: 72px; height: 72px; border-radius: 16px; object-fit: cover; flex-shrink: 0; border: 3px solid #fff; box-shadow: 0 4px 12px rgba(16, 24, 40, .12); }
         .er-detail .er-profile-initials { display: inline-flex; align-items: center; justify-content: center; background: #FEF0E7; color: var(--er-accent); font-weight: 700; font-size: 22px; }
         .er-detail .er-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 6px; font-size: 13px; color: #4B5563; }
@@ -361,7 +370,8 @@
             .er-detail .er-journey { grid-template-columns: 1fr; gap: 10px; }
             .er-detail .er-journey li { flex-direction: row; text-align: left; gap: 10px; }
             .er-detail .er-journey li::before { display: none; }
-            .er-detail .er-number-card { width: 100%; }
+            .er-detail .er-profile { grid-template-columns: 1fr; }
+            .er-detail .er-profile .er-number-card { width: 100%; justify-self: stretch; }
         }
     </style>
 </div>

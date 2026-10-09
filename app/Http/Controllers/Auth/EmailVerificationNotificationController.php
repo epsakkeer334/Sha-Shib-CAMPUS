@@ -18,7 +18,8 @@ class EmailVerificationNotificationController extends Controller
             return redirect()->intended(RouteServiceProvider::HOME);
         }
 
-        $request->user()->sendEmailVerificationNotification();
+        // SMTP2GO: email sending is switched off until the SMTP2GO mail service is set up — uncomment to go live.
+        // $request->user()->sendEmailVerificationNotification();
 
         return back()->with('status', 'verification-link-sent');
     }

@@ -8,8 +8,8 @@ use Illuminate\Support\Facades\Mail;
 
 /**
  * Sends CAMP notifications and records every attempt in notifications_log.
- * Email goes through the configured mailer. SMS is logged as pending until a
- * gateway is chosen (plan.md open question 3).
+ * Email: sending is commented out until the SMTP2GO mail service is set up (search "SMTP2GO");
+ * emails are logged as pending. SMS is logged as pending until a gateway is chosen (plan.md open question 3).
  */
 class NotificationService
 {
@@ -47,11 +47,16 @@ class NotificationService
             return;
         }
 
-        try {
-            Mail::raw($message, fn ($mail) => $mail->to($log->recipient)->subject($subject));
-            $log->update(['status' => 'sent', 'sent_at' => now()]);
-        } catch (\Throwable $e) {
-            $log->update(['status' => 'failed', 'error' => $e->getMessage()]);
-        }
+        // SMTP2GO: email sending is switched off until the SMTP2GO mail service is purchased and set up.
+        // The email stays in notifications_log as "pending" so it is visible (and can be re-sent later).
+        // To go live: set the SMTP2GO MAIL_* values in .env, then uncomment the block below and remove the line after it.
+        //
+        // try {
+        //     Mail::raw($message, fn ($mail) => $mail->to($log->recipient)->subject($subject));
+        //     $log->update(['status' => 'sent', 'sent_at' => now()]);
+        // } catch (\Throwable $e) {
+        //     $log->update(['status' => 'failed', 'error' => $e->getMessage()]);
+        // }
+        $log->update(['error' => 'Email not sent: mail service (SMTP2GO) not set up yet.']);
     }
 }
