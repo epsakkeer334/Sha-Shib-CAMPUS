@@ -328,9 +328,9 @@
                             @error('period_no') <div class="invalid-feedback">{{ $message }}</div> @enderror
                             <small class="text-muted">{{ $modalCourse ? $modalCourse->period_summary : 'Select a course first' }}</small>
                         </div>
-                        @include('livewire.admin.students.partials.input', ['name' => 'fee_head', 'label' => 'Fee', 'required' => true, 'col' => 12, 'placeholder' => 'e.g. Admission fee'])
-                        @include('livewire.admin.students.partials.input', ['name' => 'amount', 'label' => 'Amount (₹)', 'type' => 'number', 'step' => '0.01', 'required' => true])
-                        @include('livewire.admin.students.partials.input', ['name' => 'sort_order', 'label' => 'Display order', 'type' => 'number', 'required' => true])
+                        @include('livewire.admin.students.partials.input', ['name' => 'fee_head', 'label' => 'Fee', 'required' => true, 'col' => 12, 'placeholder' => 'e.g. Admission fee', 'fieldIcon' => 'ti ti-receipt-2'])
+                        @include('livewire.admin.students.partials.input', ['name' => 'amount', 'label' => 'Amount', 'type' => 'number', 'step' => '0.01', 'required' => true, 'placeholder' => '0.00', 'fieldIcon' => 'ti ti-currency-rupee'])
+                        @include('livewire.admin.students.partials.input', ['name' => 'sort_order', 'label' => 'Display order', 'type' => 'number', 'required' => true, 'fieldIcon' => 'ti ti-arrows-sort'])
                         @if(!$period_no)
                         <div class="col-12">
                             <label class="fs-adm-toggle {{ $admission_fee ? 'is-on' : '' }}">
@@ -358,9 +358,9 @@
                         @if($due_type === 'period_start')
                             <div class="col-md-6"><div class="fs-period-note"><i class="ti ti-info-circle"></i> Charged when the student enters this period; due on its start date (Institute Management → Academic Periods).</div></div>
                         @elseif($due_type === 'fixed')
-                            @include('livewire.admin.students.partials.input', ['name' => 'due_date', 'label' => 'Due on', 'type' => 'date', 'required' => true, 'help' => 'e.g. semester or lab fee due date'])
+                            @include('livewire.admin.students.partials.input', ['name' => 'due_date', 'label' => 'Due on', 'type' => 'date', 'required' => true, 'help' => 'e.g. semester or lab fee due date', 'fieldIcon' => 'ti ti-calendar-event'])
                         @else
-                            @include('livewire.admin.students.partials.input', ['name' => 'due_days', 'label' => 'Days after joining', 'type' => 'number', 'required' => true, 'help' => '0 = due on the joining date'])
+                            @include('livewire.admin.students.partials.input', ['name' => 'due_days', 'label' => 'Days after joining', 'type' => 'number', 'required' => true, 'help' => '0 = due on the joining date', 'fieldIcon' => 'ti ti-calendar-time'])
                         @endif
                         <div class="col-md-6 d-flex align-items-end">
                             <div class="form-check form-switch">
@@ -381,6 +381,11 @@
     <style>
         .fs-ui { --fs-border: #E5E7EB; --fs-soft: #F1F2F4; --fs-ink: #111827; --fs-muted: #6B7280; --fs-accent: #F26522; }
         .fs-ui .min-w-0 { min-width: 0; }
+        /* icons inside the form fields (Add / Edit fee) */
+        .fs-ui .fx-icon-field { position: relative; }
+        .fs-ui .fx-icon-field .fx-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9CA3AF; font-size: 16px; pointer-events: none; z-index: 2; }
+        .fs-ui .fx-icon-field .form-control { padding-left: 36px; }
+        .fs-ui .fx-icon-field:focus-within .fx-icon { color: var(--fs-accent); }
         .fs-ui .fs-year-select { min-width: 170px; font-weight: 600; border-color: #FDBA8C; background-color: #FFF7F2; }
         .fs-ui .fs-period-row td { background: #F8FAFC; font-weight: 600; font-size: 12.5px; color: #334155; padding-top: 7px; padding-bottom: 7px; }
         .fs-ui .fs-period-row i { color: #F26522; }

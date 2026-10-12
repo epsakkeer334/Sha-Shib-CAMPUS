@@ -121,7 +121,7 @@
                         <div class="so-section-title"><i class="ti ti-building-community"></i> Institute &amp; course</div>
                         <div class="row g-3">
                             @if($isSuperAdmin && !$student)
-                                @include('livewire.admin.students.partials.select', ['name' => 'institute_id', 'label' => 'Institute', 'required' => true, 'live' => true, 'icon' => 'ti ti-building',
+                                @include('livewire.admin.students.partials.select', ['name' => 'institute_id', 'label' => 'Institute', 'required' => true, 'live' => true, 'fieldIcon' => 'ti ti-building',
                                     'options' => $institutes->mapWithKeys(fn ($i) => [$i->id => "{$i->name} ({$i->code})"])])
                             @else
                                 <div class="col-md-6">
@@ -133,15 +133,15 @@
                                     </div>
                                 </div>
                             @endif
-                            @include('livewire.admin.students.partials.select', ['name' => 'course_id', 'label' => 'Course', 'required' => true, 'icon' => 'ti ti-books',
+                            @include('livewire.admin.students.partials.select', ['name' => 'course_id', 'label' => 'Course', 'required' => true, 'fieldIcon' => 'ti ti-books',
                                 'options' => $courses->mapWithKeys(fn ($c) => [$c->id => "{$c->name} ({$c->code})"]),
                                 'placeholder' => $institute_id ? ($courses->isEmpty() ? 'No active courses at this institute' : 'Select course') : 'Select institute first',
                                 'help' => $institute_id && $courses->isEmpty() ? 'Assign courses under Institute Management → Institute Courses.' : null, 'live' => true])
-                            @include('livewire.admin.students.partials.select', ['name' => 'batch_id', 'label' => 'Batch', 'required' => $batches->isNotEmpty(), 'icon' => 'ti ti-users-group', 'col' => 6,
+                            @include('livewire.admin.students.partials.select', ['name' => 'batch_id', 'label' => 'Batch', 'required' => $batches->isNotEmpty(), 'fieldIcon' => 'ti ti-users-group', 'col' => 6,
                                 'options' => $batches,
                                 'placeholder' => !$course_id ? 'Select course first' : ($batches->isEmpty() ? 'No open batches for this course' : 'Select batch'),
                                 'help' => $course_id && $batches->isEmpty() ? 'Add batches under Institute Management → Batches (optional).' : null])
-                            @include('livewire.admin.students.partials.input', ['name' => 'joining_date', 'label' => 'Joining date', 'type' => 'date', 'required' => true, 'col' => 4, 'icon' => 'ti ti-calendar-event',
+                            @include('livewire.admin.students.partials.input', ['name' => 'joining_date', 'label' => 'Joining date', 'type' => 'date', 'required' => true, 'col' => 4, 'fieldIcon' => 'ti ti-calendar-event',
                                 'help' => 'Onboarding deadline: ' . config('camp.onboarding_days') . ' days after joining.'])
                         </div>
                     </div>
@@ -149,9 +149,9 @@
                     <div class="so-section">
                         <div class="so-section-title"><i class="ti ti-id"></i> Personal details</div>
                         <div class="row g-3">
-                            @include('livewire.admin.students.partials.input', ['name' => 'first_name', 'label' => 'First name', 'required' => true, 'col' => 4, 'icon' => 'ti ti-user'])
-                            @include('livewire.admin.students.partials.input', ['name' => 'last_name', 'label' => 'Last name', 'required' => true, 'col' => 4, 'icon' => 'ti ti-user'])
-                            @include('livewire.admin.students.partials.input', ['name' => 'dob', 'label' => 'Date of birth', 'type' => 'date', 'required' => true, 'col' => 4, 'icon' => 'ti ti-cake'])
+                            @include('livewire.admin.students.partials.input', ['name' => 'first_name', 'label' => 'First name', 'required' => true, 'col' => 4, 'fieldIcon' => 'ti ti-user'])
+                            @include('livewire.admin.students.partials.input', ['name' => 'last_name', 'label' => 'Last name', 'required' => true, 'col' => 4, 'fieldIcon' => 'ti ti-user'])
+                            @include('livewire.admin.students.partials.input', ['name' => 'dob', 'label' => 'Date of birth', 'type' => 'date', 'required' => true, 'col' => 4, 'fieldIcon' => 'ti ti-cake'])
                             <div class="col-md-4">
                                 <label class="form-label fw-medium small d-block">Gender <span class="text-danger">*</span></label>
                                 <div class="so-segment @error('gender') is-invalid @enderror" role="radiogroup" aria-label="Gender">
@@ -162,9 +162,9 @@
                                 </div>
                                 @error('gender') <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
                             </div>
-                            @include('livewire.admin.students.partials.select', ['name' => 'qualification_id', 'label' => 'Qualification', 'required' => true, 'col' => 4, 'icon' => 'ti ti-certificate', 'options' => $qualifications])
-                            @include('livewire.admin.students.partials.select', ['name' => 'religion_id', 'label' => 'Religion', 'required' => true, 'col' => 4, 'live' => true, 'icon' => 'ti ti-heart-handshake', 'options' => $religions])
-                            @include('livewire.admin.students.partials.select', ['name' => 'category_id', 'label' => 'Category', 'required' => true, 'col' => 4, 'icon' => 'ti ti-category', 'options' => $categories,
+                            @include('livewire.admin.students.partials.select', ['name' => 'qualification_id', 'label' => 'Qualification', 'required' => true, 'col' => 4, 'fieldIcon' => 'ti ti-certificate', 'options' => $qualifications])
+                            @include('livewire.admin.students.partials.select', ['name' => 'religion_id', 'label' => 'Religion', 'required' => true, 'col' => 4, 'live' => true, 'fieldIcon' => 'ti ti-heart-handshake', 'options' => $religions])
+                            @include('livewire.admin.students.partials.select', ['name' => 'category_id', 'label' => 'Category', 'required' => true, 'col' => 4, 'fieldIcon' => 'ti ti-category', 'options' => $categories,
                                 'placeholder' => $religion_id ? 'Select category' : 'Select religion first'])
                         </div>
                     </div>
@@ -172,9 +172,9 @@
                     <div class="so-section">
                         <div class="so-section-title"><i class="ti ti-address-book"></i> Contact</div>
                         <div class="row g-3">
-                            @include('livewire.admin.students.partials.input', ['name' => 'email', 'label' => 'Email', 'type' => 'email', 'required' => true, 'col' => 4, 'icon' => 'ti ti-mail', 'placeholder' => 'student@example.com'])
-                            @include('livewire.admin.students.partials.input', ['name' => 'phone', 'label' => 'Phone', 'type' => 'tel', 'required' => true, 'col' => 4, 'icon' => 'ti ti-phone', 'placeholder' => '+919876543210'])
-                            @include('livewire.admin.students.partials.input', ['name' => 'emergency_contact', 'label' => 'Emergency contact', 'type' => 'tel', 'required' => true, 'col' => 4, 'icon' => 'ti ti-urgent', 'placeholder' => '+919876543210'])
+                            @include('livewire.admin.students.partials.input', ['name' => 'email', 'label' => 'Email', 'type' => 'email', 'required' => true, 'col' => 4, 'fieldIcon' => 'ti ti-mail', 'placeholder' => 'student@example.com'])
+                            @include('livewire.admin.students.partials.input', ['name' => 'phone', 'label' => 'Phone', 'type' => 'tel', 'required' => true, 'col' => 4, 'fieldIcon' => 'ti ti-phone', 'placeholder' => '+919876543210'])
+                            @include('livewire.admin.students.partials.input', ['name' => 'emergency_contact', 'label' => 'Emergency contact', 'type' => 'tel', 'required' => true, 'col' => 4, 'fieldIcon' => 'ti ti-urgent', 'placeholder' => '+919876543210'])
                         </div>
                     </div>
 
@@ -252,22 +252,22 @@
                     <div class="so-section">
                         <div class="so-section-title"><i class="ti ti-home"></i> Address</div>
                         <div class="row g-3">
-                            @include('livewire.admin.students.partials.input', ['name' => 'address', 'label' => 'Street address', 'type' => 'textarea', 'required' => true, 'col' => 12, 'icon' => 'ti ti-map-pin', 'placeholder' => 'House / street / area'])
-                            @include('livewire.admin.students.partials.select', ['name' => 'country_id', 'label' => 'Country', 'required' => true, 'col' => 3, 'live' => true, 'icon' => 'ti ti-world', 'options' => $countries])
-                            @include('livewire.admin.students.partials.select', ['name' => 'state_id', 'label' => 'State', 'required' => true, 'col' => 3, 'icon' => 'ti ti-map', 'options' => $states,
+                            @include('livewire.admin.students.partials.input', ['name' => 'address', 'label' => 'Street address', 'type' => 'textarea', 'required' => true, 'col' => 12, 'fieldIcon' => 'ti ti-map-pin', 'placeholder' => 'House / street / area'])
+                            @include('livewire.admin.students.partials.select', ['name' => 'country_id', 'label' => 'Country', 'required' => true, 'col' => 3, 'live' => true, 'fieldIcon' => 'ti ti-world', 'options' => $countries])
+                            @include('livewire.admin.students.partials.select', ['name' => 'state_id', 'label' => 'State', 'required' => true, 'col' => 3, 'fieldIcon' => 'ti ti-map', 'options' => $states,
                                 'placeholder' => $country_id ? 'Select state' : 'Select country first'])
-                            @include('livewire.admin.students.partials.input', ['name' => 'city', 'label' => 'City', 'required' => true, 'col' => 3, 'icon' => 'ti ti-building-skyscraper'])
-                            @include('livewire.admin.students.partials.input', ['name' => 'pincode', 'label' => 'Pincode', 'required' => true, 'col' => 3, 'icon' => 'ti ti-mailbox', 'maxlength' => 10])
+                            @include('livewire.admin.students.partials.input', ['name' => 'city', 'label' => 'City', 'required' => true, 'col' => 3, 'fieldIcon' => 'ti ti-building-skyscraper'])
+                            @include('livewire.admin.students.partials.input', ['name' => 'pincode', 'label' => 'Pincode', 'required' => true, 'col' => 3, 'fieldIcon' => 'ti ti-mailbox', 'maxlength' => 10])
                         </div>
                     </div>
 
                     <div class="so-section">
                         <div class="so-section-title"><i class="ti ti-users"></i> Parent / guardian</div>
                         <div class="row g-3">
-                            @include('livewire.admin.students.partials.input', ['name' => 'parent_name', 'label' => 'Parent name', 'required' => true, 'icon' => 'ti ti-user'])
-                            @include('livewire.admin.students.partials.input', ['name' => 'parent_occupation', 'label' => 'Occupation', 'icon' => 'ti ti-briefcase'])
-                            @include('livewire.admin.students.partials.input', ['name' => 'parent_phone', 'label' => 'Parent phone', 'type' => 'tel', 'required' => true, 'icon' => 'ti ti-phone', 'placeholder' => '+919876543210'])
-                            @include('livewire.admin.students.partials.input', ['name' => 'parent_email', 'label' => 'Parent email', 'type' => 'email', 'icon' => 'ti ti-mail'])
+                            @include('livewire.admin.students.partials.input', ['name' => 'parent_name', 'label' => 'Parent name', 'required' => true, 'fieldIcon' => 'ti ti-user'])
+                            @include('livewire.admin.students.partials.input', ['name' => 'parent_occupation', 'label' => 'Occupation', 'fieldIcon' => 'ti ti-briefcase'])
+                            @include('livewire.admin.students.partials.input', ['name' => 'parent_phone', 'label' => 'Parent phone', 'type' => 'tel', 'required' => true, 'fieldIcon' => 'ti ti-phone', 'placeholder' => '+919876543210'])
+                            @include('livewire.admin.students.partials.input', ['name' => 'parent_email', 'label' => 'Parent email', 'type' => 'email', 'fieldIcon' => 'ti ti-mail'])
                         </div>
                     </div>
                 @endif
@@ -281,7 +281,7 @@
                         <div class="so-section">
                             <div class="so-section-title"><i class="{{ $icon }}"></i> {{ $title }}</div>
                             <div class="row g-3">
-                                @include('livewire.admin.students.partials.select', ['name' => "{$prefix}_board_id", 'label' => 'Board', 'required' => true, 'col' => $prefix === 'matriculation' ? 6 : 4, 'icon' => 'ti ti-building-bank', 'options' => $boards])
+                                @include('livewire.admin.students.partials.select', ['name' => "{$prefix}_board_id", 'label' => 'Board', 'required' => true, 'col' => $prefix === 'matriculation' ? 6 : 4, 'fieldIcon' => 'ti ti-building-bank', 'options' => $boards])
                                 @if($prefix === 'higher_secondary')
                                     @include('livewire.admin.students.partials.select', ['name' => 'higher_secondary_subject', 'label' => 'Subject stream', 'required' => true, 'col' => 2, 'options' => config('camp.higher_secondary_subjects')])
                                 @endif
@@ -296,7 +296,7 @@
                                     @error("{$prefix}_mark_type") <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
                                 </div>
                                 @include('livewire.admin.students.partials.input', ['name' => "{$prefix}_mark", 'label' => 'Mark', 'type' => 'number', 'step' => '0.01', 'required' => true, 'col' => 3,
-                                    'icon' => $markType === 'cgpa' ? 'ti ti-star' : 'ti ti-percentage', 'placeholder' => $markType === 'cgpa' ? '0 – 10' : '0 – 100'])
+                                    'fieldIcon' => $markType === 'cgpa' ? 'ti ti-star' : 'ti ti-percentage', 'placeholder' => $markType === 'cgpa' ? '0 – 10' : '0 – 100'])
                             </div>
                         </div>
                     @endforeach
