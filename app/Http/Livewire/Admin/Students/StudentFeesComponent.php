@@ -53,7 +53,7 @@ class StudentFeesComponent extends Component
 
     protected function student(): Student
     {
-        return Student::with(['course', 'institute'])->findOrFail($this->studentId);
+        return Student::with(['course', 'institute', 'batch'])->findOrFail($this->studentId);
     }
 
     protected function due($id): StudentDue
@@ -282,6 +282,7 @@ class StudentFeesComponent extends Component
 
         return view('livewire.admin.students.student-fees-component', [
             'nextDue' => $fees->nextPayableDue($student),
+            'photo' => $student->documents()->where('document_type', 'kyc_photo')->latest('uploaded_at')->first(),
             'confirmInfo' => $this->confirmInfo(),
             'revocable' => $dues->filter(fn ($d) => $fees->canRevokeAdvance($d))->pluck('id'),
             'upcoming' => $upcoming,
