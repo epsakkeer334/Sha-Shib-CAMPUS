@@ -22,7 +22,11 @@
             <div class="card shadow-sm border-0 mb-3">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h5 class="fw-semibold mb-0">Fees</h5>
-                    <span class="text-muted">Still to pay <b class="amount fs-15 text-dark ms-1">{{ money_inr($outstanding, false) }}</b></span>
+                    <span class="d-flex gap-3 flex-wrap small text-muted">
+                        <span>Paid <b class="amount text-success ms-1">{{ money_inr($paidTotal, false) }}</b></span>
+                        <span>Still to pay <b class="amount fs-15 text-dark ms-1">{{ money_inr($outstanding, false) }}</b></span>
+                        <span>Upcoming <b class="amount text-info ms-1">{{ money_inr($upcomingTotal, false) }}</b></span>
+                    </span>
                 </div>
                 <div class="table-responsive">
                     <table class="table align-middle mb-0">
@@ -41,9 +45,11 @@
                                         <td colspan="2" class="small text-muted">{{ $periodDues->count() }} {{ \Illuminate\Support\Str::plural('fee', $periodDues->count()) }}</td>
                                     </tr>
                                 @endif
-                                <tr>
+                                <tr class="{{ $nextDue && $nextDue->id === $due->id ? 'fee-next-row' : '' }}">
                                     <td>
                                         <span class="fw-semibold">{{ $due->fee_head }}</span>
+                                        @if($nextDue && $nextDue->id === $due->id)<span class="badge bg-warning bg-opacity-25 text-warning ms-1">Next to pay</span>@endif
+                                        @if($due->advance)<span class="badge bg-success bg-opacity-10 text-success ms-1">{{ $due->status === 'cleared' ? 'Paid in advance' : 'Advance' }}</span>@endif
                                         @if($due->status === 'waived' && $due->remarks)<div class="small text-muted">Waived: {{ $due->remarks }}</div>@endif
                                         @if($pending > 0)<div class="small text-info">{{ money_inr($pending, false) }} being confirmed</div>@endif
                                     </td>
@@ -53,13 +59,17 @@
                                     <td class="text-end amount fw-semibold">{{ money_inr($due->balance, false) }}</td>
                                     <td>{!! $due->status_html !!}</td>
                                     <td class="text-end text-nowrap">
+                                        @if($revocable->contains($due->id) && (auth()->user()->can('payments.collect') || auth()->user()->can('fees.manage')))
+                                            <button type="button" class="btn btn-sm btn-outline-warning" wire:click="ask('revoke', {{ $due->id }})" title="Undo pay in advance">
+                                                <i class="ti ti-arrow-back-up me-1"></i> Cancel advance
+                                            </button>
+                                        @endif
                                         @can('fees.manage')
                                             @unless($due->isSettled())
                                                 <button type="button" class="btn btn-sm btn-outline-secondary" wire:click="confirmWaive({{ $due->id }})" title="Waive">Waive</button>
                                             @endunless
                                             @if($due->payments->whereIn('status', ['pending_verification', 'success'])->isEmpty())
-                                                <button type="button" class="btn btn-sm btn-outline-danger" wire:click="deleteDue({{ $due->id }})"
-                                                        onclick="confirm('Remove this fee?') || event.stopImmediatePropagation()" title="Remove"><i class="ti ti-trash"></i></button>
+                                                <button type="button" class="btn btn-sm btn-outline-danger" wire:click="ask('delete', {{ $due->id }})" title="Remove"><i class="ti ti-trash"></i></button>
                                             @endif
                                         @endcan
                                     </td>
@@ -68,6 +78,37 @@
                                 <tr><td colspan="7" class="text-center text-muted py-4">No fees yet. Generate them from the fee structure or add one.</td></tr>
                             @endforelse
                         </tbody>
+                        @if($upcoming->isNotEmpty())
+                            {{-- Fees not charged yet: charged later (ER number / next semester), or now as an advance --}}
+                            <tbody>
+                                <tr class="table-light">
+                                    <td colspan="7" class="small fw-semibold"><i class="ti ti-calendar-up text-info me-1"></i>Upcoming — not charged yet
+                                        <span class="text-muted fw-normal ms-1">{{ $upcoming->count() }} {{ \Illuminate\Support\Str::plural('fee', $upcoming->count()) }} · {{ money_inr($upcomingTotal, false) }}</span></td>
+                                </tr>
+                                @foreach($upcoming as $item)
+                                    <tr class="fee-upcoming-row">
+                                        <td>
+                                            <span class="fw-semibold">{{ $item['fee']->fee_head }}</span>
+                                            <span class="small text-muted ms-1">{{ $item['period'] }}</span>
+                                            @if($item['advance_allowed'])<span class="badge bg-info bg-opacity-10 text-info ms-1">Advance allowed</span>@endif
+                                            <div class="small text-muted">{{ $item['when'] }}</div>
+                                        </td>
+                                        <td class="small text-nowrap text-muted">{{ $item['expected'] ? $item['expected']->format('d M Y') : '—' }}</td>
+                                        <td class="text-end amount text-muted">{{ money_inr($item['fee']->amount, false) }}</td>
+                                        <td class="text-end amount text-muted">—</td>
+                                        <td class="text-end amount text-muted">—</td>
+                                        <td><span class="badge bg-info bg-opacity-10 text-info">Upcoming</span></td>
+                                        <td class="text-end text-nowrap">
+                                            @if($item['advance'] && (auth()->user()->can('payments.collect') || auth()->user()->can('fees.manage')))
+                                                <button type="button" class="btn btn-sm btn-outline-primary" wire:click="ask('advance', {{ $item['fee']->id }})">
+                                                    <i class="ti ti-player-track-next me-1"></i> Pay in advance
+                                                </button>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        @endif
                     </table>
                 </div>
                 @can('fees.manage')
@@ -188,7 +229,11 @@
                             <button type="button" class="btn btn-primary mt-3 px-4" wire:click="recordPayment" wire:loading.attr="disabled" wire:target="recordPayment,pay_proof">
                                 <i class="ti ti-device-floppy me-1"></i> Record payment
                             </button>
-                            <p class="small text-muted mt-2 mb-0">Accounts confirms each payment before a receipt is issued.</p>
+                            @can('payments.verify')
+                                <p class="small text-success mt-2 mb-0"><i class="ti ti-circle-check me-1"></i>Recorded by Accounts: the payment is confirmed at once — receipt issued and the fee updated, no approval needed.</p>
+                            @else
+                                <p class="small text-muted mt-2 mb-0">Accounts confirms each payment before a receipt is issued.</p>
+                            @endcan
                         @endif
                     @endcannot
                 </div>
@@ -216,6 +261,27 @@
         </div>
     </div>
 
+    {{-- Confirmation pop-up (pay in advance / cancel advance / remove fee) — same design as the delete modal --}}
+    <div class="modal fade" id="feeConfirmModal" tabindex="-1" aria-hidden="true" wire:ignore.self>
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-body text-center py-4">
+                    @if($confirmInfo)
+                        <i class="{{ $confirmInfo['icon'] }} text-{{ $confirmInfo['tone'] }} fs-1 mb-3"></i>
+                        <h5>{{ $confirmInfo['title'] }}</h5>
+                        <p class="text-muted mb-4">{{ $confirmInfo['text'] }}</p>
+                        <div class="d-flex justify-content-center gap-2">
+                            <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-{{ $confirmInfo['tone'] === 'danger' ? 'danger' : 'primary' }} px-4" wire:click="confirmed" wire:loading.attr="disabled">{{ $confirmInfo['button'] }}</button>
+                        </div>
+                    @else
+                        <span class="spinner-border spinner-border-sm text-secondary"></span>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
+
     {{-- Waive modal --}}
     <div class="modal fade" id="waiveModal" tabindex="-1" aria-hidden="true" wire:ignore.self>
         <div class="modal-dialog modal-dialog-centered">
@@ -234,6 +300,11 @@
     </div>
 
     @include('livewire.admin.onboarding.partials.styles')
+    <style>
+        .fee-next-row td { background: #FFFBEB; }
+        .fee-next-row td:first-child { box-shadow: inset 3px 0 0 #F59E0B; }
+        .fee-upcoming-row td { background: #FAFBFC; }
+    </style>
 </div>
 
 <script>

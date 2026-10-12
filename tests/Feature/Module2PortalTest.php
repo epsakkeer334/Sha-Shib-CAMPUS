@@ -518,7 +518,10 @@ class Module2PortalTest extends TestCase
         $studentUser = Auth::user();
         Livewire::test(DocumentsPage::class)->call('submit');
         $this->assertSame(['Admission fee'], $student->fresh()->dues()->pluck('fee_head')->all());
-        Livewire::test(PaymentPage::class)->assertSet('amount', 15000.0)->assertDontSee('Semester 1 fee');
+        // the Semester 1 fee is listed as upcoming (charged with the ER number), not payable yet
+        Livewire::test(PaymentPage::class)->assertSet('amount', 15000.0)
+            ->assertSee('Semester 1 fee')->assertSee('Charged with your ER number')
+            ->assertViewHas('payOptions', fn ($options) => array_values($options->all()) === ['Admission fee — ' . money_inr(15000, false) . ' left']);
         Livewire::test(PaymentPage::class)->set('amount', 15000)->set('utr', '627514903399')->set('proof', UploadedFile::fake()->image('gpay.png'))->call('pay')->assertHasNoErrors();
 
         // Gate 1 + Gate 2 need only the admission fee

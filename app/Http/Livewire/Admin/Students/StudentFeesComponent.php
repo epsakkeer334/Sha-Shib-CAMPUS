@@ -113,6 +113,96 @@ class StudentFeesComponent extends Component
         $this->run(fn () => app(FeeService::class)->deleteDue($this->due($id)), 'Fee removed.', 'danger');
     }
 
+    // ------------------------------------------------------------------ confirmation pop-up (like the delete modal)
+
+    /** Pending confirmation: advance (course fee id) | revoke (advance due id) | delete (due id). */
+    public $confirmAction = null;
+    public $confirmId = null;
+
+    const CONFIRM_ACTIONS = ['advance', 'revoke', 'delete'];
+
+    public function ask($action, $id)
+    {
+        if (!in_array($action, self::CONFIRM_ACTIONS, true)) {
+            return;
+        }
+        $this->confirmAction = $action;
+        $this->confirmId = (int) $id;
+        $this->dispatchBrowserEvent('open-fee-modal', ['id' => 'feeConfirmModal']);
+    }
+
+    public function confirmed()
+    {
+        [$action, $id] = [$this->confirmAction, $this->confirmId];
+        $this->reset(['confirmAction', 'confirmId']);
+        $this->dispatchBrowserEvent('close-fee-modal', ['id' => 'feeConfirmModal']);
+
+        match ($action) {
+            'advance' => $this->chargeAdvance($id),
+            'revoke' => $this->revokeAdvance($id),
+            'delete' => $this->deleteDue($id),
+            default => null,
+        };
+    }
+
+    /** Title, message, icon, colour and button of the confirmation pop-up. */
+    protected function confirmInfo(): ?array
+    {
+        if (!$this->confirmAction || !$this->confirmId) {
+            return null;
+        }
+        if ($this->confirmAction === 'advance') {
+            $fee = \App\Models\Admin\CourseFee::find($this->confirmId);
+
+            return $fee ? [
+                'title' => 'Pay in advance?', 'icon' => 'ti ti-player-track-next', 'tone' => 'primary', 'button' => 'Yes, add as advance',
+                'text' => "{$fee->fee_head} (" . money_inr($fee->amount) . ') is not due yet. It will be added to this student now so the payment can be recorded. You can cancel it while no payment is recorded.',
+            ] : null;
+        }
+        $due = StudentDue::where('student_id', $this->studentId)->find($this->confirmId);
+        if (!$due) {
+            return null;
+        }
+
+        return $this->confirmAction === 'revoke'
+            ? ['title' => 'Cancel advance?', 'icon' => 'ti ti-arrow-back-up', 'tone' => 'warning', 'button' => 'Yes, cancel advance',
+                'text' => "{$due->fee_head} (" . money_inr($due->amount_due) . ') will be removed from this student and listed as upcoming again.']
+            : ['title' => 'Remove fee?', 'icon' => 'ti ti-alert-triangle', 'tone' => 'danger', 'button' => 'Yes, remove',
+                'text' => "{$due->fee_head} (" . money_inr($due->amount_due) . ') will be removed from this student. This cannot be undone.'];
+    }
+
+    /**
+     * Advance payment at the desk: charge the next upcoming fee that allows it, then select it in the
+     * payment form so the payment can be recorded.
+     */
+    public function chargeAdvance($feeId)
+    {
+        abort_unless(Auth::user()->can('payments.collect') || Auth::user()->can('fees.manage'), 403);
+
+        $fee = \App\Models\Admin\CourseFee::findOrFail($feeId); // institute-scoped
+        try {
+            $due = app(FeeService::class)->chargeAdvance($this->student(), $fee);
+        } catch (RuntimeException $e) {
+            return $this->toast('warning', $e->getMessage());
+        }
+
+        $this->pay_due_id = $due->id;
+        $this->pay_amount = $due->payableBalance();
+        $this->toast('success', "{$due->fee_head} added as an advance fee. Record the payment below.");
+    }
+
+    /** Undo "Pay in advance" (clicked by mistake) while the advance fee has no payment. */
+    public function revokeAdvance($id)
+    {
+        abort_unless(Auth::user()->can('payments.collect') || Auth::user()->can('fees.manage'), 403);
+
+        $due = $this->due($id);
+        $this->run(fn () => app(FeeService::class)->revokeAdvance($due, 'Cancelled at the office'), "Advance fee {$due->fee_head} cancelled. It is listed as upcoming again.", 'success');
+        if ((int) $this->pay_due_id === (int) $id && optional($due->fresh())->trashed()) {
+            $this->reset(['pay_due_id', 'pay_amount']);
+        }
+    }
+
     // ------------------------------------------------------------------ payments (payments.collect)
 
     public function updatedPayDueId()
@@ -148,12 +238,22 @@ class StudentFeesComponent extends Component
             'pay_reference' => 'reference', 'pay_upi' => 'payer UPI ID', 'pay_proof' => 'payment proof',
         ]);
 
-        $this->run(function () use ($due, $gateway) {
-            app(FeeService::class)->recordPayment($due, $gateway, (float) $this->pay_amount, $this->pay_date,
-                $this->pay_reference, $gateway->type === 'upi' ? $this->pay_upi : null, $this->pay_proof, $this->pay_remarks);
-            $this->reset(['pay_due_id', 'pay_amount', 'pay_gateway_id', 'pay_reference', 'pay_upi', 'pay_proof', 'pay_remarks']);
-            $this->pay_date = now()->toDateString();
-        }, 'Payment recorded. It is now waiting for Accounts verification.');
+        // Accounts (payments.verify) record confirmed payments: no separate approval. Others' wait for Accounts.
+        $confirm = Auth::user()->can('payments.verify');
+        $receipt = null;
+        try {
+            $payment = app(FeeService::class)->recordPayment($due, $gateway, (float) $this->pay_amount, $this->pay_date,
+                $this->pay_reference, $gateway->type === 'upi' ? $this->pay_upi : null, $this->pay_proof, $this->pay_remarks, $confirm);
+            $receipt = $payment->receipt_number;
+        } catch (RuntimeException $e) {
+            return $this->toast('danger', $e->getMessage());
+        }
+
+        $this->reset(['pay_due_id', 'pay_amount', 'pay_gateway_id', 'pay_reference', 'pay_upi', 'pay_proof', 'pay_remarks']);
+        $this->pay_date = now()->toDateString();
+        $this->toast('success', $confirm
+            ? "Payment recorded and confirmed. Receipt {$receipt} issued and the fee is updated."
+            : 'Payment recorded. It is now waiting for Accounts verification.');
     }
 
     protected function run(callable $action, string $message, string $type = 'success')
@@ -177,8 +277,16 @@ class StudentFeesComponent extends Component
         $dues = StudentDue::where('student_id', $student->id)->with('payments')
             ->orderByRaw('period_no IS NOT NULL, period_no')->orderBy('due_date')->get();
         $gateway = $this->pay_gateway_id ? PaymentGateway::find($this->pay_gateway_id) : null;
+        $fees = app(FeeService::class);
+        $upcoming = $fees->upcomingFees($student);
 
         return view('livewire.admin.students.student-fees-component', [
+            'nextDue' => $fees->nextPayableDue($student),
+            'confirmInfo' => $this->confirmInfo(),
+            'revocable' => $dues->filter(fn ($d) => $fees->canRevokeAdvance($d))->pluck('id'),
+            'upcoming' => $upcoming,
+            'upcomingTotal' => $upcoming->sum(fn ($item) => (float) $item['fee']->amount),
+            'paidTotal' => $dues->sum(fn ($d) => (float) $d->amount_paid),
             'student' => $student,
             'dues' => $dues,
             'payments' => $student->payments()->with(['due', 'gateway', 'verifier'])->latest()->get(),

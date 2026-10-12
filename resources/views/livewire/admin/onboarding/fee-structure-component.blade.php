@@ -209,6 +209,9 @@
                                                 @if($fee->academicYear)
                                                     <span class="fs-chip fs-chip-year ms-1" title="Only for academic year {{ $fee->academicYear->name }}">{{ $fee->academicYear->name }}</span>
                                                 @endif
+                                                @if($fee->allow_advance && $fee->period_no)
+                                                    <span class="fs-chip fs-chip-adv ms-1" title="Students may pay it before it is charged"><i class="ti ti-player-track-next"></i> Advance</span>
+                                                @endif
                                             </td>
                                             <td class="text-end"><span class="fs-amount">{{ money_inr($fee->amount, false) }}</span></td>
                                             <td>
@@ -331,6 +334,17 @@
                         @include('livewire.admin.students.partials.input', ['name' => 'fee_head', 'label' => 'Fee', 'required' => true, 'col' => 12, 'placeholder' => 'e.g. Admission fee', 'fieldIcon' => 'ti ti-receipt-2'])
                         @include('livewire.admin.students.partials.input', ['name' => 'amount', 'label' => 'Amount', 'type' => 'number', 'step' => '0.01', 'required' => true, 'placeholder' => '0.00', 'fieldIcon' => 'ti ti-currency-rupee'])
                         @include('livewire.admin.students.partials.input', ['name' => 'sort_order', 'label' => 'Display order', 'type' => 'number', 'required' => true, 'fieldIcon' => 'ti ti-arrows-sort'])
+                        @if($period_no)
+                        <div class="col-12">
+                            <label class="fs-adm-toggle {{ $allow_advance ? 'is-on' : '' }}">
+                                <input class="form-check-input" type="checkbox" wire:model="allow_advance">
+                                <span>
+                                    <span class="fw-semibold d-block"><i class="ti ti-player-track-next"></i> Allow advance payment</span>
+                                    <span class="small text-muted">Students may pay this fee before its semester starts (once their earlier fees are paid). It is then not charged again.</span>
+                                </span>
+                            </label>
+                        </div>
+                        @endif
                         @if(!$period_no)
                         <div class="col-12">
                             <label class="fs-adm-toggle {{ $admission_fee ? 'is-on' : '' }}">
@@ -393,6 +407,7 @@
         .fs-ui .fs-period-total { font-weight: 700; color: #0F172A; }
         .fs-ui .fs-chip-year { background: #F3F4F6; color: #374151; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
         .fs-ui .fs-chip-period { background: #EDE9FE; color: #6D28D9; }
+        .fs-ui .fs-chip-adv { background: #E0F2FE; color: #0369A1; }
         .fs-ui .fs-due-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
         .fs-ui .fs-period-note { font-size: 12.5px; color: #6D28D9; background: #F5F3FF; border: 1px solid #DDD6FE; border-radius: 10px; padding: 9px 12px; }
         .fs-ui .fs-hero { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 18px 22px; border-radius: 14px; border: 1px solid var(--fs-border);

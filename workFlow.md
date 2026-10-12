@@ -347,7 +347,8 @@ Payments arrive by:
 - **UPI/GPay:** UTR + screenshot from the student or office; or
 - **offline:** cash / bank / cheque recorded at the desk.
 
-Every payment waits as **Pending verification**.
+- Payments **recorded by Accounts** (users who can verify payments; also Super Admin) are **confirmed at once** — receipt issued, the student's fee updated and the student notified, with **no separate approval**.
+- Payments submitted by the **student on the portal**, or recorded by other office staff (e.g. Institute Admin), wait as **Pending verification** for Accounts.
 
 **Payment Verification** queue (To verify / Approved / Rejected / Fee gate):
 - shows the student's phone number under the name and the fee gate status in the table;
@@ -422,6 +423,7 @@ The ER & ID Cards list has filters and keeps the Students menu highlighted when 
 | **Period** | Blank = **one-time fee**; 1…N = fee of that semester / term (labels come from the course) |
 | **Admission fee** flag | One-time fees only. This is the fee paid **during registration**. A course with **no** admission fee charges every applicable fee at registration (older behaviour) |
 | Due date | **On period start** (default for semester fees) · **after joining** (joining date + N days; 0 = on joining) · **fixed date** (same calendar date for everyone) |
+| **Allow advance payment** ✅ | Semester (period) fees only. Students may pay the fee before its semester starts (see 9.4) |
 | Order, Active/Inactive | Inactive lines are never charged |
 
 **Screen:**
@@ -449,6 +451,17 @@ The ER & ID Cards list has filters and keeps the Students menu highlighted when 
 | New or re-activated fee line | Charged **at once** to every current student it applies to (all statuses except rejected / alumni). A semester fee goes only to students **currently in that semester** |
 | Editing a fee line | Applies only to students charged from then on; existing dues are not changed |
 | Never | A fee is never charged twice to the same student |
+
+### 9.4 Payment order, advance payment & full fee list ✅
+
+| Rule | Detail |
+| --- | --- |
+| **Payment order** | A student's open fees are paid **in order**: earliest due date first (one-time fees before semester fees on the same date). Only the **next fee** can be paid on the portal; the fee after it opens once it is fully covered by payments (confirmed, or submitted and waiting for Accounts) |
+| **Advance payment** | When **no charged fee is still open**, the **next upcoming fee that allows advance payment** can be paid early (portal "Pay in advance", or "Pay in advance" on the admin Fees page). Paying it charges it at once (marked **Paid in advance**); it is **not charged again** when the semester starts |
+| Advance — when | Only after the ER number (student ER Issued / Active). One fee at a time, in order; the next advance fee opens once the previous one is paid |
+| **Cancel advance** ✅ | Undo a mistaken "Pay in advance": on the portal the advance form has **Cancel** (nothing is charged until the payment is submitted); an advance fee added but not paid shows **Cancel advance** (portal and admin Fees page, staff with payments.collect / fees.manage). Refused while a payment is confirmed or waiting — Accounts rejects the payment first. The fee becomes upcoming again; audited |
+| **Full fee list** | Portal Payment page and admin Fees & Payments show **every fee assigned to the student**: Paid · Part paid · Being confirmed · **Pay now** (next) · **Waiting** (opens after the fee before it) · **Upcoming** (not charged yet: "Charged with your ER number" / "Charged when Semester N starts", with the expected date) · totals for Paid, To pay now, Upcoming and All fees |
+| Office desk | Staff see the same order ("Next to pay") but may record a payment against any open fee |
 
 > **Existing data note:** fee lines created before Module 2B are one-time lines for every year. Students who received their ER number before Module 2B have no semester record; they are treated as Semester 1 for fees.
 
@@ -711,6 +724,8 @@ Columns: **ID** · **Scenario** · **Expected result**. ✅ = verifiable now; �
 | G-05 | Verified students in the document queue | Still listed (Gate approved tab), not hidden |
 | G-06 | Approve Gate 2 with outstanding dues / payment pending | Blocked with the reason |
 | G-07 | Approve a UPI payment | Receipt `RCPT/YYYY/#####`; due paid / part paid; student notified |
+| G-08a | Accounts records a cash payment at the desk | Confirmed immediately: receipt `RCPT/YYYY/#####`, fee paid / part paid, student notified; nothing waits in Payment Verification |
+| G-08b | Institute Admin records a desk payment | Waits as Pending verification until Accounts approves |
 | G-08 | Payment queue | Phone under the name; fee gate status visible; handled payments stay listed |
 | G-09 | Approve Gate 1 and Gate 2 (either order) | ER `ER-YYYY-#####` issued automatically; status ER Issued; ER form + pending ID card created |
 | G-10 | Two students approved at the same moment | Different, consecutive ER numbers (no duplicates) |
@@ -739,6 +754,16 @@ Columns: **ID** · **Scenario** · **Expected result**. ✅ = verifiable now; �
 | F-12 | Delete a line already charged | Refused; set inactive instead |
 | F-13 | Student Fees page / portal Payment | Dues grouped One-time / Semester 1 / … with balances |
 | F-14 | Students list | Current semester chip ("Semester 1 · 2026-27"); filter by semester after choosing a course |
+| F-15 | Student with two open fees (portal) | Only the earliest-due fee is payable ("Pay now"); the other shows "Waiting"; submitting payment for it is refused |
+| F-16 | Submit a payment covering the next fee | The following fee opens immediately (even before Accounts confirms) |
+| F-17 | All charged fees paid; Semester 2 tuition allows advance | "Pay in advance" shown on Semester 2 tuition only; Semester 3 tuition shows "Advance allowed" but not payable yet |
+| F-18 | Pay Semester 2 tuition in advance, then promote to Semester 2 | Due marked "Paid in advance"; on promotion only the other Semester 2 fees are charged — tuition not charged twice |
+| F-19 | One-time fee with "Allow advance payment" | Switch not offered; saved as off |
+| F-20 | Portal / admin fee list | Shows paid, pending, waiting and upcoming fees with Paid / To pay now / Upcoming / All fees totals |
+| F-21 | Portal: click "Pay in advance", then Cancel | Form closes; nothing charged; fee still Upcoming |
+| F-22 | Admin: "Pay in advance", then "Cancel advance" | Advance fee removed, listed as Upcoming again; audit entry `revoke_advance` |
+| F-23 | Advance fee with a payment waiting for verification | No "Cancel advance"; after Accounts rejects the payment it can be cancelled (student or staff) |
+| F-24 | Try "Cancel advance" on a normal (non-advance) fee | Refused |
 
 ### 19.7 Notifications ✅
 

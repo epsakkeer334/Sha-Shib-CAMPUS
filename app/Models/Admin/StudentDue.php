@@ -13,7 +13,7 @@ class StudentDue extends BaseModel
     use BelongsToInstitute;
 
     protected $fillable = [
-        'institute_id', 'student_id', 'course_fee_id', 'academic_year_id', 'period_no', 'fee_head', 'amount_due', 'amount_paid', 'due_date', 'status', 'remarks',
+        'institute_id', 'student_id', 'course_fee_id', 'academic_year_id', 'period_no', 'advance', 'fee_head', 'amount_due', 'amount_paid', 'due_date', 'status', 'remarks',
         'created_by', 'updated_by',
     ];
 
@@ -22,6 +22,7 @@ class StudentDue extends BaseModel
         'amount_paid' => 'decimal:2',
         'due_date' => 'date',
         'period_no' => 'integer',
+        'advance' => 'boolean', // paid in advance, before the fee was due to be charged
     ];
 
     /** "Semester 2" / "One-time" — the course's period name for this due. */

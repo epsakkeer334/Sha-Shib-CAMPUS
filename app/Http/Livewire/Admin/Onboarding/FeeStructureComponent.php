@@ -56,6 +56,7 @@ class FeeStructureComponent extends Component
     public $admission_fee = false; // paid during registration; other fees follow with the ER number
     public $academic_year_id = null; // null = every academic year
     public $period_no = null;        // null = one-time fee
+    public $allow_advance = false;   // period fees: students may pay it before it is charged
 
     public function mount()
     {
@@ -100,6 +101,9 @@ class FeeStructureComponent extends Component
     public function updatedPeriodNo()
     {
         $this->period_no = $this->period_no === '' ? null : $this->period_no;
+        if (!$this->period_no) {
+            $this->allow_advance = false; // advance payment is for period (semester) fees
+        }
         if ($this->period_no) {
             $this->admission_fee = false;
             if (!$this->editingId) {
@@ -142,6 +146,7 @@ class FeeStructureComponent extends Component
             'sort_order' => 'required|integer|min:0|max:999',
             'status' => 'boolean',
             'admission_fee' => 'boolean',
+            'allow_advance' => 'boolean',
         ];
     }
 
@@ -175,6 +180,7 @@ class FeeStructureComponent extends Component
             'amount' => $fee->amount, 'due_days' => $fee->due_days, 'sort_order' => $fee->sort_order, 'status' => $fee->status ? 1 : 0,
             'due_type' => $fee->due_type ?: CourseFee::DUE_JOINING, 'due_date' => optional($fee->due_date)->toDateString(),
             'admission_fee' => (bool) $fee->admission_fee, 'academic_year_id' => $fee->academic_year_id, 'period_no' => $fee->period_no,
+            'allow_advance' => (bool) $fee->allow_advance,
         ]);
         $this->dispatchBrowserEvent('open-fee-structure-modal');
     }
@@ -192,6 +198,7 @@ class FeeStructureComponent extends Component
             'sort_order' => $data['sort_order'], 'status' => (bool) $data['status'],
             'admission_fee' => $data['period_no'] ? false : (bool) $data['admission_fee'],
             'academic_year_id' => $data['academic_year_id'] ?: null, 'period_no' => $data['period_no'] ? (int) $data['period_no'] : null,
+            'allow_advance' => $data['period_no'] ? (bool) $data['allow_advance'] : false,
         ];
 
         $wasActive = false;
@@ -298,7 +305,7 @@ class FeeStructureComponent extends Component
     protected function resetForm()
     {
         $this->resetValidation();
-        $this->reset(['editingId', 'fee_head', 'amount', 'due_date', 'admission_fee', 'period_no']);
+        $this->reset(['editingId', 'fee_head', 'amount', 'due_date', 'admission_fee', 'period_no', 'allow_advance']);
         $this->academic_year_id = $this->filterYear ? (int) $this->filterYear : null;
         $this->due_type = CourseFee::DUE_JOINING;
         if (Auth::user()->isSuperAdmin() && !$this->instituteId && $this->filterInstitute) {

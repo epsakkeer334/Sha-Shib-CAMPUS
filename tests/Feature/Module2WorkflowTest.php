@@ -149,10 +149,11 @@ class Module2WorkflowTest extends TestCase
             ->call('recordPayment')
             ->assertHasNoErrors();
 
+        // recorded by Accounts → confirmed at once, no separate approval
         $payment = StudentPayment::where('student_id', $student->id)->latest('id')->firstOrFail();
-        Livewire::test(PaymentVerificationComponent::class)->call('select', $payment->id)->call('approve');
+        $this->assertSame('success', $payment->status);
 
-        return $payment->fresh();
+        return $payment;
     }
 
     // ------------------------------------------------------------------ the whole flow
@@ -187,7 +188,8 @@ class Module2WorkflowTest extends TestCase
         $this->assertSame(2, $student->dues()->count());
         $this->assertSame('2026-10-15', $student->dues()->where('fee_head', 'Lab & library fee')->first()->due_date->toDateString());
 
-        // GPay payment for the lab fee: UTR + screenshot, waits for verification
+        // GPay payment for the lab fee recorded by the office (Institute Admin): UTR + screenshot, waits for Accounts
+        $this->actingAs($this->admin);
         $labDue = $student->dues()->where('fee_head', 'Lab & library fee')->first();
         $fees->set('pay_due_id', $labDue->id)
             ->assertSet('pay_amount', 6500.0)
@@ -206,6 +208,7 @@ class Module2WorkflowTest extends TestCase
         $fees->set('pay_due_id', $admissionDue->id)->set('pay_gateway_id', $this->cash->id)->call('recordPayment')->assertHasNoErrors();
 
         // Gate 2 is blocked while payments wait for verification
+        $this->actingAs($this->accounts);
         Livewire::test(PaymentVerificationComponent::class)->set('tab', 'gate')->call('approveGate', $student->id);
         $this->assertFalse($student->fresh()->gateApproved(EnrollmentApproval::FEES));
 
@@ -430,9 +433,11 @@ class Module2WorkflowTest extends TestCase
             ->call('approveGate', $done->id)
             ->assertSee('Approved by')->assertDontSee('Approve fee gate');
         $this->assertTrue($done->fresh()->gateApproved(\App\Models\Admin\EnrollmentApproval::FEES));
+        $this->actingAs($this->admin); // recorded by the office → waits for Accounts
         Livewire::test(StudentFeesComponent::class, ['student' => $waiting->id])
             ->set('pay_due_id', $waiting->dues()->first()->id)->set('pay_amount', 30000)->set('pay_gateway_id', $this->cash->id)
             ->call('recordPayment')->assertHasNoErrors();
+        $this->actingAs($this->accounts);
 
         // Default "All payments": approved payment still listed, the one to verify highlighted and first
         $html = Livewire::test(PaymentVerificationComponent::class)
@@ -558,6 +563,7 @@ class Module2WorkflowTest extends TestCase
         app(\App\Services\FeeService::class)->addDue($student, 'Semester 1 fee', 42000, '2026-10-15');
         $due = $student->dues()->first();
 
+        $this->actingAs($this->admin); // the office records; Accounts verifies
         $fees = Livewire::test(StudentFeesComponent::class, ['student' => $student->id]);
 
         // More than the balance; GPay without UTR / screenshot
@@ -568,8 +574,10 @@ class Module2WorkflowTest extends TestCase
         // Part payment by cash (no reference needed)
         $fees->set('pay_amount', 20000)->set('pay_gateway_id', $this->cash->id)->call('recordPayment')->assertHasNoErrors();
         $payment = StudentPayment::where('student_id', $student->id)->first();
+        $this->assertSame('pending_verification', $payment->status);
 
         // Reject needs a reason; rejected payment leaves the due untouched
+        $this->actingAs($this->accounts);
         $queue = Livewire::test(PaymentVerificationComponent::class)->call('select', $payment->id);
         $queue->call('reject')->assertHasErrors(['reason' => 'required']);
         $queue->set('reason', 'Cash not received at the counter.')->call('reject')->assertHasNoErrors();
@@ -581,6 +589,47 @@ class Module2WorkflowTest extends TestCase
         $due->refresh();
         $this->assertSame('partial', $due->status);
         $this->assertSame(22000.0, $due->balance);
+    }
+
+    public function test_payment_recorded_by_accounts_is_confirmed_without_approval()
+    {
+        $student = $this->submittedStudent();
+        $this->actingAs($this->accounts);
+        $fees = app(\App\Services\FeeService::class);
+        $due = $fees->addDue($student, 'Semester 1 fee', 42000, '2026-10-15');
+
+        Livewire::test(StudentFeesComponent::class, ['student' => $student->id])
+            ->assertSee('no approval needed')
+            ->set('pay_due_id', $due->id)->set('pay_amount', 42000)->set('pay_gateway_id', $this->cash->id)
+            ->call('recordPayment')->assertHasNoErrors()
+            ->assertDispatchedBrowserEvent('show-toast', fn ($n, $d) => str_contains($d['message'], 'confirmed') && str_contains($d['message'], 'RCPT/'));
+
+        // confirmed at once: receipt, verifier, fee updated, student told; nothing waits in the queue
+        $payment = StudentPayment::where('student_due_id', $due->id)->firstOrFail();
+        $this->assertSame('success', $payment->status);
+        $this->assertMatchesRegularExpression('#^RCPT/\d{4}/\d{5}$#', $payment->receipt_number);
+        $this->assertSame($this->accounts->id, $payment->verified_by);
+        $this->assertSame('cleared', $due->fresh()->status);
+        $this->assertSame(0.0, $student->fresh()->outstandingAmount());
+        $this->assertTrue(NotificationLog::where('event_type', 'payment_received')->where('notifiable_id', $student->id)->exists()); // receipt message to the student
+        $this->assertTrue(\App\Models\Admin\AuditTrail::where('module', 'student_payments')->where('action', 'approve')->where('reference_id', $payment->id)->exists());
+        Livewire::test(PaymentVerificationComponent::class)->set('tab', 'pending')->assertDontSee($student->full_name);
+
+        // a part payment by Accounts is confirmed too → part paid
+        $due2 = $fees->addDue($student->fresh(), 'Lab fee', 6000, '2026-10-20');
+        Livewire::test(StudentFeesComponent::class, ['student' => $student->id])
+            ->set('pay_due_id', $due2->id)->set('pay_amount', 2500)->set('pay_gateway_id', $this->cash->id)->call('recordPayment')->assertHasNoErrors();
+        $this->assertSame('partial', $due2->fresh()->status);
+        $this->assertSame(3500.0, $due2->fresh()->balance);
+
+        // the office (Institute Admin: records, cannot verify) still needs Accounts
+        $this->actingAs($this->admin);
+        Livewire::test(StudentFeesComponent::class, ['student' => $student->id])
+            ->assertSee('Accounts confirms each payment')
+            ->set('pay_due_id', $due2->id)->set('pay_amount', 3500)->set('pay_gateway_id', $this->cash->id)->call('recordPayment')->assertHasNoErrors()
+            ->assertDispatchedBrowserEvent('show-toast', fn ($n, $d) => str_contains($d['message'], 'waiting for Accounts verification'));
+        $this->assertSame('pending_verification', StudentPayment::where('student_due_id', $due2->id)->latest('id')->first()->status);
+        $this->assertSame('partial', $due2->fresh()->status);
     }
 
     public function test_waive_and_delete_rules_and_gate_two_blockers()

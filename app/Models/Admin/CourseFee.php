@@ -15,11 +15,12 @@ class CourseFee extends BaseModel
     const DUE_FIXED = 'fixed';     // due on a fixed calendar date
     const DUE_PERIOD_START = 'period_start'; // due on the start date of the student's academic period (period fees)
 
-    protected $fillable = ['institute_id', 'course_id', 'academic_year_id', 'period_no', 'fee_head', 'amount', 'admission_fee', 'due_type', 'due_date', 'due_days', 'sort_order', 'status', 'created_by', 'updated_by'];
+    protected $fillable = ['institute_id', 'course_id', 'academic_year_id', 'period_no', 'fee_head', 'amount', 'admission_fee', 'allow_advance', 'due_type', 'due_date', 'due_days', 'sort_order', 'status', 'created_by', 'updated_by'];
 
     protected $casts = [
         'amount' => 'decimal:2',
         'admission_fee' => 'boolean',
+        'allow_advance' => 'boolean', // may be paid before it is charged (advance payment)
         'period_no' => 'integer',
         'due_date' => 'date',
         'due_days' => 'integer',

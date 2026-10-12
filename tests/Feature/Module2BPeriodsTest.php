@@ -318,6 +318,173 @@ class Module2BPeriodsTest extends TestCase
         $page->call('create', $this->course->id)->set('period_no', 9)->set('fee_head', 'Extra')->set('amount', 10)->call('save')->assertHasErrors(['period_no' => 'max']);
     }
 
+    public function test_fees_are_paid_in_order_and_the_next_semester_can_be_paid_in_advance()
+    {
+        \Illuminate\Support\Facades\Storage::fake('local');
+        $calendar = $this->generateCalendar('2026-07-01');
+        $this->fee(['fee_head' => 'Admission fee', 'amount' => 15000, 'admission_fee' => true]);
+        $this->fee(['fee_head' => 'Caution deposit', 'amount' => 5000, 'due_days' => 30, 'sort_order' => 2]);
+        $this->fee(['fee_head' => 'Tuition', 'amount' => 40000, 'period_no' => 1, 'due_type' => CourseFee::DUE_PERIOD_START]);
+        $sem2 = $this->fee(['fee_head' => 'Tuition', 'amount' => 42000, 'period_no' => 2, 'due_type' => CourseFee::DUE_PERIOD_START, 'allow_advance' => true]);
+        $exam2 = $this->fee(['fee_head' => 'Exam fee', 'amount' => 2000, 'period_no' => 2, 'due_type' => CourseFee::DUE_PERIOD_START, 'sort_order' => 2]);
+        $sem3 = $this->fee(['fee_head' => 'Tuition', 'amount' => 44000, 'period_no' => 3, 'due_type' => CourseFee::DUE_PERIOD_START, 'allow_advance' => true]);
+        $fees = app(FeeService::class);
+        $cash = \App\Models\Admin\PaymentGateway::where('code', 'cash')->firstOrFail();
+        $this->actingAs($this->admin);
+        $pay = function ($due) use ($fees, $cash) {
+            $payment = $fees->recordPayment($due->fresh(), $cash, (float) $due->fresh()->payableBalance(), now(), null, null, null, null);
+            $fees->approvePayment($payment);
+        };
+
+        $studentUser = User::create(['name' => 'Nikhil', 'email' => uniqid('nikhil') . '@student.test', 'password' => bcrypt('x'), 'institute_id' => $this->inst->id, 'status' => true]);
+        $studentUser->assignRole('student');
+        $student = $this->makeStudent(['user_id' => $studentUser->id]);
+        $fees->generateDues($student);
+
+        // registration: every other fee is listed as upcoming; nothing can be paid in advance yet
+        $upcoming = $fees->upcomingFees($student->fresh());
+        $this->assertSame(['Caution deposit', 'Tuition', 'Tuition', 'Exam fee', 'Tuition'], $upcoming->pluck('fee.fee_head')->all());
+        $this->assertSame('Charged with your ER number', $upcoming[1]['when']);
+        $this->assertSame('2027-01-01', $upcoming[2]['expected']->toDateString());
+        $this->assertFalse($upcoming->contains('advance', true));
+
+        // ER issued: Semester 1 starts; fees are paid in due-date order
+        $student->update(['er_number' => 'ER-T-' . uniqid(), 'status' => 'er_issued']);
+        app(PeriodService::class)->startFirstPeriod($student->fresh());
+        $fees->generateDues($student->fresh());
+        $student = $student->fresh();
+        $this->assertSame(['Tuition', 'Admission fee', 'Caution deposit'], $fees->openDuesInOrder($student)->pluck('fee_head')->all());
+        $first = $fees->nextPayableDue($student);
+        $this->assertSame('Tuition', $first->fee_head);
+
+        // a payment waiting for verification that covers it opens the next fee
+        $payment = $fees->recordPayment($first, $cash, 40000, now(), null, null, null, null);
+        $this->assertSame('Admission fee', $fees->nextPayableDue($student)->fee_head);
+        $fees->approvePayment($payment);
+        $pay($fees->nextPayableDue($student));
+        $pay($fees->nextPayableDue($student));
+        $this->assertNull($fees->nextPayableDue($student));
+
+        // everything charged is paid: the next semester's tuition can be paid in advance (exam fee does not allow it)
+        $upcoming = $fees->upcomingFees($student->fresh());
+        $this->assertSame(['Tuition', 'Exam fee', 'Tuition'], $upcoming->pluck('fee.fee_head')->all());
+        $this->assertSame([true, false, false], $upcoming->pluck('advance')->all());
+        $this->assertSame([true, false, true], $upcoming->pluck('advance_allowed')->all());
+        try {
+            $fees->chargeAdvance($student, $sem3);
+            $this->fail('Semester 3 must not be payable before Semester 2');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('Pay the fees before it first', $e->getMessage());
+        }
+
+        // the student pays it in advance on the portal
+        \App\Models\Admin\InstitutePaymentGateway::create(['institute_id' => $this->inst->id, 'payment_gateway_id' => \App\Models\Admin\PaymentGateway::where('code', 'gpay')->value('id'),
+            'upi_id' => 'sigma@okaxis', 'payee_name' => 'Sigma Aviation', 'status' => true]);
+        $this->actingAs($studentUser);
+        Livewire::test(\App\Http\Livewire\Portal\PaymentPage::class)
+            ->assertSee('Pay in advance')->assertSee('Exam fee')->assertSee('Charged when Semester 2 starts')
+            ->assertSet('due_id', null) // the advance form opens only on request
+            ->call('payAdvance', $sem2->id)->assertSet('due_id', 'advance-' . $sem2->id)->assertSet('amount', 42000.0)
+            ->set('due_id', 'advance-' . $sem3->id)->set('amount', 100)->set('utr', '627514903311')
+            ->set('proof', \Illuminate\Http\UploadedFile::fake()->image('gpay.png'))->call('pay')->assertHasErrors('due_id')
+            ->set('due_id', 'advance-' . $sem2->id)->set('amount', 42000)->call('pay')->assertHasNoErrors();
+        $advanceDue = $student->dues()->where('course_fee_id', $sem2->id)->firstOrFail();
+        $this->assertTrue($advanceDue->advance);
+        $this->assertSame(2, $advanceDue->period_no);
+        $this->assertSame('2027-01-01', $advanceDue->due_date->toDateString());
+
+        // once confirmed, Semester 3 tuition opens for advance
+        $this->actingAs($this->admin);
+        $fees->approvePayment(\App\Models\Admin\StudentPayment::where('student_due_id', $advanceDue->id)->firstOrFail());
+        $this->assertSame([false, true], $fees->upcomingFees($student->fresh())->pluck('advance')->all());
+
+        // moving to Semester 2 charges only the exam fee — the tuition paid in advance is not charged again
+        StudentPeriod::where('student_id', $student->id)->update(['status' => 'completed']);
+        StudentPeriod::create(['institute_id' => $student->institute_id, 'student_id' => $student->id, 'course_period_id' => $calendar[1]->id, 'period_no' => 2, 'status' => 'current', 'started_on' => '2027-01-01']);
+        $fees->generateDues($student->fresh());
+        $this->assertSame(1, $student->dues()->where('course_fee_id', $sem2->id)->count());
+        $this->assertSame(1, $student->dues()->where('course_fee_id', $exam2->id)->count());
+        $this->assertSame('Exam fee', $fees->nextPayableDue($student->fresh())->fee_head);
+
+        // the admin fee page lists paid, open and upcoming fees
+        Livewire::test(\App\Http\Livewire\Admin\Students\StudentFeesComponent::class, ['student' => $student->id])
+            ->assertSee('Next to pay')->assertSee('Paid in advance')->assertSee('Upcoming — not charged yet')->assertSee('Advance allowed');
+    }
+
+    public function test_pay_in_advance_clicked_by_mistake_can_be_cancelled()
+    {
+        $this->generateCalendar('2026-07-01');
+        $sem2 = $this->fee(['fee_head' => 'Tuition', 'amount' => 42000, 'period_no' => 2, 'due_type' => CourseFee::DUE_PERIOD_START, 'allow_advance' => true]);
+        $fees = app(FeeService::class);
+        $cash = \App\Models\Admin\PaymentGateway::where('code', 'cash')->firstOrFail();
+        $studentUser = User::create(['name' => 'Nikhil', 'email' => uniqid('nikhil') . '@student.test', 'password' => bcrypt('x'), 'institute_id' => $this->inst->id, 'status' => true]);
+        $studentUser->assignRole('student');
+        $student = $this->makeStudent(['user_id' => $studentUser->id, 'er_number' => 'ER-T-' . uniqid(), 'status' => 'er_issued']);
+        app(PeriodService::class)->startFirstPeriod($student);
+
+        // the admission fee is already paid (so nothing is open and the portal payment page is available)
+        $this->actingAs($this->admin);
+        $admission = $fees->addDue($student, 'Admission fee', 15000, '2026-10-01');
+        $fees->approvePayment($fees->recordPayment($admission, $cash, 15000, now(), null, null, null, null));
+
+        // office: "Pay in advance" adds the fee at once — "Cancel advance" removes it again
+        $page = Livewire::test(\App\Http\Livewire\Admin\Students\StudentFeesComponent::class, ['student' => $student->id])
+            ->call('ask', 'advance', $sem2->id)->assertDispatchedBrowserEvent('open-fee-modal')->assertSee('Pay in advance?');
+        $this->assertSame(0, $student->dues()->where('course_fee_id', $sem2->id)->count()); // nothing until confirmed
+        $page->call('confirmed');
+        $due = $student->dues()->where('course_fee_id', $sem2->id)->firstOrFail();
+        $page->assertSet('pay_due_id', $due->id)->assertSee('Cancel advance')
+            ->call('ask', 'revoke', $due->id)->assertSee('Cancel advance?')->assertSee('listed as upcoming again')
+            ->call('confirmed')->assertSet('pay_due_id', null)->assertSet('confirmAction', null);
+        $this->assertSoftDeleted($due);
+        $this->assertTrue(\App\Models\Admin\AuditTrail::where('action', 'revoke_advance')->where('reference_id', $due->id)->exists());
+        $this->assertSame([true], $fees->upcomingFees($student->fresh())->pluck('advance')->all()); // upcoming again
+
+        // a payment waiting for verification blocks cancelling; once Accounts rejects it, it can be cancelled
+        $due = $fees->chargeAdvance($student->fresh(), $sem2);
+        $payment = $fees->recordPayment($due, $cash, 42000, now(), null, null, null, null);
+        Livewire::test(\App\Http\Livewire\Admin\Students\StudentFeesComponent::class, ['student' => $student->id])
+            ->assertDontSee('Cancel advance')
+            ->call('revokeAdvance', $due->id)->assertDispatchedBrowserEvent('show-toast', fn ($n, $d) => $d['type'] === 'danger');
+        $this->assertNotSoftDeleted($due);
+        $fees->rejectPayment($payment, 'Paid by mistake');
+
+        // the student cancels it on the portal
+        $this->actingAs($studentUser);
+        Livewire::test(\App\Http\Livewire\Portal\PaymentPage::class)
+            ->assertSee('Cancel advance')
+            ->call('ask', 'revoke', $due->id)->assertSee('Cancel advance payment?')
+            ->call('closeConfirm')->assertDontSee('Cancel advance payment?') // pop-up Cancel keeps the fee
+            ->call('ask', 'revoke', $due->id)->call('confirmed')->assertDispatchedBrowserEvent('show-toast', fn ($n, $d) => $d['type'] === 'success');
+        $this->assertSoftDeleted($due);
+
+        // portal: opening the advance form by mistake and cancelling it charges nothing
+        Livewire::test(\App\Http\Livewire\Portal\PaymentPage::class)
+            ->call('ask', 'advance', $sem2->id)->assertSee('Pay in advance?')->assertSet('due_id', null)
+            ->call('confirmed')->assertSet('due_id', 'advance-' . $sem2->id)->assertSee('Nothing is charged until you submit')
+            ->call('cancelAdvance')->assertSet('due_id', null)->assertDontSee('Nothing is charged until you submit');
+        $this->assertSame(0, $student->dues()->where('course_fee_id', $sem2->id)->count());
+
+        // a fee that was not added as an advance cannot be removed this way
+        $this->actingAs($this->admin);
+        Livewire::test(\App\Http\Livewire\Admin\Students\StudentFeesComponent::class, ['student' => $student->id])
+            ->call('ask', 'revoke', $admission->id)->call('confirmed')->assertDispatchedBrowserEvent('show-toast', fn ($n, $d) => $d['type'] === 'danger');
+        $this->assertNotSoftDeleted($admission);
+    }
+
+    public function test_fee_structure_saves_the_advance_payment_switch_for_semester_fees_only()
+    {
+        $this->actingAs($this->admin);
+        Livewire::test(FeeStructureComponent::class)
+            ->call('create', $this->course->id)->set('period_no', 2)->set('allow_advance', true)
+            ->set('fee_head', 'Tuition')->set('amount', 42000)->call('save')->assertHasNoErrors()
+            ->call('create', $this->course->id)->set('allow_advance', true)
+            ->set('fee_head', 'Library')->set('amount', 1000)->call('save')->assertHasNoErrors()
+            ->assertSee('Advance');
+        $this->assertTrue(CourseFee::where('fee_head', 'Tuition')->firstOrFail()->allow_advance);
+        $this->assertFalse(CourseFee::where('fee_head', 'Library')->firstOrFail()->allow_advance); // one-time fee: never advance
+    }
+
     public function test_fee_structure_year_filter_grouping_and_copy_from_previous_year()
     {
         $this->fee(['fee_head' => 'Admission fee', 'amount' => 15000, 'admission_fee' => true]);
