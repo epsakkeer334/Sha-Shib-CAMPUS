@@ -428,6 +428,64 @@ class Module1CoreTest extends TestCase
         $this->assertSame(1, $hot->fresh()->permissions->count());
     }
 
+    public function test_audit_trail_filters_and_detail_popup()
+    {
+        $super = $this->makeUser('super-admin');
+        $adminA = $this->makeUser('institute-admin', $this->instA);
+        $mk = fn ($attrs) => AuditTrail::create($attrs + ['ip_address' => '10.0.0.7']);
+        $a = $mk(['user_id' => $adminA->id, 'institute_id' => $this->instA->id, 'action' => 'approve', 'module' => 'enrollment',
+            'meta' => ['description' => 'Gate 1 approved for Alpha Student', 'reason' => 'All documents fine']]);
+        $b = $mk(['user_id' => null, 'institute_id' => $this->instB->id, 'action' => 'update', 'module' => 'students',
+            'meta' => ['description' => 'Updated Beta Student', 'old' => ['phone' => '111'], 'new' => ['phone' => '222']]]);
+        AuditTrail::whereKey($b->id)->update(['created_at' => now()->subDays(20)]);
+
+        $this->actingAs($super);
+        Livewire::test(\App\Http\Livewire\Admin\AuditTrail\AuditTrailComponent::class)
+            ->assertSee('Gate 1 approved for Alpha Student')->assertSee('Updated Beta Student')
+            ->set('filterInstitute', $this->instA->id)->assertSee('Alpha Student')->assertDontSee('Beta Student')
+            ->call('clearFilters')->set('filterUser', 'system')->assertSee('Beta Student')->assertDontSee('Alpha Student')
+            ->call('clearFilters')->set('filterModule', 'enrollment')->set('filterAction', 'approve')->assertSee('Alpha Student')->assertDontSee('Beta Student')
+            ->call('clearFilters')->call('range', '7d')->assertSee('Alpha Student')->assertDontSee('Beta Student')
+            ->call('clearFilters')->set('search', 'Beta')->assertSee('Updated Beta Student')->assertDontSee('Gate 1 approved')
+            ->call('view', $b->id)->assertDispatchedBrowserEvent('open-audit-modal')
+            ->assertSet('selected.old', ['phone' => '111'])->assertSet('selected.new', ['phone' => '222'])->assertSet('selected.user', 'System');
+
+        // Institute Admin: own institute only, no institute filter
+        $this->actingAs($adminA);
+        Livewire::test(\App\Http\Livewire\Admin\AuditTrail\AuditTrailComponent::class)
+            ->assertSee('Alpha Student')->assertDontSee('Beta Student')->assertDontSee('All institutes')
+            ->set('filterInstitute', $this->instB->id)->assertDontSee('Beta Student');
+        $this->expectException(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
+        Livewire::test(\App\Http\Livewire\Admin\AuditTrail\AuditTrailComponent::class)->call('view', $b->id);
+    }
+
+    public function test_notification_log_filters_and_full_message_popup()
+    {
+        $super = $this->makeUser('super-admin');
+        $staffA = $this->makeUser('accounts', $this->instA);
+        $mk = fn ($attrs) => \App\Models\Admin\NotificationLog::create($attrs + ['notifiable_type' => User::class, 'notifiable_id' => $staffA->id]);
+        $sent = $mk(['institute_id' => $this->instA->id, 'channel' => 'email', 'event_type' => 'er_issued', 'recipient' => 'alpha@mail.test', 'status' => 'sent', 'sent_at' => now(),
+            'payload' => ['subject' => 'Your ER number: ER-2026-00001', 'message' => "Dear Alpha,\n\nYour ER number is ER-2026-00001.", 'er' => 'ER-2026-00001']]);
+        $pending = $mk(['institute_id' => $this->instB->id, 'channel' => 'sms', 'event_type' => 'document_rejected', 'recipient' => '9847000000', 'status' => 'pending',
+            'error' => 'SMS gateway not configured yet.', 'payload' => ['subject' => 'Document needs attention', 'message' => 'Please re-upload your photo.']]);
+
+        $this->actingAs($super);
+        Livewire::test(\App\Http\Livewire\Admin\Notifications\NotificationLogComponent::class)
+            ->assertSee('Your ER number: ER-2026-00001')->assertSee('Document needs attention')->assertSee('not sent yet')
+            ->set('filterInstitute', $this->instB->id)->assertSee('Document needs attention')->assertDontSee('Your ER number')
+            ->call('clearFilters')->set('filterChannel', 'email')->assertSee('Your ER number')->assertDontSee('Document needs attention')
+            ->call('clearFilters')->set('filterEvent', 'document_rejected')->assertSee('Document needs attention')->assertDontSee('Your ER number')
+            ->call('clearFilters')->set('filterStatus', 'sent')->assertSee('Your ER number')->assertDontSee('Document needs attention')
+            ->call('clearFilters')->set('search', 're-upload')->assertSee('Document needs attention')->assertDontSee('Your ER number')
+            ->call('clearFilters')->call('view', $sent->id)->assertDispatchedBrowserEvent('open-notification-log-modal')
+            ->assertSet('selected.message', "Dear Alpha,\n\nYour ER number is ER-2026-00001.")
+            ->assertSet('selected.extra', ['er' => 'ER-2026-00001'])->assertSet('selected.event', 'ER Issued')
+            ->assertSee('Your ER number is ER-2026-00001.');
+
+        $this->actingAs($this->makeUser('institute-admin', $this->instA));
+        Livewire::test(\App\Http\Livewire\Admin\Notifications\NotificationLogComponent::class)->assertSee('Your ER number')->assertDontSee('Document needs attention');
+    }
+
     public function test_serial_numbers_are_sequential_per_series_and_year()
     {
         $service = app(SerialNumberService::class);
