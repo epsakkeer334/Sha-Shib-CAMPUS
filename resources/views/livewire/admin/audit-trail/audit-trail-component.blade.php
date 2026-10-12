@@ -128,60 +128,98 @@
         <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
             <div class="modal-content border-0 mon-modal">
                 @if($selected)
-                    <div class="modal-header">
-                        <div class="d-flex align-items-start gap-3 min-w-0">
-                            <span class="mon-modal-icon mon-tone-{{ AT::actionTone($selected['action']) }}"><i class="ti ti-history"></i></span>
-                            <div class="min-w-0">
-                                <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
-                                    <span class="mon-chip mon-tone-{{ AT::actionTone($selected['action']) }}">{{ $label($selected['action']) }}</span>
-                                    <span class="mon-sub">{{ $label($selected['module']) }} · entry #{{ $selected['id'] }}</span>
-                                </div>
-                                <h5 class="modal-title mb-0">{{ $selected['description'] ?? ($label($selected['action']) . ' ' . $label($selected['module'])) }}</h5>
-                            </div>
+                    @php
+                        $tone = AT::actionTone($selected['action']);
+                        $fields = array_values(array_unique(array_merge(array_keys($selected['old']), array_keys($selected['new']))));
+                        $rows = collect($fields)->map(function ($f) use ($selected) {
+                            $before = \App\Support\Readable::value($selected['old'][$f] ?? null, $f);
+                            $after = \App\Support\Readable::value($selected['new'][$f] ?? null, $f);
+                            $hasOld = array_key_exists($f, $selected['old']);
+                            $hasNew = array_key_exists($f, $selected['new']);
+
+                            return ['label' => \App\Support\Readable::label($f), 'before' => $before, 'after' => $after,
+                                'changed' => !$hasOld || !$hasNew || $before !== $after, 'onlyNew' => !$hasOld, 'onlyOld' => !$hasNew];
+                        });
+                        $changed = $rows->where('changed', true);
+                        $unchanged = $rows->where('changed', false);
+                    @endphp
+                    {{-- Summary --}}
+                    <div class="am-hero mon-tone-{{ $tone }}">
+                        <button type="button" class="btn-close am-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        <span class="am-hero-icon"><i class="ti ti-{{ ['green' => 'circle-plus', 'blue' => 'pencil', 'red' => 'circle-minus', 'teal' => 'circle-check', 'amber' => 'alert-circle'][$tone] ?? 'history' }}"></i></span>
+                        <div class="min-w-0">
+                            <div class="am-kicker">{{ $label($selected['action']) }} · {{ $label($selected['module']) }}</div>
+                            <h5 class="am-title">{{ $selected['description'] ?? ($label($selected['action']) . ' ' . $label($selected['module'])) }}</h5>
+                            <div class="am-byline">by <strong>{{ $selected['user'] }}</strong> · {{ $selected['ago'] }}</div>
                         </div>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
+
                     <div class="modal-body">
-                        <div class="mon-facts">
-                            <div><span>When</span><strong>{{ $selected['when'] }}</strong><small>{{ $selected['ago'] }}</small></div>
-                            <div><span>By</span><strong>{{ $selected['user'] }}</strong>@if($selected['email'])<small>{{ $selected['email'] }}</small>@endif</div>
-                            <div><span>Institute</span><strong>{{ $selected['institute'] }}</strong></div>
-                            <div><span>Record</span><strong>{{ $selected['reference'] }}</strong></div>
-                            <div><span>IP address</span><strong class="mon-mono">{{ $selected['ip'] ?: '—' }}</strong></div>
-                        </div>
+                        {{-- Who, when, where --}}
+                        <ul class="am-info">
+                            <li><span class="am-info-icon"><i class="ti ti-user"></i></span>
+                                <div><span>Done by</span><strong>{{ $selected['user'] }}</strong><small>{{ $selected['role'] }}@if($selected['email']) · {{ $selected['email'] }}@endif</small></div></li>
+                            <li><span class="am-info-icon"><i class="ti ti-clock"></i></span>
+                                <div><span>When</span><strong>{{ $selected['when'] }}</strong><small>{{ $selected['ago'] }}</small></div></li>
+                            <li><span class="am-info-icon"><i class="ti ti-building"></i></span>
+                                <div><span>Institute</span><strong>{{ $selected['institute'] }}</strong></div></li>
+                            <li><span class="am-info-icon"><i class="ti ti-file-description"></i></span>
+                                <div><span>Record</span><strong>{{ $selected['reference'] ?? 'Not linked to a record' }}</strong></div></li>
+                        </ul>
 
                         @if($selected['reason'])
-                            <div class="mon-callout"><i class="ti ti-message-2"></i><div><strong>Reason</strong><div>{{ $selected['reason'] }}</div></div></div>
+                            <div class="am-reason"><i class="ti ti-quote"></i><div><span>Reason given</span><p>{{ $selected['reason'] }}</p></div></div>
                         @endif
 
-                        @if($selected['old'] || $selected['new'])
-                            @php $fields = array_unique(array_merge(array_keys($selected['old']), array_keys($selected['new']))); @endphp
-                            <h6 class="mon-section">Changes</h6>
-                            <div class="table-responsive">
-                                <table class="table table-sm mb-0 mon-diff">
-                                    <thead><tr><th>Field</th><th>Before</th><th>After</th></tr></thead>
-                                    <tbody>
-                                        @foreach($fields as $field)
-                                            @php $before = $selected['old'][$field] ?? null; $after = $selected['new'][$field] ?? null; $changed = $fmt($before) !== $fmt($after); @endphp
-                                            <tr class="{{ $changed ? 'is-changed' : '' }}">
-                                                <td><code>{{ $field }}</code></td>
-                                                <td class="text-break mon-before">{{ $before === null ? '—' : \Illuminate\Support\Str::limit($fmt($before), 300) }}</td>
-                                                <td class="text-break mon-after">{{ $after === null ? '—' : \Illuminate\Support\Str::limit($fmt($after), 300) }}</td>
-                                            </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
+                        {{-- What changed --}}
+                        @if($rows->isNotEmpty())
+                            <div class="am-section-head">
+                                <h6 class="mon-section mb-0">What changed <span class="am-count">{{ $changed->count() }}</span></h6>
+                                @if($unchanged->isNotEmpty())
+                                    <button type="button" class="am-link" wire:click="$toggle('showUnchanged')">{{ $showUnchanged ? 'Hide' : 'Show' }} {{ $unchanged->count() }} unchanged</button>
+                                @endif
+                            </div>
+                            <div class="am-changes">
+                                @foreach($changed as $row)
+                                    <div class="am-change">
+                                        <div class="am-field">{{ $row['label'] }}</div>
+                                        <div class="am-values">
+                                            @if($row['onlyNew'])
+                                                <span class="am-new">{{ $row['after'] }}</span><span class="am-tag">added</span>
+                                            @elseif($row['onlyOld'])
+                                                <span class="am-old">{{ $row['before'] }}</span><span class="am-tag">removed</span>
+                                            @else
+                                                <span class="am-old">{{ $row['before'] }}</span>
+                                                <i class="ti ti-arrow-narrow-right am-arrow"></i>
+                                                <span class="am-new">{{ $row['after'] }}</span>
+                                            @endif
+                                        </div>
+                                    </div>
+                                @endforeach
+                                @if($changed->isEmpty())<div class="am-change text-muted small">No values changed.</div>@endif
+                                @if($showUnchanged)
+                                    @foreach($unchanged as $row)
+                                        <div class="am-change is-same"><div class="am-field">{{ $row['label'] }}</div><div class="am-values"><span>{{ $row['after'] }}</span></div></div>
+                                    @endforeach
+                                @endif
                             </div>
                         @endif
 
-                        @if($selected['extra'])
-                            <h6 class="mon-section">More details</h6>
+                        {{-- Technical details --}}
+                        <details class="am-tech">
+                            <summary><i class="ti ti-code"></i> Technical details</summary>
                             <dl class="mon-kv">
+                                <dt>Entry no.</dt><dd>#{{ $selected['id'] }}</dd>
+                                <dt>Action code</dt><dd><code>{{ $selected['action'] }}</code> in <code>{{ $selected['module'] }}</code></dd>
+                                <dt>IP address</dt><dd class="mon-mono">{{ $selected['ip'] ?: '—' }}</dd>
                                 @foreach($selected['extra'] as $k => $v)
-                                    <dt>{{ $label($k) }}</dt><dd class="text-break">{{ \Illuminate\Support\Str::limit($fmt($v), 500) }}</dd>
+                                    <dt>{{ \App\Support\Readable::label($k) }}</dt><dd class="text-break">{{ \App\Support\Readable::value($v, $k) }}</dd>
                                 @endforeach
                             </dl>
-                        @endif
+                        </details>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Close</button>
                     </div>
                 @else
                     <div class="modal-body text-center py-5"><span class="spinner-border spinner-border-sm text-secondary"></span></div>
@@ -189,7 +227,6 @@
             </div>
         </div>
     </div>
-
     @include('livewire.admin.monitoring.styles')
 </div>
 

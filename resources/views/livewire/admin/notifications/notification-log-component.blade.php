@@ -141,60 +141,77 @@
         @if($logs->hasPages())<div class="mon-foot">{{ $logs->links() }}</div>@endif
     </div>
 
-    {{-- Full details pop-up --}}
+    {{-- Full details pop-up: the message as the recipient sees it --}}
     <div class="modal fade" id="notificationLogModal" tabindex="-1" aria-hidden="true" wire:ignore.self>
         <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
             <div class="modal-content border-0 mon-modal">
                 @if($selected)
                     @php
-                        [$sLabel, $sTone] = NL::STATUSES[$selected['status']] ?? [ucfirst($selected['status']), 'slate'];
-                        [$cLabel, $cIcon] = NL::CHANNELS[$selected['channel']] ?? [strtoupper($selected['channel']), 'ti ti-send'];
+                        $isSms = $selected['channel'] === 'sms';
+                        $banner = [
+                            'sent' => ['green', 'ti ti-circle-check', $isSms ? 'SMS sent' : 'Email sent', 'Sent on ' . ($selected['sent'] ?? $selected['created'])],
+                            'pending' => ['amber', 'ti ti-clock-pause', 'Not sent yet', $selected['error'] ?: 'Waiting to be sent.'],
+                            'failed' => ['red', 'ti ti-alert-triangle', 'Sending failed', $selected['error'] ?: 'The message could not be delivered.'],
+                        ][$selected['status']] ?? ['slate', 'ti ti-info-circle', ucfirst($selected['status']), $selected['error'] ?? ''];
                     @endphp
-                    <div class="modal-header">
-                        <div class="d-flex align-items-start gap-3 min-w-0">
-                            <span class="mon-modal-icon mon-tone-violet"><i class="{{ $cIcon }}"></i></span>
+                    <div class="modal-header nm-head">
+                        <div class="d-flex align-items-center gap-3 min-w-0">
+                            <span class="mon-modal-icon mon-tone-violet"><i class="ti {{ $isSms ? 'ti-message-2' : 'ti-mail' }}"></i></span>
                             <div class="min-w-0">
-                                <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
-                                    <span class="mon-chip mon-tone-violet">{{ $selected['event'] }}</span>
-                                    <span class="mon-chip mon-tone-{{ $sTone }}">{{ $sLabel }}</span>
-                                    <span class="mon-sub">{{ $cLabel }} · message #{{ $selected['id'] }}</span>
-                                </div>
-                                <h5 class="modal-title mb-0">{{ $selected['subject'] ?? $selected['event'] }}</h5>
+                                <div class="am-kicker text-muted">{{ $isSms ? 'SMS' : 'Email' }} · {{ $selected['event'] }}</div>
+                                <h5 class="modal-title mb-0 text-truncate">{{ $selected['subject'] ?? $selected['event'] }}</h5>
                             </div>
                         </div>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
+
                     <div class="modal-body">
-                        <div class="mon-facts">
-                            <div><span>To</span><strong>{{ $selected['name'] }}</strong><small>{{ $selected['type'] }}</small></div>
-                            <div><span>{{ $selected['channel'] === 'sms' ? 'Phone' : 'Email' }}</span><strong>{{ $selected['recipient'] ?: '—' }}</strong></div>
-                            <div><span>Institute</span><strong>{{ $selected['institute'] }}</strong></div>
-                            <div><span>Created</span><strong>{{ $selected['created'] }}</strong><small>{{ $selected['ago'] }}</small></div>
-                            <div><span>Sent</span><strong>{{ $selected['sent'] ?? 'Not sent' }}</strong></div>
+                        {{-- Delivery status --}}
+                        <div class="nm-status mon-tone-{{ $banner[0] }}">
+                            <i class="{{ $banner[1] }}"></i>
+                            <div><strong>{{ $banner[2] }}</strong><span>{{ $banner[3] }}</span></div>
                         </div>
 
-                        @if($selected['error'])
-                            <div class="mon-callout {{ $selected['status'] === 'failed' ? 'is-error' : '' }}"><i class="ti ti-alert-triangle"></i>
-                                <div><strong>{{ $selected['status'] === 'failed' ? 'Error' : 'Note' }}</strong><div class="text-break">{{ $selected['error'] }}</div></div>
+                        @if($isSms)
+                            {{-- SMS: phone-style bubble --}}
+                            <div class="nm-sms">
+                                <div class="nm-sms-to"><i class="ti ti-device-mobile"></i> To {{ $selected['name'] }} · <span class="mon-mono">{{ $selected['recipient'] ?: 'no number' }}</span></div>
+                                <div class="nm-bubble">{{ $selected['message'] ?? 'No message text was stored.' }}</div>
+                                <div class="nm-sms-time">{{ $selected['created'] }}</div>
+                            </div>
+                        @else
+                            {{-- Email: as the recipient sees it --}}
+                            <div class="nm-mail">
+                                <dl class="nm-mail-head">
+                                    <dt>From</dt><dd>{{ $selected['institute'] === 'Central' ? config('app.name') : $selected['institute'] }}</dd>
+                                    <dt>To</dt><dd><strong>{{ $selected['name'] }}</strong>@if($selected['recipient']) &lt;{{ $selected['recipient'] }}&gt;@endif <span class="nm-who">{{ $selected['type'] }}</span></dd>
+                                    <dt>Date</dt><dd>{{ $selected['created'] }} <span class="text-muted">({{ $selected['ago'] }})</span></dd>
+                                    <dt>Subject</dt><dd><strong>{{ $selected['subject'] ?? '—' }}</strong></dd>
+                                </dl>
+                                <div class="nm-mail-body">{{ $selected['message'] ?? 'No message text was stored.' }}</div>
                             </div>
                         @endif
 
-                        <h6 class="mon-section">Message</h6>
-                        @if($selected['subject'])<div class="mon-subject">{{ $selected['subject'] }}</div>@endif
-                        <pre class="mon-message">{{ $selected['message'] ?? 'No message text was stored.' }}</pre>
-
-                        @if($selected['extra'])
-                            <h6 class="mon-section">More details</h6>
+                        {{-- Technical details --}}
+                        <details class="am-tech">
+                            <summary><i class="ti ti-code"></i> Technical details</summary>
                             <dl class="mon-kv">
+                                <dt>Message no.</dt><dd>#{{ $selected['id'] }}</dd>
+                                <dt>Event</dt><dd>{{ $selected['event'] }}</dd>
+                                <dt>Institute</dt><dd>{{ $selected['institute'] }}</dd>
+                                <dt>Created</dt><dd>{{ $selected['created'] }}</dd>
+                                <dt>Sent</dt><dd>{{ $selected['sent'] ?? 'Not sent' }}</dd>
                                 @foreach($selected['extra'] as $k => $v)
-                                    <dt>{{ \Illuminate\Support\Str::of($k)->replace('_', ' ')->title() }}</dt><dd class="text-break">{{ \Illuminate\Support\Str::limit($fmt($v), 500) }}</dd>
+                                    <dt>{{ \App\Support\Readable::label($k) }}</dt><dd class="text-break">{{ \App\Support\Readable::value($v, $k) }}</dd>
                                 @endforeach
                             </dl>
-                        @endif
-
+                        </details>
+                    </div>
+                    <div class="modal-footer">
                         @if($selected['link'])
-                            <div class="mt-3 text-end"><a href="{{ $selected['link'] }}" class="btn btn-sm btn-outline-primary"><i class="ti ti-external-link me-1"></i> Open student's fees &amp; payments</a></div>
+                            <a href="{{ $selected['link'] }}" class="btn btn-outline-primary me-auto"><i class="ti ti-user me-1"></i> Open student's fees &amp; payments</a>
                         @endif
+                        <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Close</button>
                     </div>
                 @else
                     <div class="modal-body text-center py-5"><span class="spinner-border spinner-border-sm text-secondary"></span></div>
@@ -202,7 +219,6 @@
             </div>
         </div>
     </div>
-
     @include('livewire.admin.monitoring.styles')
     <style>
         .mon-ui .nl-tabs { display: inline-flex; padding: 4px; border-radius: 12px; background: #F3F4F6; gap: 2px; flex-wrap: wrap; }

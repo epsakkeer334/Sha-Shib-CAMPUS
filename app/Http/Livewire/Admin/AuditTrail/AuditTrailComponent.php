@@ -38,6 +38,7 @@ class AuditTrailComponent extends Component
     ];
 
     public $selected = null;
+    public $showUnchanged = false; // detail pop-up: list fields that did not change too
 
     const FILTERS = ['search', 'filterInstitute', 'filterUser', 'filterModule', 'filterAction', 'dateFrom', 'dateTo'];
 
@@ -138,10 +139,11 @@ class AuditTrailComponent extends Component
             'ago' => optional($entry->created_at)->diffForHumans(),
             'user' => optional($entry->user)->name ?? 'System',
             'email' => optional($entry->user)->email,
+            'role' => $entry->user ? $entry->user->role_display_name : 'Automatic action',
             'institute' => optional($entry->institute)->name ?? 'Central',
             'action' => $entry->action,
             'module' => $entry->module,
-            'reference' => $entry->reference_label,
+            'reference' => $entry->reference_type ? Str::headline(class_basename($entry->reference_type)) . ' #' . $entry->reference_id : null,
             'ip' => $entry->ip_address,
             'description' => $meta['description'] ?? null,
             'reason' => $meta['reason'] ?? null,
@@ -150,6 +152,7 @@ class AuditTrailComponent extends Component
             'extra' => collect($meta)->except(['description', 'reason', 'old', 'new'])->all(),
         ];
 
+        $this->showUnchanged = false;
         $this->dispatchBrowserEvent('open-audit-modal');
     }
 
