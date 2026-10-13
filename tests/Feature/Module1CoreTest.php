@@ -486,6 +486,58 @@ class Module1CoreTest extends TestCase
         Livewire::test(\App\Http\Livewire\Admin\Notifications\NotificationLogComponent::class)->assertSee('Your ER number')->assertDontSee('Document needs attention');
     }
 
+    public function test_each_role_gets_its_own_dashboard_with_real_data()
+    {
+        $super = $this->makeUser('super-admin');
+        $adminA = $this->makeUser('institute-admin', $this->instA);
+        $accountsA = $this->makeUser('accounts', $this->instA);
+        $tmA = $this->makeUser('training-manager', $this->instA);
+        $facultyA = $this->makeUser('faculty', $this->instA);
+        $neverA = $this->makeUser('hot', $this->instA);
+        $adminA->update(['name' => 'Alpha Admin Person', 'last_login_at' => now()->subMinutes(3)]);
+        $this->makeUser('institute-admin', $this->instB)->update(['name' => 'Beta Admin Person']);
+        AuditTrail::create(['user_id' => $adminA->id, 'institute_id' => $this->instA->id, 'action' => 'create', 'module' => 'users', 'meta' => ['description' => 'Created user: Alpha Clerk']]);
+        AuditTrail::create(['user_id' => null, 'institute_id' => $this->instB->id, 'action' => 'create', 'module' => 'users', 'meta' => ['description' => 'Created user: Beta Clerk']]);
+
+        $service = app(\App\Services\DashboardService::class);
+        $this->assertSame('super-admin', $service->dashboardFor($super));
+        $this->assertSame('institute-admin', $service->dashboardFor($adminA));
+        $this->assertSame('accounts', $service->dashboardFor($accountsA));
+        $this->assertSame('training-manager', $service->dashboardFor($tmA));
+        $this->assertSame('staff', $service->dashboardFor($facultyA));
+
+        // Super Admin: system-wide figures, both institutes, master data, set-up checklist
+        $data = $service->superAdmin($super);
+        $this->assertGreaterThanOrEqual(2, $data['institutes']->count());
+        $this->assertGreaterThanOrEqual(7, $data['logins']['total']);
+        $this->assertGreaterThanOrEqual(1, $data['logins']['online']);
+        $this->assertSame(10, $data['masters']->count());
+        $this->assertCount(12, $data['activity']);
+        $this->actingAs($super);
+        $this->get(route('admin.dashboard'))->assertOk()
+            ->assertSee('Super Admin Dashboard')->assertSee('Users by Role')->assertSee('Master Data')->assertSee('System Set-up')
+            ->assertSee($this->instA->name)->assertSee($this->instB->name)->assertSee('Created user: Alpha Clerk')
+            ->assertDontSee('Employees By Department')->assertDontSee('Job Applicants'); // template sample data is gone
+
+        // Institute Admin: own institute only
+        $data = $service->instituteAdmin($adminA);
+        $this->assertSame(5, $data['logins']['total']);   // admin, accounts, TM, faculty, HoT of institute A
+        $this->assertSame(4, $data['logins']['never']);
+        $this->actingAs($adminA);
+        $this->get(route('admin.dashboard'))->assertOk()
+            ->assertSee('Institute Dashboard')->assertSee('Institute Set-up')->assertSee($this->instA->name)
+            ->assertSee('Created user: Alpha Clerk')->assertDontSee('Created user: Beta Clerk')->assertDontSee('Beta Admin Person');
+
+        $this->actingAs($accountsA);
+        $this->get(route('admin.dashboard'))->assertOk()->assertSee('Accounts Dashboard')->assertSee('Payments to Verify')->assertSee('Collections');
+
+        $this->actingAs($tmA);
+        $this->get(route('admin.dashboard'))->assertOk()->assertSee('Training Manager Dashboard')->assertSee('ID Cards to Sign');
+
+        $this->actingAs($facultyA);
+        $this->get(route('admin.dashboard'))->assertOk()->assertSee('Faculty Dashboard')->assertSee('Attendance to upload per subject')->assertSee('Institute Snapshot');
+    }
+
     public function test_serial_numbers_are_sequential_per_series_and_year()
     {
         $service = app(SerialNumberService::class);

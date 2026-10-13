@@ -591,6 +591,61 @@ class Module2WorkflowTest extends TestCase
         $this->assertSame(22000.0, $due->balance);
     }
 
+    public function test_dashboards_highlight_the_approvals_waiting_for_each_role()
+    {
+        $dash = app(\App\Services\DashboardService::class);
+        $count = fn ($user, $key) => collect($dash->pendingActions($user->fresh()))->firstWhere('key', $key)['count'] ?? null;
+        $keys = fn ($user) => collect($dash->pendingActions($user->fresh()))->pluck('key')->all();
+        $otherAdmin = $this->makeUser('institute-admin', $this->otherInst);
+
+        // Each role sees only what it can act on
+        $this->assertSame(['docs', 'gate1', 'form_print', 'form_sign', 'form_archive', 'card_print', 'card_sign'], $keys($this->admin));
+        $this->assertSame(['payments', 'gate2'], $keys($this->accounts));
+        $this->assertSame(['form_print', 'form_sign', 'form_archive', 'card_print', 'card_sign'], $keys($this->tm));
+
+        // Submitted application: 4 documents to verify (Gate 1 not ready yet); other institute sees nothing
+        $student = $this->submittedStudent();
+        $this->assertSame(4, $count($this->admin, 'docs'));
+        $this->assertSame(0, $count($this->admin, 'gate1'));
+        $this->assertSame(0, $count($otherAdmin, 'docs'));
+        $this->actingAs($this->admin);
+        $this->get(route('admin.dashboard'))->assertOk()->assertSee('Waiting for you')->assertSee('Documents to verify')->assertSee('data-pending="docs"', false);
+
+        // Documents verified → Gate 1 ready to approve
+        $this->verifyAllDocuments($student);
+        $this->assertSame(0, $count($this->admin, 'docs'));
+        $this->assertSame(1, $count($this->admin, 'gate1'));
+        Livewire::test(DocumentVerificationComponent::class)->call('select', $student->id)->call('approveGate');
+        $this->assertSame(0, $count($this->admin, 'gate1'));
+
+        // A payment recorded at the office waits for Accounts; once cleared, the fee gate is ready
+        app(\App\Services\FeeService::class)->addDue($student->fresh(), 'Admission fee', 15000, '2026-10-01');
+        $this->actingAs($this->admin);
+        Livewire::test(StudentFeesComponent::class, ['student' => $student->id])
+            ->set('pay_due_id', $student->dues()->first()->id)->set('pay_amount', 15000)->set('pay_gateway_id', $this->cash->id)->call('recordPayment')->assertHasNoErrors();
+        $this->assertSame(1, $count($this->accounts, 'payments'));
+        $this->assertSame(0, $count($this->accounts, 'gate2'));
+        $this->actingAs($this->accounts);
+        $this->get(route('admin.dashboard'))->assertOk()->assertSee('Payments to verify')->assertSee('Fee gate ready to approve');
+        Livewire::test(PaymentVerificationComponent::class)->call('select', StudentPayment::where('student_id', $student->id)->first()->id)->call('approve');
+        $this->assertSame(0, $count($this->accounts, 'payments'));
+        $this->assertSame(1, $count($this->accounts, 'gate2'));
+
+        // Gate 2 approved → ER number → ER form & ID card waiting for the Training Manager
+        Livewire::test(PaymentVerificationComponent::class)->set('tab', 'gate')->call('approveGate', $student->id);
+        $this->assertSame(0, $count($this->accounts, 'gate2'));
+        $this->assertSame(1, $count($this->tm, 'form_print'));
+        $this->assertSame(1, $count($this->tm, 'card_print'));
+        $this->assertSame(0, $count($this->tm, 'card_sign'));
+        $card = $student->fresh()->idCard;
+        app(OnboardingService::class)->markCardPrinted($card);
+        $this->assertSame(0, $count($this->tm, 'card_print'));
+        $this->assertSame(1, $count($this->tm, 'card_sign'));
+        $this->actingAs($this->tm);
+        $this->get(route('admin.dashboard'))->assertOk()->assertSee('ID cards to sign &amp; issue', false)
+            ->assertSee(route('admin.onboarding.enrollment', ['cardStage' => 'to_sign']), false);
+    }
+
     public function test_payment_recorded_by_accounts_is_confirmed_without_approval()
     {
         $student = $this->submittedStudent();

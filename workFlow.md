@@ -172,6 +172,29 @@ Student **admissions portal** (`/admissions`, separate from the admin panel): Ho
 
 ---
 
+### 3.3 Dashboards ✅ (role-based, real data)
+
+| Role | Dashboard shows |
+| --- | --- |
+| Super Admin | Institutes, staff users (by role, status, login activity, recent / never signed in), courses, master data (10 lists with counts), students & pending approvals, audit activity (12 months, recent entries, most active institute), Email & SMS log, serial numbers issued this year, academic years, **system set-up checklist** (institute admin, courses, fee structure, payment methods, academic year, email service) |
+| Institute Admin | Own institute: staff by role & sign-ins, courses offered, open batches, running semesters, students by status, documents to approve, ER issued, fees outstanding, institute activity, **institute set-up checklist** |
+| Accounts | Payments to verify, collected today / this month, outstanding & overdue fees, fee gate pending, collections chart (6 months), waiting list, recent receipts, overdue fees |
+| Training Manager | ER forms to print / sign / archive, ID cards to sign, cards issued, students awaiting ID card |
+| BiC · EM · HoT · Faculty | Institute snapshot, colleagues, courses, notifications, own account & actions, and what their role will do when Modules 3–7 arrive |
+
+**"Waiting for you" panel** ✅ — at the top of every dashboard, each pending approval the user can act on (by permission; own institute, Super Admin all), highlighted with its count and a link to the filtered queue:
+
+| Group | Items | Permission (default roles) |
+| --- | --- | --- |
+| Gate 1 · Documents | Documents to verify · Gate 1 ready to approve (all required documents verified) | onboarding.verify_documents (Institute Admin) |
+| Gate 2 · Fees | Payments to verify · Fee gate ready to approve (all dues cleared, nothing waiting) | payments.verify (Accounts) |
+| ER form | To print · to sign · to archive | enrollment.manage (Institute Admin, TM) |
+| ID card | To print · to sign & issue · reprints to sign | enrollment.manage (Institute Admin, TM) |
+
+Items with work pending are coloured with a pulsing dot and "Open queue"; empty items show "All clear". Roles without these permissions (BiC, EM, HoT, Faculty) see no panel until their modules add approvals.
+
+Phase 1 = Module 1 data (+ Module 2 figures where they are the role's daily work); exam, result, DMS and MoU figures are added as those modules are built.
+
 ## 4. Permissions
 
 Super Admin passes every permission check. Defaults for the other roles are below; they can be edited on Roles & Permissions.
@@ -763,6 +786,11 @@ Columns: **ID** · **Scenario** · **Expected result**. ✅ = verifiable now; �
 | F-21 | Portal: click "Pay in advance", then Cancel | Form closes; nothing charged; fee still Upcoming |
 | F-22 | Admin: "Pay in advance", then "Cancel advance" | Advance fee removed, listed as Upcoming again; audit entry `revoke_advance` |
 | F-23 | Advance fee with a payment waiting for verification | No "Cancel advance"; after Accounts rejects the payment it can be cancelled (student or staff) |
+| DB-01 | Submit an application | Institute Admin dashboard: "Documents to verify" = number of documents, highlighted; another institute's admin sees 0 |
+| DB-02 | Verify all documents | "Gate 1 ready to approve" = 1; after approving the gate it returns to 0 |
+| DB-03 | Office records a payment | Accounts dashboard: "Payments to verify" = 1; after approval "Fee gate ready to approve" = 1 |
+| DB-04 | Approve Gate 2 | TM dashboard: "ER forms to print" = 1 and "ID cards to print" = 1; after printing the card "ID cards to sign & issue" = 1 |
+| DB-05 | Click a highlighted item | Opens the matching queue already filtered (e.g. ER & ID Cards → Printed — to sign) |
 | F-24 | Try "Cancel advance" on a normal (non-advance) fee | Refused |
 
 ### 19.7 Notifications ✅
