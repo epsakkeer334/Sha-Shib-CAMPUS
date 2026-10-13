@@ -2,66 +2,58 @@
 @php
     $Fm = $d['forms']; $C = $d['cards'];
     $initials = fn ($name) => collect(preg_split('/\s+/', trim((string) $name)))->filter()->take(2)->map(fn ($w) => mb_strtoupper(mb_substr($w, 0, 1)))->implode('');
-    $toSign = $Fm['to_sign'] + $C['pending'];
+    $formTone = ['generated' => 'sky', 'printed' => 'amber', 'signed' => 'violet', 'archived' => 'green'];
 @endphp
-<div class="content">
-    @include('livewire.admin.dashboard.partials.shared.head', ['title' => 'Training Manager Dashboard'])
-
-    @include('livewire.admin.dashboard.partials.shared.welcome', [
-        'user' => $d['user'],
-        'line' => e(optional($d['institute'])->name) . '<br>You have <a href="' . e(route('admin.onboarding.enrollment')) . '" class="text-primary text-decoration-underline">' . $toSign . '</a> ER forms and ID cards waiting for your signature.',
-        'actions' => [['ER & ID Cards', 'admin.onboarding.enrollment', 'ti ti-id-badge-2', 'btn-primary'], ['All Students', 'admin.students', 'ti ti-school', 'btn-secondary']],
+<div class="content db-ui">
+    @include('livewire.admin.dashboard.partials.shared.hero', [
+        'title' => 'Training Manager Dashboard', 'user' => $d['user'],
+        'line' => '<i class="ti ti-building"></i> ' . e(optional($d['institute'])->name) . ' · ER forms &amp; ID cards',
+        'actions' => [['All Students', 'admin.students', 'ti ti-school', false], ['ER & ID Cards', 'admin.onboarding.enrollment', 'ti ti-id-badge-2', true]],
     ])
 
     @include('livewire.admin.dashboard.partials.shared.pending', ['pending' => $d['pending']])
 
-    <div class="row">
+    <div class="db-kpis mb-3">
         @foreach([
-            ['ti ti-printer', 'info', 'ER Forms to Print', $Fm['to_print'], '', 'Open queue', 'admin.onboarding.enrollment'],
-            ['ti ti-signature', 'warning', 'ER Forms to Sign', $Fm['to_sign'], '', 'Open queue', 'admin.onboarding.enrollment'],
-            ['ti ti-archive', 'secondary', 'Forms to Archive', $Fm['to_archive'], '<span class="text-muted">' . $Fm['archived'] . ' archived</span>', 'Open queue', 'admin.onboarding.enrollment'],
-            ['ti ti-id-badge-2', 'danger', 'ID Cards to Sign', $C['pending'], '', 'Open queue', 'admin.onboarding.enrollment'],
-            ['ti ti-circle-check', 'success', 'Cards Issued', $C['issued_month'], '<span class="text-muted">this month</span>', 'Students', 'admin.students'],
-            ['ti ti-user-check', 'primary', 'Signed by You', $C['signed_by_me'], '<span class="text-muted">ID cards</span>', '', ''],
-        ] as [$tIcon, $tTone, $tLabel, $tValue, $tExtra, $tLink, $tRoute])
-            @include('livewire.admin.dashboard.partials.shared.tile', ['icon' => $tIcon, 'tone' => $tTone, 'label' => $tLabel, 'value' => $tValue, 'extra' => $tExtra, 'link' => $tLink, 'route' => $tRoute, 'col' => 'col-xl-2 col-md-4'])
+            ['ER Forms to Sign', $Fm['to_sign'], $Fm['to_print'] . ' still to print', 'ti ti-signature', 'amber', ['formStage' => 'printed']],
+            ['ID Cards to Sign', $C['pending'], 'printed or waiting to print', 'ti ti-id-badge-2', 'red', ['cardStage' => 'to_sign']],
+            ['Cards Issued', $C['issued_month'], 'this month · ' . $C['signed_by_me'] . ' signed by you', 'ti ti-circle-check', 'green', ['cardStage' => 'issued']],
+            ['Forms Archived', $Fm['archived'], $Fm['to_archive'] . ' signed, to archive', 'ti ti-archive', 'slate', ['formStage' => 'archived']],
+        ] as [$kLabel, $kValue, $kHint, $kIcon, $kTone, $kParams])
+            @include('livewire.admin.dashboard.partials.shared.kpi', ['label' => $kLabel, 'value' => $kValue, 'hint' => $kHint, 'icon' => $kIcon, 'tone' => $kTone, 'route' => 'admin.onboarding.enrollment', 'params' => $kParams])
         @endforeach
     </div>
 
-    <div class="row">
-        {{-- Awaiting signature --}}
-        <div class="col-xxl-5 col-xl-6 d-flex">
-            <div class="card flex-fill">
-                <div class="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
-                    <h5 class="mb-2">Students Awaiting ID Card</h5>
-                    <a href="{{ route('admin.onboarding.enrollment') }}" class="btn btn-light btn-md mb-2">View All</a>
+    <div class="row g-3">
+        <div class="col-xl-5">
+            <div class="db-panel">
+                <div class="db-panel-head">
+                    <div class="d-flex align-items-center gap-2"><span class="db-ph-icon"><i class="ti ti-id"></i></span><div><h5>Students Awaiting ID Card</h5><small>ER issued, card not yet signed</small></div></div>
+                    <a href="{{ route('admin.onboarding.enrollment') }}" class="db-link">Open queue <i class="ti ti-arrow-right"></i></a>
                 </div>
-                <div class="card-body">
+                <div class="db-panel-body pt-1 pb-1">
                     @forelse($d['awaiting'] as $s)
                         @php $form = $s->erRequest; $card = $s->idCard; @endphp
-                        <div class="d-flex align-items-center justify-content-between mb-3 p-2 border br-5">
-                            <div class="d-flex align-items-center overflow-hidden">
-                                <span class="avatar flex-shrink-0 rounded-circle bg-primary-transparent text-primary fw-semibold">{{ $initials($s->full_name) }}</span>
-                                <div class="ms-2 overflow-hidden">
-                                    <h6 class="fs-14 fw-medium text-truncate"><a href="{{ route('admin.onboarding.enrollment.student', $s->id) }}">{{ $s->full_name }}</a></h6>
-                                    <p class="fs-13 mb-0 text-truncate"><span class="font-monospace">{{ $s->er_number }}</span> · {{ optional($s->course)->code }}</p>
-                                </div>
+                        <div class="db-row">
+                            <span class="db-av tone-indigo">{{ $initials($s->full_name) }}</span>
+                            <div class="db-row-main">
+                                <div class="db-row-title"><a href="{{ route('admin.onboarding.enrollment.student', $s->id) }}">{{ $s->full_name }}</a></div>
+                                <div class="db-row-sub"><span class="font-monospace">{{ $s->er_number }}</span> · {{ optional($s->course)->code }}</div>
                             </div>
-                            <div class="d-flex gap-1 flex-wrap justify-content-end ms-2">
-                                <span class="badge {{ optional($form)->status === 'archived' ? 'badge-success' : 'badge-warning' }} badge-xs">Form: {{ ucfirst(optional($form)->status ?? '—') }}</span>
-                                <span class="badge {{ optional($card)->print_count ? 'badge-info' : 'badge-secondary' }} badge-xs">Card: {{ optional($card)->print_count ? 'printed' : 'not printed' }}</span>
+                            <div class="d-flex flex-column align-items-end gap-1">
+                                <span class="db-chip tone-{{ $formTone[optional($form)->status] ?? 'slate' }}">Form: {{ ucfirst(optional($form)->status ?? '—') }}</span>
+                                <span class="db-chip {{ optional($card)->print_count ? 'tone-sky' : 'tone-slate' }}">Card: {{ optional($card)->print_count ? 'printed' : 'not printed' }}</span>
                             </div>
                         </div>
                     @empty
-                        <div class="text-center py-4"><i class="ti ti-circle-check text-success fs-1 d-block mb-1"></i><p class="text-muted mb-0">No students waiting for an ID card.</p></div>
+                        <div class="db-empty is-ok"><i class="ti ti-circle-check"></i>No students waiting for an ID card.</div>
                     @endforelse
                 </div>
             </div>
         </div>
-
-        {{-- Recent signatures --}}
-        @include('livewire.admin.dashboard.partials.shared.activity', ['entries' => $d['recent'], 'col' => 'col-xxl-4 col-xl-6'])
-
-        @include('livewire.admin.dashboard.partials.shared.notifications', ['notifications' => $d['notifications'], 'col' => 'col-xxl-3 col-xl-12'])
+        <div class="col-xl-4">@include('livewire.admin.dashboard.partials.shared.activity', ['entries' => $d['recent'], 'title' => 'ER & ID Card Activity'])</div>
+        <div class="col-xl-3">@include('livewire.admin.dashboard.partials.shared.notifications', ['notifications' => $d['notifications']])</div>
     </div>
+
+    @include('livewire.admin.dashboard.partials.shared.styles')
 </div>
