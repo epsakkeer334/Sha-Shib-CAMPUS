@@ -1,5 +1,7 @@
 <div class="dropdown me-1 nt-bell" wire:poll.30s wire:ignore.self>
-    <a href="#" class="btn btn-menubar position-relative" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false"
+    {{-- wire:ignore.self: the 30 s poll must not reset Bootstrap's open state (".show" / aria-expanded) on the toggle,
+         otherwise an outside click no longer closes the open dropdown. The badge inside still updates. --}}
+    <a href="#" class="btn btn-menubar position-relative" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" wire:ignore.self
        aria-label="Notifications{{ $unread ? " ({$unread} unread)" : '' }}" title="Notifications">
         <i class="ti ti-bell {{ $unread ? 'nt-ring' : '' }}"></i>
         @if($unread)
