@@ -14,7 +14,7 @@
         'actions' => [['Add User', 'admin.users', 'ti ti-user-plus', false], ['Add Institute', 'admin.institutes', 'ti ti-building-plus', true]],
     ])
 
-    @include('livewire.admin.dashboard.partials.shared.pending', ['pending' => $d['pending']])
+    @include('livewire.admin.dashboard.partials.shared.pending', ['pending' => $d['pending'], 'overview' => $d['overview'], 'showInstitute' => true])
 
     {{-- KPIs --}}
     <div class="db-kpis mb-3">

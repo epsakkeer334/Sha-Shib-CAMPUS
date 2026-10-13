@@ -191,6 +191,8 @@ Student **admissions portal** (`/admissions`, separate from the admin panel): Ho
 | ER form | To print · to sign · to archive | enrollment.manage (Institute Admin, TM) |
 | ID card | To print · to sign & issue · reprints to sign | enrollment.manage (Institute Admin, TM) |
 
+**"Pending Actions — Who Acts Next"** ✅ (Super Admin: all institutes, with an Institute column; Institute Admin: own institute) — every pending step with its count, the **next step**, the **role whose turn it is** and the **responsible people by name** (active users of that institute holding the permission; signature steps → the Training Manager, or whoever may record it when there is no TM). The viewer is shown as **"You"** with a "Do it" link; a step nobody can take is flagged **"No active user — add one"** in red. Every role's "Waiting for you" bar reads "your next steps as <role>" and each chip's tooltip names the step.
+
 Items with work pending are coloured with a pulsing dot and "Open queue"; empty items show "All clear". Roles without these permissions (BiC, EM, HoT, Faculty) see no panel until their modules add approvals.
 
 Phase 1 = Module 1 data (+ Module 2 figures where they are the role's daily work); exam, result, DMS and MoU figures are added as those modules are built.
@@ -790,6 +792,9 @@ Columns: **ID** · **Scenario** · **Expected result**. ✅ = verifiable now; �
 | DB-02 | Verify all documents | "Gate 1 ready to approve" = 1; after approving the gate it returns to 0 |
 | DB-03 | Office records a payment | Accounts dashboard: "Payments to verify" = 1; after approval "Fee gate ready to approve" = 1 |
 | DB-04 | Approve Gate 2 | TM dashboard: "ER forms to print" = 1 and "ID cards to print" = 1; after printing the card "ID cards to sign & issue" = 1 |
+| DB-06 | Institute Admin dashboard with a printed ID card waiting | "Who Acts Next": ID cards to sign & issue · next step by Training Manager · responsible = the TM by name (not the admin) |
+| DB-07 | Payment waiting in an institute with no Accounts user (Super Admin view) | Row flagged red "No active user — add one", next step by Accounts, link "Add user" |
+| DB-08 | Institute Admin's own steps (e.g. documents to verify) | Responsible shows "You"; link reads "Do it" |
 | DB-05 | Click a highlighted item | Opens the matching queue already filtered (e.g. ER & ID Cards → Printed — to sign) |
 | F-24 | Try "Cancel advance" on a normal (non-advance) fee | Refused |
 

@@ -643,7 +643,42 @@ class Module2WorkflowTest extends TestCase
         $this->assertSame(1, $count($this->tm, 'card_sign'));
         $this->actingAs($this->tm);
         $this->get(route('admin.dashboard'))->assertOk()->assertSee('ID cards to sign &amp; issue', false)
-            ->assertSee(route('admin.onboarding.enrollment', ['cardStage' => 'to_sign']), false);
+            ->assertSee(route('admin.onboarding.enrollment', ['cardStage' => 'to_sign']), false)
+            ->assertSee('your next steps as Training Manager')->assertDontSee('Who acts next'); // overview: admins only
+
+        // Who acts next (Institute Admin): the card waits for the Training Manager, by name
+        $overview = $dash->pendingOverview($this->admin->fresh());
+        $row = collect($overview['rows'])->firstWhere('key', 'card_sign');
+        $this->assertSame(1, $row['count']);
+        $this->assertSame(['Training Manager (TM)'], $row['roles']);
+        $this->assertSame([$this->tm->id], $row['users']->pluck('id')->all());
+        $this->assertFalse($row['mine']);
+        $this->assertFalse($row['missing']);
+        $this->assertSame($this->inst->id, $row['institute']->id);
+        $this->assertNull($dash->pendingOverview($this->accounts->fresh())); // only Super Admin / Institute Admin
+
+        // A payment waiting in an institute with no Accounts user: flagged as unassigned, named role = Accounts
+        $other = $this->submittedStudent($this->otherInst);
+        app(\App\Services\FeeService::class)->addDue($other, 'Admission fee', 15000, '2026-10-01');
+        $this->actingAs($otherAdmin);
+        Livewire::test(StudentFeesComponent::class, ['student' => $other->id])
+            ->set('pay_due_id', $other->dues()->first()->id)->set('pay_amount', 15000)->set('pay_gateway_id', $this->cash->id)->call('recordPayment')->assertHasNoErrors();
+        $super = $this->makeUser('super-admin');
+        $rows = collect($dash->pendingOverview($super)['rows']);
+        $missing = $rows->first(fn ($r) => $r['key'] === 'payments' && $r['institute']->id === $this->otherInst->id);
+        $this->assertTrue($missing['missing']);
+        $this->assertSame(['Accounts'], $missing['roles']);
+        $docsOther = $rows->first(fn ($r) => $r['key'] === 'docs' && $r['institute']->id === $this->otherInst->id);
+        $this->assertSame([$otherAdmin->id], $docsOther['users']->pluck('id')->all());
+        $this->actingAs($super);
+        $this->get(route('admin.dashboard'))->assertOk()->assertSee('Who acts next')
+            ->assertSee('No active user — add one')->assertSee($this->otherInst->name)->assertSee('Verify the payment and issue the receipt');
+
+        // The Institute Admin sees themself as "You" on the steps they take
+        $this->actingAs($otherAdmin);
+        $docsRow = collect($dash->pendingOverview($otherAdmin->fresh())['rows'])->firstWhere('key', 'docs');
+        $this->assertTrue($docsRow['mine']);
+        $this->get(route('admin.dashboard'))->assertOk()->assertSee('Who acts next')->assertSee('</span>You', false);
     }
 
     public function test_payment_recorded_by_accounts_is_confirmed_without_approval()

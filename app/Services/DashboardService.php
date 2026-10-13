@@ -158,72 +158,182 @@ class DashboardService
         ];
     }
 
-    // ================================================================== approvals waiting for the user
+    // ================================================================== pending approvals: who acts next
 
     /**
-     * Every pending approval the user can act on (by permission), with counts for their institute
-     * (Super Admin: all institutes) and a link to the matching queue/filter:
-     *  Gate 1 — documents to verify, applications ready to approve (onboarding.verify_documents)
-     *  Gate 2 — payments to verify, fee gates ready to approve (payments.verify)
-     *  ER form — to print / sign / archive; ID card — to print / sign / reprints (enrollment.manage)
-     * Each: key, label, hint, count, icon, tone, url, group.
+     * Pending approval steps of the onboarding workflow. For each: the permission needed to act, the role
+     * that normally takes the step (null = anyone with the permission) and the next step in plain words.
      */
-    public function pendingActions(User $user): array
-    {
-        $id = $user->isSuperAdmin() ? null : (int) $user->institute_id;
-        $scope = fn ($q) => $q->when($id, fn ($w) => $w->where('institute_id', $id));
-        $onboarding = app(OnboardingService::class);
-        $items = [];
+    const PENDING = [
+        'docs' => ['group' => 'Gate 1 · Documents', 'label' => 'Documents to verify', 'icon' => 'ti ti-file-search', 'tone' => 'warning',
+            'permission' => 'onboarding.verify_documents', 'role' => null, 'step' => 'Verify each KYC document', 'route' => ['admin.onboarding.documents', ['tab' => 'pending']]],
+        'gate1' => ['group' => 'Gate 1 · Documents', 'label' => 'Gate 1 ready to approve', 'icon' => 'ti ti-file-check', 'tone' => 'primary',
+            'permission' => 'onboarding.verify_documents', 'role' => null, 'step' => 'Approve the document gate', 'route' => ['admin.onboarding.documents', ['tab' => 'pending']]],
+        'payments' => ['group' => 'Gate 2 · Fees', 'label' => 'Payments to verify', 'icon' => 'ti ti-cash', 'tone' => 'warning',
+            'permission' => 'payments.verify', 'role' => null, 'step' => 'Verify the payment and issue the receipt', 'route' => ['admin.onboarding.payments', ['tab' => 'pending']]],
+        'gate2' => ['group' => 'Gate 2 · Fees', 'label' => 'Fee gate ready to approve', 'icon' => 'ti ti-shield-check', 'tone' => 'primary',
+            'permission' => 'payments.verify', 'role' => null, 'step' => 'Approve the fee gate (issues the ER number)', 'route' => ['admin.onboarding.payments', ['tab' => 'gate']]],
+        'form_print' => ['group' => 'ER form', 'label' => 'ER forms to print', 'icon' => 'ti ti-printer', 'tone' => 'info',
+            'permission' => 'enrollment.manage', 'role' => null, 'step' => 'Print the ER request form', 'route' => ['admin.onboarding.enrollment', ['formStage' => 'generated']]],
+        'form_sign' => ['group' => 'ER form', 'label' => 'ER forms to sign', 'icon' => 'ti ti-signature', 'tone' => 'warning',
+            'permission' => 'enrollment.manage', 'role' => 'training-manager', 'step' => 'Training Manager signs the printed form', 'route' => ['admin.onboarding.enrollment', ['formStage' => 'printed']]],
+        'form_archive' => ['group' => 'ER form', 'label' => 'ER forms to archive', 'icon' => 'ti ti-archive', 'tone' => 'secondary',
+            'permission' => 'enrollment.manage', 'role' => null, 'step' => 'Archive the signed form', 'route' => ['admin.onboarding.enrollment', ['formStage' => 'signed']]],
+        'card_print' => ['group' => 'ID card', 'label' => 'ID cards to print', 'icon' => 'ti ti-id', 'tone' => 'info',
+            'permission' => 'enrollment.manage', 'role' => null, 'step' => 'Print the ID card', 'route' => ['admin.onboarding.enrollment', ['cardStage' => 'to_print']]],
+        'card_sign' => ['group' => 'ID card', 'label' => 'ID cards to sign & issue', 'icon' => 'ti ti-id-badge-2', 'tone' => 'danger',
+            'permission' => 'enrollment.manage', 'role' => 'training-manager', 'step' => 'Training Manager signs and issues the card', 'route' => ['admin.onboarding.enrollment', ['cardStage' => 'to_sign']]],
+        'card_reprint' => ['group' => 'ID card', 'label' => 'Reprinted cards to sign', 'icon' => 'ti ti-copy', 'tone' => 'danger',
+            'permission' => 'enrollment.manage', 'role' => 'training-manager', 'step' => 'Training Manager signs the reprinted card', 'route' => ['admin.onboarding.enrollment', ['cardStage' => 'reprinted']]],
+    ];
 
-        if ($user->can('onboarding.verify_documents')) {
+    /**
+     * Counts (and short hints) of the pending steps for one institute (null = all institutes).
+     *
+     * @return array<string, array{count: int, hint: string}>
+     */
+    public function pendingCounts(?int $instituteId, array $keys): array
+    {
+        $scope = fn ($q) => $q->when($instituteId, fn ($w) => $w->where('institute_id', $instituteId));
+        $onboarding = app(OnboardingService::class);
+        $out = [];
+        $want = fn ($key) => in_array($key, $keys, true);
+
+        if ($want('docs')) {
             $docs = \App\Models\Admin\StudentDocument::withoutGlobalScopes()->whereNull('deleted_at')->tap($scope)
                 ->where('verification_status', 'pending')
                 ->whereHas('student', fn ($s) => $s->whereIn('status', ['pending_docs', 'pending_approval']));
-            $gate1 = Student::withoutGlobalScopes()->whereNull('deleted_at')->tap($scope)->where('status', 'pending_approval')
+            $out['docs'] = ['count' => (clone $docs)->count(), 'hint' => (clone $docs)->distinct('student_id')->count('student_id') . ' applications'];
+        }
+        if ($want('gate1')) {
+            $out['gate1'] = ['count' => Student::withoutGlobalScopes()->whereNull('deleted_at')->tap($scope)->where('status', 'pending_approval')
                 ->whereHas('approvals', fn ($a) => $a->where('gate', EnrollmentApproval::DOCUMENTS)->where('status', 'pending'))
                 ->with('approvals', 'documents')->get()
-                ->filter(fn ($s) => $onboarding->gateBlocker($s, EnrollmentApproval::DOCUMENTS) === null);
-            $items[] = ['key' => 'docs', 'group' => 'Gate 1 · Documents', 'label' => 'Documents to verify', 'hint' => (clone $docs)->distinct('student_id')->count('student_id') . ' applications',
-                'count' => (clone $docs)->count(), 'icon' => 'ti ti-file-search', 'tone' => 'warning', 'url' => route('admin.onboarding.documents', ['tab' => 'pending'])];
-            $items[] = ['key' => 'gate1', 'group' => 'Gate 1 · Documents', 'label' => 'Gate 1 ready to approve', 'hint' => 'all documents verified',
-                'count' => $gate1->count(), 'icon' => 'ti ti-file-check', 'tone' => 'primary', 'url' => route('admin.onboarding.documents', ['tab' => 'pending'])];
+                ->filter(fn ($s) => $onboarding->gateBlocker($s, EnrollmentApproval::DOCUMENTS) === null)->count(), 'hint' => 'all documents verified'];
         }
-
-        if ($user->can('payments.verify')) {
+        if ($want('payments')) {
             $payments = StudentPayment::withoutGlobalScopes()->whereNull('deleted_at')->tap($scope)->where('status', 'pending_verification');
-            $gate2 = Student::withoutGlobalScopes()->whereNull('deleted_at')->tap($scope)
+            $out['payments'] = ['count' => (clone $payments)->count(), 'hint' => money_inr((clone $payments)->sum('amount'), false)];
+        }
+        if ($want('gate2')) {
+            $out['gate2'] = ['count' => Student::withoutGlobalScopes()->whereNull('deleted_at')->tap($scope)
                 ->whereHas('approvals', fn ($a) => $a->where('gate', EnrollmentApproval::FEES)->where('status', 'pending'))
                 ->whereHas('approvals', fn ($a) => $a->where('gate', EnrollmentApproval::DOCUMENTS)->where('status', 'approved'))
                 ->with('approvals')->get()
-                ->filter(fn ($s) => $onboarding->gateBlocker($s, EnrollmentApproval::FEES) === null);
-            $items[] = ['key' => 'payments', 'group' => 'Gate 2 · Fees', 'label' => 'Payments to verify', 'hint' => money_inr((clone $payments)->sum('amount'), false),
-                'count' => (clone $payments)->count(), 'icon' => 'ti ti-cash', 'tone' => 'warning', 'url' => route('admin.onboarding.payments', ['tab' => 'pending'])];
-            $items[] = ['key' => 'gate2', 'group' => 'Gate 2 · Fees', 'label' => 'Fee gate ready to approve', 'hint' => 'all dues cleared',
-                'count' => $gate2->count(), 'icon' => 'ti ti-shield-check', 'tone' => 'primary', 'url' => route('admin.onboarding.payments', ['tab' => 'gate'])];
+                ->filter(fn ($s) => $onboarding->gateBlocker($s, EnrollmentApproval::FEES) === null)->count(), 'hint' => 'all dues cleared'];
+        }
+        $forms = fn () => ErRequest::withoutGlobalScopes()->whereNull('deleted_at')->tap($scope);
+        $cards = fn () => IdCard::withoutGlobalScopes()->whereNull('deleted_at')->tap($scope)->where('tm_signature_status', 'pending');
+        foreach (['form_print' => 'generated', 'form_sign' => 'printed', 'form_archive' => 'signed'] as $key => $status) {
+            if ($want($key)) {
+                $out[$key] = ['count' => $forms()->where('status', $status)->count(), 'hint' => ['form_print' => 'new ER numbers', 'form_sign' => 'TM signature', 'form_archive' => 'signed'][$key]];
+            }
+        }
+        if ($want('card_print')) {
+            $out['card_print'] = ['count' => $cards()->where('status', '!=', 'reprinted')->where('print_count', 0)->count(), 'hint' => 'not printed yet'];
+        }
+        if ($want('card_sign')) {
+            $out['card_sign'] = ['count' => $cards()->where('status', '!=', 'reprinted')->where('print_count', '>', 0)->count(), 'hint' => 'printed'];
+        }
+        if ($want('card_reprint')) {
+            $out['card_reprint'] = ['count' => $cards()->where('status', 'reprinted')->count(), 'hint' => 'lost / damaged'];
         }
 
-        if ($user->can('enrollment.manage')) {
-            $forms = fn () => ErRequest::withoutGlobalScopes()->whereNull('deleted_at')->tap($scope);
-            $cards = fn () => IdCard::withoutGlobalScopes()->whereNull('deleted_at')->tap($scope)->where('tm_signature_status', 'pending');
-            $queue = fn ($params) => route('admin.onboarding.enrollment', $params);
-            $items[] = ['key' => 'form_print', 'group' => 'ER form', 'label' => 'ER forms to print', 'hint' => 'new ER numbers',
-                'count' => $forms()->where('status', 'generated')->count(), 'icon' => 'ti ti-printer', 'tone' => 'info', 'url' => $queue(['formStage' => 'generated'])];
-            $items[] = ['key' => 'form_sign', 'group' => 'ER form', 'label' => 'ER forms to sign', 'hint' => 'TM signature',
-                'count' => $forms()->where('status', 'printed')->count(), 'icon' => 'ti ti-signature', 'tone' => 'warning', 'url' => $queue(['formStage' => 'printed'])];
-            $items[] = ['key' => 'form_archive', 'group' => 'ER form', 'label' => 'ER forms to archive', 'hint' => 'signed',
-                'count' => $forms()->where('status', 'signed')->count(), 'icon' => 'ti ti-archive', 'tone' => 'secondary', 'url' => $queue(['formStage' => 'signed'])];
-            $items[] = ['key' => 'card_print', 'group' => 'ID card', 'label' => 'ID cards to print', 'hint' => 'not printed yet',
-                'count' => $cards()->where('status', '!=', 'reprinted')->where('print_count', 0)->count(), 'icon' => 'ti ti-id', 'tone' => 'info', 'url' => $queue(['cardStage' => 'to_print'])];
-            $items[] = ['key' => 'card_sign', 'group' => 'ID card', 'label' => 'ID cards to sign & issue', 'hint' => 'printed',
-                'count' => $cards()->where('status', '!=', 'reprinted')->where('print_count', '>', 0)->count(), 'icon' => 'ti ti-id-badge-2', 'tone' => 'danger', 'url' => $queue(['cardStage' => 'to_sign'])];
-            $reprints = $cards()->where('status', 'reprinted')->count();
-            if ($reprints) {
-                $items[] = ['key' => 'card_reprint', 'group' => 'ID card', 'label' => 'Reprinted cards to sign', 'hint' => 'lost / damaged',
-                    'count' => $reprints, 'icon' => 'ti ti-copy', 'tone' => 'danger', 'url' => $queue(['cardStage' => 'reprinted'])];
+        return $out;
+    }
+
+    /**
+     * Who takes a step in an institute: active users holding the permission (and, for signature steps,
+     * the Training Managers — or, without a TM, whoever may record the signature).
+     *
+     * @return array{users: Collection, roles: array, missing: bool}
+     */
+    public function responsibleFor(string $key, int $instituteId): array
+    {
+        $def = self::PENDING[$key];
+        $holders = User::permission($def['permission'])->with('roles')->where('institute_id', $instituteId)->where('status', true)->orderBy('name')->get();
+        $users = $def['role'] ? $holders->filter(fn ($u) => $u->hasRole($def['role']))->values() : $holders;
+        if ($def['role'] && $users->isEmpty()) {
+            $users = $holders; // no Training Manager account: others with the permission record it
+        }
+        $roleSlugs = $def['role'] && $users->contains(fn ($u) => $u->hasRole($def['role']))
+            ? [$def['role']]
+            : $users->flatMap(fn ($u) => $u->getRoleNames())->unique()->values()->all();
+        if (!$roleSlugs) {
+            // nobody can act: name the roles that normally do
+            $roleSlugs = $def['role'] ? [$def['role']] : \Spatie\Permission\Models\Role::permission($def['permission'])->pluck('name')->reject(fn ($r) => $r === 'super-admin')->values()->all();
+        }
+
+        return [
+            'users' => $users,
+            'roles' => collect($roleSlugs)->map(fn ($r) => config("camp.roles.{$r}", $r))->all(),
+            'role_slugs' => $roleSlugs,
+            'missing' => $users->isEmpty(),
+        ];
+    }
+
+    /** Link to the queue of a pending step. */
+    protected function pendingUrl(string $key): string
+    {
+        [$route, $params] = self::PENDING[$key]['route'];
+
+        return route($route, $params);
+    }
+
+    /**
+     * "Waiting for you": the pending steps this user can take (by permission), with counts for their institute
+     * (Super Admin: all institutes). Each: key, group, label, hint, count, icon, tone, url, step.
+     */
+    public function pendingActions(User $user): array
+    {
+        $keys = collect(self::PENDING)->filter(fn ($def) => $user->can($def['permission']))->keys()->all();
+        $counts = $this->pendingCounts($user->isSuperAdmin() ? null : (int) $user->institute_id, $keys);
+
+        return collect($keys)
+            ->reject(fn ($key) => $key === 'card_reprint' && !($counts[$key]['count'] ?? 0)) // only when there are reprints
+            ->map(fn ($key) => array_merge(
+                array_intersect_key(self::PENDING[$key], array_flip(['group', 'label', 'icon', 'tone', 'step'])),
+                ['key' => $key, 'count' => $counts[$key]['count'] ?? 0, 'hint' => $counts[$key]['hint'] ?? '', 'url' => $this->pendingUrl($key)]
+            ))
+            ->values()->all();
+    }
+
+    /**
+     * Super Admin / Institute Admin: every pending step in their institute(s) with the role whose turn it is
+     * and the people responsible — so they can see where work is waiting and with whom.
+     * Rows: key, group, label, icon, tone, step, url, count, hint, institute, roles, users, missing, mine.
+     */
+    public function pendingOverview(User $user): ?array
+    {
+        if (!$user->isSuperAdmin() && !$user->hasRole('institute-admin')) {
+            return null;
+        }
+        $institutes = $user->isSuperAdmin()
+            ? Institute::where('status', true)->orderBy('name')->get(['id', 'name', 'code'])
+            : Institute::whereKey($user->institute_id)->get(['id', 'name', 'code']);
+        $keys = array_keys(self::PENDING);
+        $order = array_flip($keys);
+        $rows = [];
+
+        foreach ($institutes as $institute) {
+            foreach ($this->pendingCounts($institute->id, $keys) as $key => $c) {
+                if (!$c['count']) {
+                    continue;
+                }
+                $who = $this->responsibleFor($key, $institute->id);
+                $rows[] = array_merge(
+                    array_intersect_key(self::PENDING[$key], array_flip(['group', 'label', 'icon', 'tone', 'step'])),
+                    ['key' => $key, 'count' => $c['count'], 'hint' => $c['hint'], 'url' => $this->pendingUrl($key), 'institute' => $institute,
+                        'roles' => $who['roles'], 'role_slugs' => $who['role_slugs'], 'users' => $who['users'], 'missing' => $who['missing'],
+                        'mine' => $who['users']->contains('id', $user->id)]
+                );
             }
         }
 
-        return $items;
+        usort($rows, fn ($a, $b) => [$order[$a['key']], $a['institute']->name] <=> [$order[$b['key']], $b['institute']->name]);
+
+        return ['rows' => $rows, 'total' => array_sum(array_column($rows, 'count')), 'institutes' => $institutes->count(),
+            'unassigned' => count(array_filter($rows, fn ($r) => $r['missing']))];
     }
 
     // ================================================================== Super Admin

@@ -14,7 +14,7 @@
         'actions' => [['Add Staff User', 'admin.users', 'ti ti-users-plus', false], ['Add Student', 'admin.students.create', 'ti ti-user-plus', true]],
     ])
 
-    @include('livewire.admin.dashboard.partials.shared.pending', ['pending' => $d['pending']])
+    @include('livewire.admin.dashboard.partials.shared.pending', ['pending' => $d['pending'], 'overview' => $d['overview'], 'showInstitute' => false])
 
     <div class="db-kpis mb-3">
         @foreach([

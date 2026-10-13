@@ -26,6 +26,7 @@ class Dashboard extends Component
         };
 
         $data['pending'] = $dashboards->pendingActions($user); // highlighted on every dashboard
+        $data['overview'] = $dashboards->pendingOverview($user); // Super Admin / Institute Admin: who acts next
 
         return view('livewire.admin.dashboard.dashboard', ['type' => $type, 'd' => $data])
             ->layout('layouts.admin.master');
