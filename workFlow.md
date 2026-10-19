@@ -51,8 +51,8 @@ CAMP serves 10+ institutes of the Sha Shib Group from **one application and one 
 | # | Module | Status |
 | --- | --- | --- |
 | 1 | Core / Foundation: institutes, users, roles & permissions, side menu, audit trail, notification log, serial numbers | ✅ Built |
-| 1A | Master Data (Super Admin): academic years, courses, qualifications, boards, religions, categories, countries, states, payment gateways | ✅ Built |
-| 2 | Student Onboarding & ER Number: admin onboarding, admissions portal, document gate, fee gate, ER number, ER form, ID card, batches, payment settings | ✅ Built |
+| 1A | Master Data (Super Admin): academic years, courses, qualifications, boards, religions, categories, countries, states, payment gateways · 🟡 12th subjects, 12th subject groups, course eligibility criteria | ✅ Built (🟡 new lists planned) |
+| 2 | Student Onboarding & ER Number: admin onboarding, admissions portal, document gate, fee gate, ER number, ER form, ID card, batches, payment settings · 🟡 **course eligibility check (12th)** (step 2.7) | ✅ Built (2.7 🟡 planned) |
 | 2A | In-app workflow notifications (bell, notification page, portal notifications) | ✅ Built |
 | 2B | Academic years, academic periods (semesters / terms), student period history, semester-wise fee structure | ✅ Built |
 | 2C | Scholarship Management: scholarships per institute / course / batch, assignment to students, automatic fee discounts | 🟡 Planned |
@@ -152,6 +152,7 @@ Student **admissions portal** (`/admissions`, separate from the admin panel): Ho
 
 | Section | Menu | Roles |
 | --- | --- | --- |
+| Configuration | Master Data ▸ Academic ▸ 12th Subjects, 12th Subject Groups, Course Eligibility | Super Admin |
 | Institute Management | Scholarships ▸ Scholarships | Super Admin, Institute Admin (Accounts: view) |
 | Institute Management | Scholarships ▸ Assign Scholarship | Super Admin, Institute Admin |
 | Academics | Examinations ▸ Courses & Subjects | Super Admin, Institute Admin |
@@ -222,6 +223,7 @@ Super Admin passes every permission check. Defaults for the other roles are belo
 | `audit.view` | Audit trail | Institute Admin |
 | `notifications.view` | Notification log | Institute Admin |
 | `serials.manage` | Serial number series | Super Admin |
+| 🟡 `eligibility.override` | Allow a student who doesn't meet the course eligibility criteria (reason required) | Institute Admin |
 | 🟡 `scholarships.view` | See scholarships and student discounts | Institute Admin, Accounts |
 | 🟡 `scholarships.manage` | Create, edit, deactivate scholarships | Institute Admin |
 | 🟡 `scholarships.assign` | Assign scholarships to students, revoke | Institute Admin |
@@ -395,6 +397,32 @@ Payments arrive by:
 
 A new due added after Gate 2 approval **but before the ER number** reopens Gate 2.
 
+### 6.6 Course eligibility check (12th) 🟡 (Module 2 step 2.7)
+
+```
+Super Admin set-up                       Student / office                           Check
+──────────────────                       ────────────────                           ─────
+12th Subjects, Subject Groups      ──►   Choose course → "Eligibility (12th)"  ──►  Live ✓ / ✗ per subject + aggregate
+Board CGPA factor (default 9.5)          card shows accepted groups & minimums      Eligible ─► submit allowed
+Course Eligibility: course + board       Board → group → mark per subject           Not eligible ─► submit blocked
+  (or any) + group + min % per             (% or CGPA)                              Override (reason) ─► submit allowed
+  subject + optional aggregate                                                      Gate 1 shows marks vs 12th marksheet
+```
+
+| Rule | Detail |
+| --- | --- |
+| Criteria | Per course: accepted subject group(s) (PCM, PCB, Commerce …), each with a **minimum % per required subject** and an optional **minimum aggregate** (average of those subjects). Per board, or "Any board" (a board-specific criterion wins) |
+| Shown | On the portal Step 1 / admin Basic tab as soon as a course is chosen |
+| Marks | Step 2 / Academic tab: only the groups the course accepts; one mark per required subject, % (0–100) or CGPA (0–10) |
+| CGPA | Converted with the board's factor: % = CGPA × factor (default 9.5), max 100 |
+| Not eligible | **Submission blocked** (portal and admin) with the reasons |
+| Override | Super Admin / Institute Admin (`eligibility.override`): "Allow with reason" — audited; cleared if course, board, group or marks change |
+| No criteria | Course without criteria: subject marks optional, nothing blocked |
+| Gate 1 | Document Verification shows the eligibility status and subject marks next to the 12th marksheet |
+| Not Module 3 | 12th subjects are separate master lists, **not** the course subjects of Module 3 (syllabus, exams) |
+
+**Worked example:** AME B1.1 accepts PCM (any board): Physics ≥ 50, Chemistry ≥ 45, Mathematics ≥ 50, aggregate ≥ 50. A student enters Physics 48 %, Chemistry 60 %, Mathematics CGPA 8.0 (board factor 9.5 → 76 %). Aggregate = 61.3 % ✓, but Physics 48 < 50 ✗ → **Not eligible**, submission blocked until the marks are corrected or an admin overrides with a reason.
+
 ---
 
 ## 7. ER number generation & rules ✅
@@ -551,7 +579,7 @@ Define scholarship  ──►  Assign to students  ──►  Discount on unpaid
 
 **Trigger → Approval → Execution**
 
-1. **Subjects** per course and **semester** (`period_no`), with syllabus topics.
+1. **Subjects** per course and **semester** (`period_no`), with syllabus topics. *(These are the course's own subjects — separate from the 12th qualifying subjects used for course eligibility, see [6.6](#66-course-eligibility-check-12th--module-2-step-27).)*
 2. **Syllabus mapping** (Super Admin): an exam can be scheduled only when the syllabus covered is at least the threshold. **Mid-semester: 40 %. Semester exam: 100 %.**
 3. **Exam schedule** (Super Admin, Institute Admin, EM): exam type (mid-sem / semester), semester, date, mode (online / offline).
 4. **Exam application** by the student, choosing subjects. One application per student per exam.
@@ -691,6 +719,11 @@ Draft upload ─► HoT review ─┬─► Returned for correction ─► (re-u
 | D20 | A scholarship reduces the **unpaid balance only**; fully paid fees are skipped, no refunds |
 | D21 | Several scholarships per student are allowed; the total discount is **capped at the fee**; the same scholarship can't be assigned twice |
 | D22 | Scholarship assignments **apply at once** (no approval), with audit trail and notifications |
+| D23 | Course eligibility (12th): marks below the criteria **block submission**; Super Admin / Institute Admin may override with a reason |
+| D24 | A criterion = **minimum % per required subject** + optional **minimum aggregate**, per course + group, per board or any board |
+| D25 | CGPA is converted to % with a **per-board factor** (default 9.5) |
+| D26 | 12th subjects and subject groups are **Master Data** (Super Admin); PCM / PCB / Commerce / Arts seeded |
+| D27 | 12th qualifying subjects are kept **separate from the Module 3 course subjects** |
 
 ---
 
@@ -774,6 +807,25 @@ Columns: **ID** · **Scenario** · **Expected result**. ✅ = verifiable now; �
 | O-09 | Portal: change course after submitting a payment | Refused |
 | O-10 | Edit details after Gate 1 approval | Gate 1 reopened; admins notified |
 | O-11 | Joining date + 30 days passed without ER | Shown as past deadline; counted on the list header |
+
+### 19.4a Course eligibility (12th) 🟡
+
+| ID | Scenario | Expected |
+| --- | --- | --- |
+| EL-01 | Course with PCM criterion; choose it on portal Step 1 | "Eligibility (12th)" card shows PCM with each subject minimum and the aggregate |
+| EL-02 | Step 2 group list for that course | Only the accepted groups are offered |
+| EL-03 | All subjects at or above their minimums, aggregate met | Eligible ✓; submission allowed |
+| EL-04 | One subject below its minimum | Not eligible; that subject named ("Physics 48 % — needs 50 %"); submit refused |
+| EL-05 | Every subject passes but the average is below the aggregate | Not eligible (aggregate) |
+| EL-06 | CGPA 8.0 on a board with factor 9.5 | Counted as 76 % |
+| EL-07 | Board-specific criterion and an "Any board" criterion exist | The board-specific one is applied |
+| EL-08 | Course with no criteria | Subject marks optional; submission not blocked |
+| EL-09 | Admin office side (Academic tab) with failing marks | Same check; Submit refused |
+| EL-10 | Institute Admin "Allow with reason" | Status Overridden; submission allowed; audit entry with the reason |
+| EL-11 | Change a mark after an override | Re-checked; override cleared |
+| EL-12 | Gate 1 Document Verification | Shows eligibility status and subject marks beside the 12th marksheet |
+| EL-13 | Deactivate a 12th subject / group used by a criterion or students | Delete refused; deactivation allowed |
+| EL-14 | Module 3 Courses & Subjects screen | Does not list the 12th subjects (separate lists) |
 
 ### 19.5 Gates, ER number, ER form, ID card ✅
 

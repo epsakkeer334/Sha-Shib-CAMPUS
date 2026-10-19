@@ -77,7 +77,7 @@ Only Super Admin adds/edits institutes. Students are created by Module 2 (onboar
 
 **Side menu** ✅ — role × menu matrix in `config/menu.php`, rendered by `App\Services\MenuService`. An item shows when its route exists and the user has the listed role/permission, so menu items for Modules 2–8 appear automatically as each module is built. Non-Super-Admin dashboards show the same items as quick links.
 
-**Permissions** ✅ — defined in `config/camp.php` → `permissions` (Module 1: `institutes.manage`, `users.view/create/update/delete`, `roles.manage`, `audit.view`, `notifications.view`, `serials.manage`; Module 1A: `masters.manage` ✅ — Super Admin only, hidden from the matrix; `institute_courses.view` / `institute_courses.manage` ✅ — default for Institute Admin, own institute only (Super Admin: all institutes); planned: `payments.collect`, `payments.verify`, `payments.refund` — Accounts, for Module 2; Module 2C 🟡: `scholarships.view` (Institute Admin, Accounts), `scholarships.manage` and `scholarships.assign` (Institute Admin)); editable per role on the Roles & Permissions screen. Super Admin passes every check (`Gate::before`).
+**Permissions** ✅ — defined in `config/camp.php` → `permissions` (Module 1: `institutes.manage`, `users.view/create/update/delete`, `roles.manage`, `audit.view`, `notifications.view`, `serials.manage`; Module 1A: `masters.manage` ✅ — Super Admin only, hidden from the matrix; `institute_courses.view` / `institute_courses.manage` ✅ — default for Institute Admin, own institute only (Super Admin: all institutes); planned: `payments.collect`, `payments.verify`, `payments.refund` — Accounts, for Module 2; Module 2C 🟡: `scholarships.view` (Institute Admin, Accounts), `scholarships.manage` and `scholarships.assign` (Institute Admin); Module 2.7 🟡: `eligibility.override` (Institute Admin)); editable per role on the Roles & Permissions screen. Super Admin passes every check (`Gate::before`).
 
 ---
 
@@ -192,7 +192,8 @@ ORGANIZATION
   Institute Management ▸ Institutes, Institute Courses
 CONFIGURATION
   Master Data ▸
-     Academic ▸ Courses, Qualifications, Matriculation Boards, Higher Secondary Boards
+     Academic ▸ Courses, Qualifications, Matriculation Boards, Higher Secondary Boards,
+                12th Subjects 🟡, 12th Subject Groups 🟡, Course Eligibility 🟡 (Module 2 step 2.7)
      Personal ▸ Religions, Categories
      Location ▸ Countries, States
      Finance  ▸ Payment Gateways
@@ -309,6 +310,7 @@ Fixed lists kept in `config/camp.php` (not tables): `higher_secondary_subjects` 
 | 2.4 Dual gate → ER number | Both gates approved → ER number `ER-2026-00001` (group-wide series, `SerialNumberService`), status `er_issued`, ER request form + pending ID card created, student emailed; ER form lifecycle printed → TM signed → archived | ✅ |
 | 2.5 ID card | Card preview with KYC photo, print (count kept), Mark signed & issued → student `active`; reprint with reason | ✅ |
 | 2.6 Admissions portal (student website) | `/admissions`: home → **Apply** (Step 1 Your details: creates the student login + draft application; institute → course) → Step 2 Academic (segmented % / CGPA, stream cards) → Step 3 Documents (upload on select, re-upload rejected, submit application → fees generated from the fee structure) → Step 4 Payment (fees list, GPay/UPI: QR / UPI app link / UPI ID, UTR + screenshot → Accounts verification; office payment info; receipts) → Application status (timeline, action-needed banners, documents). Student sign-in at `/admissions/login` (throttled). Course fees are shown in Step 1 once a course is chosen and are added to the student at registration (kept in step with course / joining date until a payment exists), with a fee summary on every step; **Pay now** / **Save and pay now** and the Payment step open only once all required documents are uploaded (or a payment already exists), then stay open until everything is paid (also before submitting). Details, academic and documents stay editable at any stage until a fee payment is **confirmed** (course change refused once a payment is submitted; edits after Gate 1 approval reopen Gate 1). Free navigation between all steps; unsaved field entries are auto-saved as a draft (`students.portal_drafts`) and restored; sign-in resumes at the last step visited (`students.portal_last_step`, `App\Support\PortalProgress`). Same rules/services as the admin side (`App\Support\StudentRules`, `OnboardingService`, `FeeService`). Students are kept out of the admin panel and staff out of the portal. | ✅ |
+| 2.7 Course eligibility criteria (12th) | Super Admin sets per course the accepted 12th subject groups (PCM, PCB, Commerce …) with a minimum % per subject + optional aggregate (any board or per board); criteria shown when the student picks a course; marks entered per subject (% or CGPA, converted by the board factor); live check; submission blocked when not eligible (override with reason) — see *Course Eligibility Criteria* below | 🟡 |
 
 Admin: Institute Management ▸ **Payment Settings** (`admin.institute-payment-settings`, `fees.manage`) — per institute: which methods are accepted, UPI ID, payee name, QR image, office instructions (shown on the portal payment step).
 
@@ -357,9 +359,105 @@ Default permissions (editable on Roles & Permissions): Institute Admin — stude
 | matriculation_mark_type | enum(percentage,cgpa) |  |
 | matriculation_mark | decimal(5,2) | 0–100 for percentage, 0–10 for CGPA |
 | higher_secondary_board_id | bigint FK → `higher_secondary_boards` |  |
-| higher_secondary_subject | enum(PCM,PCB,COMMERCE,ARTS) | fixed list from `config/camp.php`, not a table |
+| higher_secondary_subject | enum(PCM,PCB,COMMERCE,ARTS) | fixed list from `config/camp.php`, not a table — 🟡 becomes `qualifying_subject_group_id` (step 2.7) |
 | higher_secondary_mark_type | enum(percentage,cgpa) |  |
 | higher_secondary_mark | decimal(5,2) | same range rule |
+
+#### Course Eligibility Criteria — Higher Secondary (12th) 🟡 planned (step 2.7)
+
+**Purpose:** the Super Admin configures, per course, which 12th subject groups are accepted and the minimum marks per subject. When a student chooses a course, the criteria are shown; the student enters a mark (% or CGPA) for each required subject and the application is validated against the criteria.
+
+**Decisions (agreed)**
+- (a) Marks that don't meet the criteria **block submission** (portal and admin). The Super Admin / Institute Admin can **override with a reason** (audited).
+- (b) A criterion = a **minimum % per required subject** + an optional **minimum aggregate** (average % of the group's required subjects).
+- (c) CGPA is **converted with a per-board factor** (default 9.5): % = CGPA × factor, max 100. Criteria are always stored in %.
+- (d) Subjects and subject groups are **Master Data tables** (Super Admin); PCM / PCB / Commerce / Arts are seeded.
+- (e) These are **12th qualifying subjects**, kept **separate from the Module 3 `subjects`** (the subjects taught inside a course). Tables are named `qualifying_*` and the screens "12th Subjects" / "12th Subject Groups" so the two are never mixed up.
+
+**Master Data tables** (Super Admin, `masters.manage`; each with `status` + `BaseModel` columns; a row in use is deactivated, never deleted)
+
+`qualifying_subjects` ("12th Subjects" — not Module 3 `subjects`)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| name | string unique | Physics, Chemistry, Mathematics, Biology, Accountancy, Business Studies, Economics, English … (seeded) |
+| code | string unique | e.g. PHY, CHE, MAT |
+| status | boolean |  |
+
+`qualifying_subject_groups` ("12th Subject Groups") + pivot `qualifying_group_subjects` (qualifying_subject_group_id, qualifying_subject_id, sort_order; unique pair)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| code | string unique | PCM, PCB, COMMERCE, ARTS (seeded; more can be added, e.g. PCMB) |
+| name | string | e.g. "Physics, Chemistry, Mathematics" |
+| status | boolean |  |
+
+Seeded groups: **PCM** = Physics, Chemistry, Mathematics · **PCB** = Physics, Chemistry, Biology · **Commerce** = Accountancy, Business Studies · **Arts** (subjects to be confirmed).
+
+`higher_secondary_boards` ✅ gets **`cgpa_factor`** decimal(4,2), default 9.5 (CGPA → % conversion for that board).
+
+`course_eligibility_criteria`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| course_id | bigint FK → `courses` |  |
+| higher_secondary_board_id | bigint FK nullable | null = **any board**; a board-specific row wins over the "any board" row |
+| qualifying_subject_group_id | bigint FK | the accepted group, e.g. PCM |
+| min_aggregate | decimal(5,2) nullable | minimum average % of the required subjects |
+| remarks | text nullable | shown to the student, e.g. "English must be passed" |
+| status | boolean |  |
+| unique | (course_id, higher_secondary_board_id, qualifying_subject_group_id) |  |
+
+`course_eligibility_subjects`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| course_eligibility_criterion_id | bigint FK |  |
+| qualifying_subject_id | bigint FK | must belong to the criterion's group (all the group's subjects are filled in by default) |
+| min_percent | decimal(5,2) | 0–100 |
+| unique | (criterion, qualifying_subject_id) |  |
+
+Example: *AME B1.1 · Any board · PCM — Physics ≥ 50 %, Chemistry ≥ 45 %, Mathematics ≥ 50 %, aggregate ≥ 50 %*; a course can accept several groups (e.g. PCM **or** PCB), one criterion row each.
+
+**Student side**
+- `student_academic_details`:
+  - `higher_secondary_subject` (enum) → **`qualifying_subject_group_id`** FK. An additive migration maps PCM / PCB / COMMERCE / ARTS to the seeded groups. `config('camp.higher_secondary_subjects')` is retired afterwards.
+  - New: `eligibility_status` enum(eligible, not_eligible, not_configured, overridden), `eligibility_snapshot` json (the criterion and per-subject result at check time), `eligibility_checked_at`, `eligibility_override_by`, `eligibility_override_reason`.
+  - The overall `higher_secondary_mark` stays as entered today.
+- New table `student_qualifying_marks`: student_id, qualifying_subject_id, mark_type enum(percentage, cgpa), mark decimal(5,2) (0–100 for %, 0–10 for CGPA), percent decimal(5,2) (converted); unique (student_id, qualifying_subject_id).
+
+**`App\Services\EligibilityService`** (used by the admin and the portal, like `OnboardingService`)
+- `groupsFor(course)` — groups accepted for the course (all active groups when the course has no criteria).
+- `criteriaFor(course, board, group)` — the board-specific criterion, else the "any board" one.
+- `toPercent(mark, type, board)` — CGPA × `cgpa_factor`, max 100.
+- `evaluate(student)` — per subject ✓ / ✗ (percent vs `min_percent`), aggregate vs `min_aggregate`, overall status; stores `eligibility_status` + snapshot.
+
+**Flow**
+1. **Portal Step 1 / admin Basic tab:** when a course is chosen, an **"Eligibility (12th)"** card lists each accepted group with its subject minimums and aggregate (and the remarks).
+2. **Portal Step 2 / admin Academic tab:**
+   - Choose the board, then the group (only the groups accepted for the course).
+   - One mark row per required subject, each with a % / CGPA toggle.
+   - A **live check** shows ✓ / ✗ per subject ("Physics 48 % — needs 50 %"), the aggregate, and an overall *Eligible* / *Not eligible* banner.
+3. **Submit:** `OnboardingService` refuses submission while `eligibility_status = not_eligible` and lists the reasons.
+4. **Override:** users with `eligibility.override` record "Allow with reason" → status `overridden` (audit trail).
+5. **Re-check:** changing the course, board, group or marks re-runs the check and clears an override.
+6. **Gate 1:** Document Verification shows the eligibility chip and the subject marks next to the 12th marksheet, so the admin can compare them with the document.
+
+**Rules**
+- A course with **no criteria** → `not_configured`: subject marks are optional and nothing is blocked (today's behaviour).
+- Existing students keep their data; they are checked the next time their academic details are saved.
+
+**Screens:** Master Data ▸ Academic ▸ **12th Subjects**, **12th Subject Groups** (subject picker), **Course Eligibility** (filter by course; add criterion = course → board or "Any board" → group → min % per subject + aggregate).
+
+**Components:**
+- New: `Admin\Masters\QualifyingSubjectsManager`, `QualifyingSubjectGroupsManager` (both on `MasterCrudComponent`), `CourseEligibilityManager`.
+- Extended: `StudentOnboardingComponent` (Basic + Academic tabs), `Portal\AcademicPage` and portal Step 1; `App\Support\StudentRules` for the mark ranges.
+
+**Permissions:** `masters.manage` (masters and criteria — Super Admin); new **`eligibility.override`** (Institute Admin by default; Super Admin passes every check).
 
 `student_documents`
 
@@ -733,7 +831,9 @@ Super Admin passes every check. **Data isolation:** `BelongsToInstitute` on all 
 
 **Tables**
 
-Courses come from the Master Data module (`courses` + `institute_courses`); there is no separate `programs` table. (When this module is built, the planned menu item "Programs & Subjects" / `admin.programs` in `config/menu.php` becomes "Courses & Subjects".)
+Courses come from the Master Data module (`courses` + `institute_courses`); there is no separate `programs` table.
+
+> **Note:** `subjects` here are the **subjects taught inside a course** (per institute, course and semester, with syllabus, attendance, exams and marks). They are **not** the 12th qualifying subjects used for course eligibility (`qualifying_subjects` / `qualifying_subject_groups`, Module 2 step 2.7). The two lists are kept separate; the menu "Courses & Subjects" manages course subjects only. (When this module is built, the planned menu item "Programs & Subjects" / `admin.programs` in `config/menu.php` becomes "Courses & Subjects".)
 
 `subjects`
 
@@ -1122,6 +1222,7 @@ Export feature: a queued job zips the `document_final_records` of all `documents
 | **Sprint 1 — Student Onboarding** | ✅ done (2.1–2.6, admin side + admissions portal) | Student registration (+ user account, academic information), document upload wizard, student dues & payments (online gateways, GPay/UPI, offline + Accounts verification, receipts), dual-gate approval (Admin + Accounts), ER generation, ID card issuance |
 | **Sprint 1b — Academic Years, Academic Periods & Period-wise Fees (Module 2B)** ✅ | 1–2 weeks | Academic years master + seeder, course period structure (semester / term / module / year, length, number of periods), course periods per institute / course / academic year (generate & edit), batches → intake year, period-wise fee structure (academic year + period on fee lines, due on the period start date, period 1 fees at ER issue), dues grouped per period |
 | **Sprint 1c — Scholarship Management (Module 2C)** 🟡 | 1–1.5 weeks | Scholarships (institute + course + optional batch / academic year, percentage or fixed, one or more semesters), Assign Scholarship page (one / selected / all eligible, semester-wise preview of fee, discounts and final payable), automatic discounts on student dues (incl. semesters charged later), revoke, permissions + institute isolation |
+| **Sprint 1d — Course Eligibility Criteria (Module 2.7)** 🟡 | ~1 week | 12th Subjects & Subject Groups masters (seed PCM / PCB / Commerce / Arts), board CGPA factor, Course Eligibility screen, per-subject marks on portal Step 2 and the admin Academic tab, criteria card on course choice, live check, submit block + override, eligibility shown at Gate 1 |
 | **Sprint 2 — Exam Application & Approval** | 2 weeks | Subjects per course/syllabus mapping, exam appearance requests, Accounts dues gate + BiC bypass, TM attendance gate, admit card generation |
 | **Sprint 3 — Question Bank & Paper Setup** | 1–2 weeks | Question bank CRUD (Super Admin + Institute), exam paper builder |
 | **Sprint 4 — Grading & Results** | 2 weeks | Marks entry (all three modes), result computation (configurable pass %), Super Admin correction workflow, marksheet + consolidated marksheet generation with unique serials, **promotion to the next period** (75 % per subject eligibility list, Examination Manager + Institute Admin approval, detain / Super Admin override, next-period fees) |
@@ -1148,7 +1249,7 @@ app/
       Roles/               RolesComponent ✅
       AuditTrail/          AuditTrailComponent ✅
       Notifications/       NotificationLogComponent ✅
-      Masters/             QualificationsManager, CoursesManager, ReligionsManager, CategoriesManager, MatriculationBoardsManager, HigherSecondaryBoardsManager, CountriesManager, StatesManager
+      Masters/             QualificationsManager, CoursesManager, ReligionsManager, CategoriesManager, MatriculationBoardsManager, HigherSecondaryBoardsManager, CountriesManager, StatesManager; 🟡 QualifyingSubjectsManager, QualifyingSubjectGroupsManager, CourseEligibilityManager (Module 2.7)
       Onboarding/          StudentRegistrationForm, StudentAcademicForm, DocumentUploadWizard, AdminDocumentVerification, AccountsFeeVerification, ERRequestGenerator, IDCardIssuance
       Scholarships/        ScholarshipsComponent, AssignScholarshipComponent (Module 2C)
       Exams/               ExamAppearanceApplication, AccountsDuesApproval, BiCOverridePanel, TMAttendanceApproval, AdmitCardGenerator, ExamScheduleManager, SyllabusMappingManager
@@ -1161,7 +1262,7 @@ app/
     User.php ✅
     Admin/                 BaseModel ✅, Institute ✅, AuditTrail ✅, Country ✅, State ✅, (one model per new table, extending BaseModel)
   Traits/                  RecordsAuditTrail ✅, BelongsToInstitute
-  Services/                SerialNumberService ✅, NotificationService ✅, MenuService ✅, ScholarshipService (Module 2C), PaymentService, PdfGenerationService, ComplianceAggregationService
+  Services/                SerialNumberService ✅, NotificationService ✅, MenuService ✅, ScholarshipService (Module 2C), EligibilityService (Module 2.7), PaymentService, PdfGenerationService, ComplianceAggregationService
     Payments/              PaymentGatewayInterface, RazorpayGateway, GPayUpiGateway, OfflineGateway ... (one driver per payment_gateways.code)
   Http/Controllers/        PaymentWebhookController (signature-verified, idempotent gateway callbacks)
   Policies/                StudentPolicy, ExamApprovalPolicy, DocumentPolicy, MoUPolicy ...
