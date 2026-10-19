@@ -144,6 +144,7 @@
                             @include('livewire.admin.students.partials.input', ['name' => 'joining_date', 'label' => 'Joining date', 'type' => 'date', 'required' => true, 'col' => 4, 'fieldIcon' => 'ti ti-calendar-event',
                                 'help' => 'Onboarding deadline: ' . config('camp.onboarding_days') . ' days after joining.'])
                         </div>
+                        @include('livewire.admin.students.partials.eligibility-criteria', ['criteria' => $eligibilityCriteria])
                     </div>
 
                     <div class="so-section">
@@ -281,9 +282,10 @@
                         <div class="so-section">
                             <div class="so-section-title"><i class="{{ $icon }}"></i> {{ $title }}</div>
                             <div class="row g-3">
-                                @include('livewire.admin.students.partials.select', ['name' => "{$prefix}_board_id", 'label' => 'Board', 'required' => true, 'col' => $prefix === 'matriculation' ? 6 : 4, 'fieldIcon' => 'ti ti-building-bank', 'options' => $boards])
+                                @include('livewire.admin.students.partials.select', ['name' => "{$prefix}_board_id", 'label' => 'Board', 'required' => true, 'col' => $prefix === 'matriculation' ? 6 : 4, 'fieldIcon' => 'ti ti-building-bank', 'options' => $boards, 'live' => $prefix === 'higher_secondary'])
                                 @if($prefix === 'higher_secondary')
-                                    @include('livewire.admin.students.partials.select', ['name' => 'higher_secondary_subject', 'label' => 'Subject stream', 'required' => true, 'col' => 2, 'options' => config('camp.higher_secondary_subjects')])
+                                    @include('livewire.admin.students.partials.select', ['name' => 'higher_secondary_subject', 'label' => 'Subject stream', 'required' => true, 'col' => 2, 'live' => true,
+                                        'options' => $groups->mapWithKeys(fn ($g) => [$g->code => $g->code])])
                                 @endif
                                 <div class="col-md-3">
                                     <label class="form-label fw-medium small d-block">Mark in <span class="text-danger">*</span></label>
@@ -295,9 +297,13 @@
                                     </div>
                                     @error("{$prefix}_mark_type") <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
                                 </div>
-                                @include('livewire.admin.students.partials.input', ['name' => "{$prefix}_mark", 'label' => 'Mark', 'type' => 'number', 'step' => '0.01', 'required' => true, 'col' => 3,
+                                @include('livewire.admin.students.partials.input', ['name' => "{$prefix}_mark", 'label' => $prefix === 'higher_secondary' ? 'Overall mark' : 'Mark', 'type' => 'number', 'step' => '0.01', 'required' => true, 'col' => 3,
                                     'fieldIcon' => $markType === 'cgpa' ? 'ti ti-star' : 'ti ti-percentage', 'placeholder' => $markType === 'cgpa' ? '0 – 10' : '0 – 100'])
                             </div>
+                            @if($prefix === 'higher_secondary')
+                                @include('livewire.admin.students.partials.eligibility-criteria', ['criteria' => $eligibilityCriteria])
+                                @include('livewire.admin.students.partials.subject-marks', ['entry' => $entry, 'check' => $check, 'markType' => $markType])
+                            @endif
                         </div>
                     @endforeach
                 @endif
@@ -418,6 +424,8 @@
                         <div class="so-alert so-alert-ok mb-3"><i class="ti ti-circle-check"></i><div>All details and required documents are in place.</div></div>
                     @endif
 
+                    @include('livewire.admin.students.partials.eligibility-override', ['academic' => $academic, 'canOverride' => $canOverride && !$readOnly])
+
                     <div class="row g-3">
                         @foreach([
                             ['basic', 'Basic details', 'ti ti-user', [
@@ -442,6 +450,8 @@
                             ['academic', 'Academic details', 'ti ti-school', $academic ? [
                                 '10th' => optional($academic->matriculationBoard)->name . ' — ' . \App\Models\Admin\StudentAcademicDetail::formatMark($academic->matriculation_mark, $academic->matriculation_mark_type),
                                 '12th' => optional($academic->higherSecondaryBoard)->name . " ({$academic->higher_secondary_subject}) — " . \App\Models\Admin\StudentAcademicDetail::formatMark($academic->higher_secondary_mark, $academic->higher_secondary_mark_type),
+                                '12th subjects' => $student->qualifyingMarks()->with('subject')->get()->map(fn ($m) => optional($m->subject)->name . ' ' . \App\Models\Admin\StudentAcademicDetail::formatMark(rtrim(rtrim((string) $m->mark, '0'), '.'), $m->mark_type))->implode(' · ') ?: '—',
+                                'Eligibility' => $academic->eligibility_label ?: 'Not checked yet',
                             ] : ['Status' => 'Not entered']],
                             ['documents', 'KYC documents', 'ti ti-file-certificate', collect($documentTypes)->mapWithKeys(fn ($t, $type) => [$t[0] => $documents->has($type) ? ucfirst($documents->get($type)->first()->verification_status) : ($t[1] ? 'Missing' : '—')])->all()],
                         ] as [$tabKey, $title, $icon, $rows])
@@ -454,7 +464,7 @@
                                     <dl class="so-facts">
                                         @foreach($rows as $k => $v)
                                             <dt>{{ $k }}</dt>
-                                            <dd class="{{ in_array($v, ['Missing', 'Rejected', 'Not entered'], true) ? 'text-danger fw-semibold' : (in_array($v, ['Verified'], true) ? 'text-success' : '') }}">{{ $v ?: '—' }}</dd>
+                                            <dd class="{{ in_array($v, ['Missing', 'Rejected', 'Not entered', 'Not eligible'], true) ? 'text-danger fw-semibold' : (in_array($v, ['Verified', 'Eligible'], true) ? 'text-success' : ($v === 'Allowed by admin' ? 'text-warning fw-semibold' : '')) }}">{{ $v ?: '—' }}</dd>
                                         @endforeach
                                     </dl>
                                 </div>
@@ -563,6 +573,25 @@
         .so-ui .so-meta > span { display: inline-flex; align-items: center; gap: 4px; }
         .so-ui .so-code { padding: 0 6px; border-radius: 5px; background: #EEF2FF; color: #4338CA; font-weight: 600; font-size: 11.5px; }
         .so-ui .so-deadline-ok { color: #15803D; } .so-ui .so-deadline-warn { color: #B45309; font-weight: 600; } .so-ui .so-deadline-bad { color: #DC2626; font-weight: 600; }
+        /* course eligibility (12th) */
+        .so-ui .el-card { border: 1px solid #DBEAFE; background: #F8FBFF; border-radius: 12px; padding: 12px 14px; }
+        .so-ui .el-card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 600; font-size: 13.5px; color: #1E3A8A; margin-bottom: 8px; }
+        .so-ui .el-card-head i { color: #2563EB; }
+        .so-ui .el-crit-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 8px; }
+        .so-ui .el-crit { background: #fff; border: 1px solid #E5E7EB; border-radius: 10px; padding: 10px 12px; }
+        .so-ui .el-group { padding: 1px 8px; border-radius: 6px; background: #1E3A8A; color: #fff; font-weight: 700; font-size: 12px; letter-spacing: .02em; }
+        .so-ui .el-board { margin-left: auto; padding: 1px 8px; border-radius: 999px; background: #F3F4F6; color: #4B5563; font-size: 11.5px; font-weight: 600; }
+        .so-ui .el-pill { display: inline-flex; gap: 4px; padding: 2px 9px; border-radius: 999px; background: #ECFDF5; color: #065F46; font-size: 12px; }
+        .so-ui .el-pill-agg { background: #EFF6FF; color: #1D4ED8; }
+        .so-ui .el-marks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 10px; }
+        .so-ui .el-mark { border: 1px solid var(--so-border); border-radius: 12px; padding: 10px 12px; background: #fff; transition: border-color .15s, background .15s; }
+        .so-ui .el-mark.is-ok { border-color: #BBF7D0; background: #F0FDF4; }
+        .so-ui .el-mark.is-bad { border-color: #FECACA; background: #FEF2F2; }
+        .so-ui .el-mark-name { display: flex; justify-content: space-between; gap: 6px; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+        .so-ui .el-mark-result { margin-top: 6px; font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+        .so-ui .el-mark.is-ok .el-mark-result { color: #15803D; }
+        .so-ui .el-mark.is-bad .el-mark-result { color: #B91C1C; }
+        .so-ui .el-override { background: #fff; border: 1px dashed #FCA5A5; border-radius: 10px; padding: 10px 12px; color: #374151; }
         /* alerts */
         .so-ui .so-alert { display: flex; gap: 10px; align-items: flex-start; padding: 12px 16px; border-radius: 12px; font-size: 13.5px; }
         .so-ui .so-alert > i { font-size: 18px; margin-top: 1px; }

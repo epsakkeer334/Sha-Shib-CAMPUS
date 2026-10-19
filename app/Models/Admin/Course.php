@@ -71,6 +71,12 @@ class Course extends BaseModel
         return $this->hasMany(InstituteCourse::class);
     }
 
+    /** 12th eligibility criteria (Module 2 step 2.7). */
+    public function eligibilityCriteria()
+    {
+        return $this->hasMany(CourseEligibilityCriterion::class);
+    }
+
     protected function usageRelations(): array
     {
         return ['instituteCourses', 'students'];

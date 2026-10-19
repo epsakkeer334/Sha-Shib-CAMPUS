@@ -42,7 +42,9 @@ abstract class MasterCrudComponent extends Component
      * Form fields: key => [
      *   'label' => string, 'type' => text|number|textarea|select,
      *   'rules' => array, 'col' => 6, 'placeholder' => string,
-     *   'options' => fn () => [value => label]   (select only)
+     *   'options' => fn () => [value => label]   (select / checkboxes),
+     *   'item_rules' => array                    (checkboxes: rules of each ticked value),
+     *   'virtual' => true                        (not a column: loaded in loadExtra(), saved in afterSave())
      * ]
      */
     abstract protected function fields(): array;
@@ -85,6 +87,9 @@ abstract class MasterCrudComponent extends Component
         $rules = ['status' => 'boolean'];
         foreach ($this->fields() as $key => $field) {
             $rules["form.{$key}"] = $field['rules'];
+            if (isset($field['item_rules'])) {
+                $rules["form.{$key}.*"] = $field['item_rules'];
+            }
         }
 
         return $rules;
@@ -97,7 +102,7 @@ abstract class MasterCrudComponent extends Component
 
     protected function resetForm()
     {
-        $this->form = array_fill_keys(array_keys($this->fields()), null);
+        $this->form = collect($this->fields())->map(fn ($f) => ($f['type'] ?? 'text') === 'checkboxes' ? [] : null)->all();
         $this->status = 1;
         $this->recordId = null;
         $this->isEdit = false;
@@ -118,9 +123,12 @@ abstract class MasterCrudComponent extends Component
         $this->resetForm();
         $this->isEdit = true;
         $this->recordId = $record->id;
-        foreach (array_keys($this->fields()) as $key) {
-            $this->form[$key] = $record->{$key};
+        foreach ($this->fields() as $key => $field) {
+            if (empty($field['virtual'])) {
+                $this->form[$key] = $record->{$key};
+            }
         }
+        $this->loadExtra($record);
         $this->status = $record->status ? 1 : 0;
 
         $this->dispatchBrowserEvent('open-master-modal');
@@ -130,8 +138,9 @@ abstract class MasterCrudComponent extends Component
     {
         $this->validate();
 
+        $columns = collect($this->fields())->reject(fn ($f) => !empty($f['virtual']))->keys()->all();
         $data = collect($this->form)
-            ->only(array_keys($this->fields()))
+            ->only($columns)
             ->map(fn ($value) => is_string($value) && trim($value) === '' ? null : $value)
             ->all();
         $data['status'] = (bool) $this->status;
@@ -140,10 +149,12 @@ abstract class MasterCrudComponent extends Component
             $record = ($this->modelClass())::findOrFail($this->recordId);
             $old = $record->only(array_keys($data));
             $record->update($data);
+            $this->afterSave($record);
             $this->auditUpdate($record, $this->module(), $old, $record->only(array_keys($data)), "Updated {$this->singular()}: " . $this->recordLabel($record));
             $message = "{$this->singular()} updated successfully.";
         } else {
             $record = ($this->modelClass())::create($data);
+            $this->afterSave($record);
             $this->auditCreate($record, $this->module(), "Created {$this->singular()}: " . $this->recordLabel($record));
             $message = "{$this->singular()} created successfully.";
         }
@@ -151,6 +162,16 @@ abstract class MasterCrudComponent extends Component
         $this->closeModal();
         $this->emit('refreshTable');
         $this->toast('success', $message);
+    }
+
+    /** Fill virtual fields (e.g. a pivot) when a record is opened for editing. */
+    protected function loadExtra($record): void
+    {
+    }
+
+    /** Save virtual fields (e.g. sync a pivot) after the record is created / updated. */
+    protected function afterSave($record): void
+    {
     }
 
     protected function recordLabel($record): string

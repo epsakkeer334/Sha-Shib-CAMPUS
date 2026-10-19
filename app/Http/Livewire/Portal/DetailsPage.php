@@ -214,6 +214,7 @@ class DetailsPage extends Component
                 $data, "Student updated their details on the portal: {$student->full_name}");
 
             app(FeeService::class)->syncCourseDues($student->fresh());
+            app(\App\Services\EligibilityService::class)->evaluate($student->fresh()); // the course may have changed
             if ($student->submitted_at) {
                 app(OnboardingService::class)->detailsChanged($student->fresh(), 'personal details');
             }
@@ -266,6 +267,7 @@ class DetailsPage extends Component
                 ? CourseFee::active()->where('institute_id', $this->institute_id)->where('course_id', $this->course_id)->orderByDesc('admission_fee')->orderBy('sort_order')->get()
                 : collect(),
             'batches' => $this->batchOptions($this->institute_id, $this->course_id, optional($student)->batch_id),
+            'eligibility' => app(\App\Services\EligibilityService::class)->criteriaFor($this->course_id ? (int) $this->course_id : null),
             'qualifications' => Qualification::active()->orderBy('name')->pluck('name', 'id'),
             'religions' => Religion::active()->orderBy('name')->pluck('name', 'id'),
             'categories' => $this->religion_id ? Category::active()->where('religion_id', $this->religion_id)->orderBy('name')->pluck('name', 'id') : collect(),

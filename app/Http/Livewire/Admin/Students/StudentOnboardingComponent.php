@@ -12,7 +12,9 @@ use App\Models\Admin\Qualification;
 use App\Models\Admin\Religion;
 use App\Models\Admin\State;
 use App\Models\Admin\Student;
+use App\Models\Admin\QualifyingSubjectGroup;
 use App\Models\Admin\StudentAcademicDetail;
+use App\Services\EligibilityService;
 use App\Services\FeeService;
 use App\Services\OnboardingService;
 use App\Support\StudentRules;
@@ -58,6 +60,9 @@ class StudentOnboardingComponent extends Component
     // Academic details
     public $matriculation_board_id, $matriculation_mark_type = 'percentage', $matriculation_mark;
     public $higher_secondary_board_id, $higher_secondary_subject, $higher_secondary_mark_type = 'percentage', $higher_secondary_mark;
+    /** @var array<int|string, mixed> 12th subject id => mark (course eligibility, step 2.7) */
+    public $subject_marks = [];
+    public $eligibility_reason = '';
 
     // KYC uploads (one property per document type)
     public $upload_kyc_photo, $upload_medical_certificate, $upload_marksheet_10, $upload_marksheet_12, $upload_other;
@@ -105,6 +110,8 @@ class StudentOnboardingComponent extends Component
                 'higher_secondary_board_id', 'higher_secondary_subject', 'higher_secondary_mark_type', 'higher_secondary_mark',
             ]));
         }
+        $this->subject_marks = $student->qualifyingMarks()->get()
+            ->mapWithKeys(fn ($m) => [$m->qualifying_subject_id => rtrim(rtrim((string) $m->mark, '0'), '.')])->all();
     }
 
     /**
@@ -280,6 +287,7 @@ class StudentOnboardingComponent extends Component
                 $this->syncLogin($student->fresh());
             });
             app(FeeService::class)->syncCourseDues($student->fresh()); // course / joining date may have changed
+            app(EligibilityService::class)->evaluate($student->fresh()); // the course may have changed
             $this->toast('success', 'Basic details saved.' . ($passwordReset ? ' Portal password updated.' : (!$hadLogin && $student->fresh()->user_id ? ' Portal login created.' : '')));
             $this->activeTab = 'address';
 
@@ -323,9 +331,19 @@ class StudentOnboardingComponent extends Component
 
     // ---------------------------------------------------------------- tab 3: academic
 
-    protected function academicRules(): array
+    /** 12th subjects to enter marks for (criterion subjects with minimums, else the group's subjects). */
+    protected function subjectEntry(): array
     {
-        return StudentRules::academic($this->formValues());
+        return app(EligibilityService::class)->subjectsToEnter($this->course_id ? (int) $this->course_id : null, $this->higher_secondary_board_id ?: null, $this->higher_secondary_subject);
+    }
+
+    protected function academicRules(array $entry): array
+    {
+        return StudentRules::academic($this->formValues() + [
+            'current_group' => optional(optional($this->student())->academicDetail)->higher_secondary_subject,
+            'subject_rows' => $entry['subjects'],
+            'subjects_required' => $entry['required'],
+        ]);
     }
 
     public function saveAcademic()
@@ -333,15 +351,43 @@ class StudentOnboardingComponent extends Component
         $student = $this->authorizeChange();
         abort_unless($student, 404);
 
-        $data = $this->validate($this->academicRules(), $this->messages());
+        $entry = $this->subjectEntry();
+        $data = $this->validate($this->academicRules($entry), array_merge($this->messages(), StudentRules::subjectMessages($entry['subjects'])));
+        $marks = array_intersect_key($data['subject_marks'] ?? [], array_flip(array_column($entry['subjects'], 'id')));
+        unset($data['subject_marks']);
+        $data['qualifying_subject_group_id'] = optional(QualifyingSubjectGroup::where('code', $data['higher_secondary_subject'])->first())->id;
 
         $academic = StudentAcademicDetail::firstOrNew(['student_id' => $student->id]);
         $old = $academic->exists ? $academic->only(array_keys($data)) : [];
         $academic->fill($data)->save();
+        app(EligibilityService::class)->saveMarks($student->fresh(), $marks, $data['higher_secondary_mark_type']);
 
-        $this->auditUpdate($student, 'students', $this->stringify($old), $this->stringify($data), "Updated academic details: {$student->full_name}");
-        $this->toast('success', 'Academic details saved.');
+        $this->auditUpdate($student, 'students', $this->stringify($old), $this->stringify($data) + ['subject_marks' => $marks], "Updated academic details: {$student->full_name}");
+        $status = optional($student->academicDetail()->first())->eligibility_status;
+        $this->toast($status === 'not_eligible' ? 'warning' : 'success', $status === 'not_eligible'
+            ? 'Academic details saved — the 12th marks do not meet the course eligibility criteria, so the application cannot be submitted yet.'
+            : 'Academic details saved.');
         $this->activeTab = 'documents';
+    }
+
+    /** Allow a student who does not meet the course eligibility criteria (reason required, audited). */
+    public function overrideEligibility()
+    {
+        $student = $this->authorizeChange();
+        abort_unless($student && Auth::user()->can('eligibility.override'), 403);
+
+        $this->validate(['eligibility_reason' => ['required', 'string', 'min:5', 'max:500']], [], ['eligibility_reason' => 'reason']);
+
+        try {
+            app(EligibilityService::class)->override($student, trim($this->eligibility_reason));
+        } catch (\RuntimeException $e) {
+            $this->toast('warning', $e->getMessage());
+
+            return;
+        }
+
+        $this->eligibility_reason = '';
+        $this->toast('success', 'Eligibility allowed. The application can now be submitted.');
     }
 
     // ---------------------------------------------------------------- tab 4: KYC documents
@@ -454,6 +500,8 @@ class StudentOnboardingComponent extends Component
         $user = Auth::user();
         $student = $this->studentId ? Student::with(['institute', 'course', 'documents', 'academicDetail'])->find($this->studentId) : null;
 
+        $eligibility = app(EligibilityService::class);
+        $entry = $this->subjectEntry();
         $courses = $this->institute_id
             ? optional(Institute::find($this->institute_id))->offeredCourses()?->orderBy('name')->get(['courses.id', 'courses.name', 'courses.code']) ?? collect()
             : collect();
@@ -482,6 +530,14 @@ class StudentOnboardingComponent extends Component
             'states' => $this->country_id ? State::active()->where('country_id', $this->country_id)->orderBy('name')->pluck('name', 'id') : collect(),
             'matriculationBoards' => $this->withCurrent(MatriculationBoard::active()->orderBy('name')->pluck('name', 'id'), MatriculationBoard::class, $this->matriculation_board_id),
             'higherSecondaryBoards' => $this->withCurrent(HigherSecondaryBoard::active()->orderBy('name')->pluck('name', 'id'), HigherSecondaryBoard::class, $this->higher_secondary_board_id),
+            'eligibilityCriteria' => $eligibility->criteriaFor($this->course_id ? (int) $this->course_id : null),
+            'groups' => $eligibility->groupsFor($this->course_id ? (int) $this->course_id : null, optional(optional($student)->academicDetail)->higher_secondary_subject),
+            'entry' => $entry,
+            'check' => $this->higher_secondary_subject ? $eligibility->check([
+                'course_id' => $this->course_id, 'board_id' => $this->higher_secondary_board_id ?: null, 'group_code' => $this->higher_secondary_subject,
+                'mark_type' => $this->higher_secondary_mark_type, 'marks' => (array) $this->subject_marks,
+            ]) : null,
+            'canOverride' => $user->can('eligibility.override'),
             'documentTypes' => config('camp.student_document_types'),
             'documents' => $student ? $student->documents->sortByDesc('uploaded_at')->groupBy('document_type') : collect(),
             'checklist' => $this->checklist($student),

@@ -99,19 +99,51 @@ class StudentRules
         ];
     }
 
+    /**
+     * Academic details. 12th subject group = an active group of Master Data (or the student's saved one).
+     * $in['subject_rows'] (from EligibilityService::subjectsToEnter) adds one mark per 12th subject:
+     * required when the course has a criterion for the chosen group, optional otherwise.
+     */
     public static function academic(array $in): array
     {
         $mark = fn ($type) => ['required', 'numeric', 'min:0', 'max:' . ($type === 'cgpa' ? 10 : 100)];
+        $groups = \App\Models\Admin\QualifyingSubjectGroup::active()->pluck('code')->all();
+        if (!empty($in['current_group'])) {
+            $groups[] = $in['current_group'];
+        }
 
-        return [
+        $rules = [
             'matriculation_board_id' => ['required', Rule::exists('matriculation_boards', 'id')->whereNull('deleted_at')],
             'matriculation_mark_type' => ['required', Rule::in(array_keys(config('camp.mark_types')))],
             'matriculation_mark' => $mark($in['matriculation_mark_type'] ?? null),
             'higher_secondary_board_id' => ['required', Rule::exists('higher_secondary_boards', 'id')->whereNull('deleted_at')],
-            'higher_secondary_subject' => ['required', Rule::in(array_keys(config('camp.higher_secondary_subjects')))],
+            'higher_secondary_subject' => ['required', Rule::in($groups)],
             'higher_secondary_mark_type' => ['required', Rule::in(array_keys(config('camp.mark_types')))],
             'higher_secondary_mark' => $mark($in['higher_secondary_mark_type'] ?? null),
         ];
+
+        foreach ($in['subject_rows'] ?? [] as $row) {
+            $rules["subject_marks.{$row['id']}"] = array_merge(
+                [!empty($in['subjects_required']) ? 'required' : 'nullable'],
+                array_slice($mark($in['higher_secondary_mark_type'] ?? null), 1)
+            );
+        }
+
+        return $rules;
+    }
+
+    /** Messages naming each 12th subject ("Enter the Physics mark."). */
+    public static function subjectMessages(array $rows): array
+    {
+        $messages = [];
+        foreach ($rows as $row) {
+            $messages["subject_marks.{$row['id']}.required"] = "Enter the {$row['name']} mark.";
+            $messages["subject_marks.{$row['id']}.numeric"] = "The {$row['name']} mark must be a number.";
+            $messages["subject_marks.{$row['id']}.min"] = "The {$row['name']} mark cannot be negative.";
+            $messages["subject_marks.{$row['id']}.max"] = "The {$row['name']} mark must be between 0 and :max.";
+        }
+
+        return $messages;
     }
 
     /**

@@ -111,6 +111,23 @@
         .notice.info { background: var(--info-bg); border: 1px solid #C3D3E8; color: #163E6B; }
         .notice.ok { background: var(--brand-soft); border: 1px solid #BFDCCF; color: var(--brand-ink); }
 
+        /* course eligibility (12th) */
+        .elig-card { border-radius: 12px; background: var(--bg); padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+        .elig-list { display: flex; flex-direction: column; gap: 10px; }
+        .elig-item { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+        .elig-subjects { display: flex; flex-wrap: wrap; gap: 6px; }
+        .elig-pill { display: inline-flex; gap: 4px; align-items: center; padding: 4px 10px; border-radius: 999px; background: var(--brand-soft); color: var(--brand-ink); font-size: 13px; }
+        .elig-pill-agg { background: var(--info-bg); color: var(--info); }
+        .elig-marks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 12px 16px; }
+        .elig-mark { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+        .elig-mark.is-ok { border-color: #BFDCCF; background: var(--brand-tint); }
+        .elig-mark.is-bad { border-color: var(--danger-line); background: var(--danger-tint); }
+        .elig-mark-name { font-size: 14px; font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
+        .elig-mark-name .muted { font-weight: 400; font-size: 13px; }
+        .elig-mark-result { font-size: 13px; font-weight: 500; }
+        .elig-mark.is-ok .elig-mark-result { color: var(--brand-ink); }
+        .elig-mark.is-bad .elig-mark-result { color: var(--danger); }
+
         /* documents */
         .docrow { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 18px 28px; border-bottom: 1px solid var(--line-2); }
         .docrow:last-child { border-bottom: 0; }

@@ -118,6 +118,10 @@ class OnboardingService
         if (!$student->academicDetail()->exists()) {
             $missing['academic'][] = 'Academic details are not saved.';
         }
+        // Course eligibility (12th, step 2.7): not eligible blocks submission unless an admin allowed it.
+        foreach (app(EligibilityService::class)->blockingReasons($student) as $reason) {
+            $missing['academic'][] = "Not eligible for the course: {$reason}";
+        }
         foreach ($student->missingRequiredDocuments() as $type) {
             $missing['documents'][] = config("camp.student_document_types.{$type}.0") . ' is not uploaded.';
         }
@@ -133,7 +137,8 @@ class OnboardingService
      */
     public function submit(Student $student): array
     {
-        $missing = $this->checklist($student);
+        app(EligibilityService::class)->evaluate($student); // criteria may have changed since the last save
+        $missing = $this->checklist($student->fresh());
         $blocking = array_diff_key($missing, ['documents' => true]);
 
         if ($blocking) {

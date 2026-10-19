@@ -101,6 +101,12 @@ class Student extends BaseModel
         return $this->hasOne(StudentAcademicDetail::class);
     }
 
+    /** 12th marks per subject (course eligibility, Module 2 step 2.7). */
+    public function qualifyingMarks()
+    {
+        return $this->hasMany(StudentQualifyingMark::class);
+    }
+
     public function documents()
     {
         return $this->hasMany(StudentDocument::class);

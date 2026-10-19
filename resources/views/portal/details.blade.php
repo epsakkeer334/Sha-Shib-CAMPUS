@@ -56,6 +56,9 @@
                     'hint' => 'Complete all steps within ' . config('camp.onboarding_days') . ' days of this date'])
             </div>
 
+            {{-- Course eligibility (12th) of the chosen course --}}
+            @include('portal.partials.eligibility-criteria', ['criteria' => $eligibility])
+
             {{-- Fees of the chosen course --}}
             @if($registering && $courseFees->isNotEmpty())
                 @php

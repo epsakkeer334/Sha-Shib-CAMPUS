@@ -124,7 +124,7 @@ class DocumentVerificationComponent extends Component
 
     protected function selected(): ?Student
     {
-        return $this->selectedId ? Student::with(['course', 'documents.verifier', 'approvals.approver'])->find($this->selectedId) : null;
+        return $this->selectedId ? Student::with(['course', 'documents.verifier', 'approvals.approver', 'academicDetail.higherSecondaryBoard', 'qualifyingMarks.subject'])->find($this->selectedId) : null;
     }
 
     protected function document($id): StudentDocument

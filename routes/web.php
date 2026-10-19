@@ -120,6 +120,9 @@ Route::prefix('admin')->middleware(['auth', 'staff', 'active.user'])->group(func
         Route::get('/academic-years', Masters\AcademicYearsManager::class)->name('academic-years');
         Route::get('/matriculation-boards', Masters\MatriculationBoardsManager::class)->name('matriculation-boards');
         Route::get('/higher-secondary-boards', Masters\HigherSecondaryBoardsManager::class)->name('higher-secondary-boards');
+        Route::get('/12th-subjects', Masters\QualifyingSubjectsManager::class)->name('qualifying-subjects');
+        Route::get('/12th-subject-groups', Masters\QualifyingSubjectGroupsManager::class)->name('qualifying-subject-groups');
+        Route::get('/course-eligibility', Masters\CourseEligibilityManager::class)->name('course-eligibility');
         Route::get('/religions', Masters\ReligionsManager::class)->name('religions');
         Route::get('/categories', Masters\CategoriesManager::class)->name('categories');
         Route::get('/countries', Masters\CountriesManager::class)->name('countries');

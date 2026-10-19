@@ -59,6 +59,7 @@ return [
         ],
         'Onboarding' => [
             'onboarding.verify_documents' => 'Verify KYC documents & approve Gate 1 (Admin)',
+            'eligibility.override' => 'Allow a student who does not meet the course eligibility (12th) criteria, with a reason',
             'enrollment.manage' => 'ER request form & ID card (print, TM signed, archive, issue)',
         ],
         'Fees & Payments' => [
@@ -91,7 +92,7 @@ return [
 
     // Default permissions per role (super-admin gets everything through Gate::before).
     'default_role_permissions' => [
-        'institute-admin' => ['users.view', 'users.create', 'users.update', 'users.delete', 'audit.view', 'notifications.view', 'institute_courses.view', 'institute_courses.manage', 'batches.manage', 'periods.manage', 'students.view', 'students.create', 'students.update', 'students.delete', 'onboarding.verify_documents', 'enrollment.manage', 'fees.manage', 'payments.collect'],
+        'institute-admin' => ['users.view', 'users.create', 'users.update', 'users.delete', 'audit.view', 'notifications.view', 'institute_courses.view', 'institute_courses.manage', 'batches.manage', 'periods.manage', 'students.view', 'students.create', 'students.update', 'students.delete', 'onboarding.verify_documents', 'eligibility.override', 'enrollment.manage', 'fees.manage', 'payments.collect'],
         'accounts' => ['students.view', 'fees.manage', 'payments.collect', 'payments.verify'],
         'training-manager' => ['students.view', 'enrollment.manage'],
         'bic' => [],
@@ -118,7 +119,6 @@ return [
         'upi' => 'UPI (GPay / QR)',
         'offline' => 'Offline (cash / bank / cheque)',
     ],
-    'higher_secondary_subjects' => ['PCM' => 'PCM', 'PCB' => 'PCB', 'COMMERCE' => 'Commerce', 'ARTS' => 'Arts'],
     'mark_types' => ['percentage' => 'Percentage (%)', 'cgpa' => 'CGPA'],
 
     // Module 2 — Student onboarding

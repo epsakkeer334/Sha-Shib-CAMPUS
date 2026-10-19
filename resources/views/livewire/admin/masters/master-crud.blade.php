@@ -72,6 +72,16 @@
                                                     @endforeach
                                                 </select>
                                                 @break
+                                            @case('checkboxes')
+                                                <div class="mc-checks @error('form.' . $key) is-invalid @enderror">
+                                                    @foreach($field['options'] as $value => $label)
+                                                        <label class="mc-check">
+                                                            <input class="form-check-input m-0" type="checkbox" value="{{ $value }}" wire:model.defer="form.{{ $key }}">
+                                                            <span>{{ $label }}</span>
+                                                        </label>
+                                                    @endforeach
+                                                </div>
+                                                @break
                                             @case('textarea')
                                                 <textarea class="form-control @error('form.' . $key) is-invalid @enderror" wire:model.defer="form.{{ $key }}" rows="2"
                                                           placeholder="{{ $field['placeholder'] ?? '' }}"></textarea>
@@ -145,6 +155,13 @@
         </div>
     </div>
 </div>
+
+<style>
+    .mc-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; padding: 10px; border: 1px solid #E5E7EB; border-radius: 10px; background: #fff; }
+    .mc-checks.is-invalid { border-color: #DC2626; }
+    .mc-check { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 13.5px; }
+    .mc-check:hover { background: #F9FAFB; }
+</style>
 
 <script>
 document.addEventListener('livewire:load', function () {

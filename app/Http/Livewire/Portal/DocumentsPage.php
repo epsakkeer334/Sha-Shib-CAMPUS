@@ -94,7 +94,10 @@ class DocumentsPage extends Component
         $result = app(OnboardingService::class)->submit($student);
 
         if (!$result['submitted']) {
-            $this->toast('warning', 'Please complete the ' . implode(' and ', array_keys($result['blocking'])) . ' details first.');
+            $reasons = app(\App\Services\EligibilityService::class)->blockingReasons($student->fresh());
+            $this->toast('warning', $reasons
+                ? 'Your 12th marks do not meet the eligibility criteria of this course: ' . implode(' ', $reasons) . ' Contact the admissions office if your marksheet differs.'
+                : 'Please complete the ' . implode(' and ', array_keys($result['blocking'])) . ' details first.');
 
             return null;
         }

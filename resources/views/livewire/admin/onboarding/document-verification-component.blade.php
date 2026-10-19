@@ -158,6 +158,22 @@
                                 <span class="text-muted"><i class="ti ti-flag"></i> Deadline {{ $student->formatted_onboarding_deadline }}</span>
                                 @if($chipText)<span class="dv-chip {{ $chipClass }}">{{ $chipText }}</span>@endif
                             </div>
+                            @php $acad = $student->academicDetail; @endphp
+                            @if($acad)
+                                {{-- 12th marks to compare with the marksheet + course eligibility (step 2.7) --}}
+                                <div class="dv-elig mt-2">
+                                    <span class="text-muted"><i class="ti ti-certificate-2"></i> 12th {{ $acad->higher_secondary_subject }} · {{ optional($acad->higherSecondaryBoard)->name }}
+                                        · {{ \App\Models\Admin\StudentAcademicDetail::formatMark($acad->higher_secondary_mark, $acad->higher_secondary_mark_type) }}</span>
+                                    @foreach($student->qualifyingMarks as $m)
+                                        <span class="dv-mark">{{ optional($m->subject)->name }} <b>{{ rtrim(rtrim((string) $m->mark, '0'), '.') }}{{ $m->mark_type === 'cgpa' ? ' CGPA' : '%' }}</b></span>
+                                    @endforeach
+                                    @if($acad->eligibility_label)
+                                        <span class="dv-chip dv-elig-{{ $acad->eligibility_status }}" title="{{ implode(' ', $acad->eligibility_snapshot['reasons'] ?? []) ?: ($acad->eligibility_override_reason ?? '') }}">
+                                            <i class="ti ti-{{ $acad->eligibility_status === 'eligible' ? 'circle-check' : ($acad->eligibility_status === 'not_configured' ? 'minus' : 'alert-triangle') }}"></i> {{ $acad->eligibility_label }}
+                                        </span>
+                                    @endif
+                                </div>
+                            @endif
                         </div>
                         <div class="dv-ring" style="--p: {{ $percentReq }};" title="{{ $verifiedReq }} of {{ $requiredTypes->count() }} verified">
                             <span>{{ $verifiedReq }}/{{ $requiredTypes->count() }}</span>
@@ -284,6 +300,12 @@
         .doc-verify .dv-status-all.is-active .dv-status-arrow { color: #4338CA; }
         .doc-verify .dv-avatar { width: 36px; height: 36px; border-radius: 50%; background: #FEF0E7; color: #F26522; font-weight: 600; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .doc-verify .dv-avatar-lg { width: 52px; height: 52px; font-size: 17px; }
+        .doc-verify .dv-elig { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px; }
+        .doc-verify .dv-mark { padding: 1px 8px; border-radius: 999px; background: #F3F4F6; color: #374151; }
+        .doc-verify .dv-elig-eligible { background: #DCFCE7; color: #166534; }
+        .doc-verify .dv-elig-not_eligible { background: #FEE2E2; color: #991B1B; }
+        .doc-verify .dv-elig-overridden { background: #FEF3C7; color: #92400E; }
+        .doc-verify .dv-elig-not_configured { background: #F3F4F6; color: #6B7280; }
         .doc-verify .dv-course { padding: 0 6px; border-radius: 5px; background: #EEF2FF; color: #4338CA; font-weight: 500; font-size: 11px; }
         .doc-verify .dv-chip { padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
         .doc-verify .dv-chip-bad { background: #FEE2E2; color: #DC2626; }

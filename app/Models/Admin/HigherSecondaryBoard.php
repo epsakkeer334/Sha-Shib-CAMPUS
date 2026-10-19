@@ -15,10 +15,18 @@ class HigherSecondaryBoard extends BaseModel
 
     protected $fillable = [
         'name',
+        'cgpa_factor', // CGPA × factor = % (course eligibility)
         'status',
         'created_by',
         'updated_by',
     ];
+
+    protected $casts = ['cgpa_factor' => 'decimal:2'];
+
+    public function eligibilityCriteria()
+    {
+        return $this->hasMany(CourseEligibilityCriterion::class);
+    }
 
     public function academicDetails()
     {
@@ -27,6 +35,6 @@ class HigherSecondaryBoard extends BaseModel
 
     protected function usageRelations(): array
     {
-        return ['academicDetails'];
+        return ['academicDetails', 'eligibilityCriteria'];
     }
 }

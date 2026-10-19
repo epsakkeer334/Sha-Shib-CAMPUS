@@ -51,8 +51,8 @@ CAMP serves 10+ institutes of the Sha Shib Group from **one application and one 
 | # | Module | Status |
 | --- | --- | --- |
 | 1 | Core / Foundation: institutes, users, roles & permissions, side menu, audit trail, notification log, serial numbers | ✅ Built |
-| 1A | Master Data (Super Admin): academic years, courses, qualifications, boards, religions, categories, countries, states, payment gateways · 🟡 12th subjects, 12th subject groups, course eligibility criteria | ✅ Built (🟡 new lists planned) |
-| 2 | Student Onboarding & ER Number: admin onboarding, admissions portal, document gate, fee gate, ER number, ER form, ID card, batches, payment settings · 🟡 **course eligibility check (12th)** (step 2.7) | ✅ Built (2.7 🟡 planned) |
+| 1A | Master Data (Super Admin): academic years, courses, qualifications, boards, religions, categories, countries, states, payment gateways · 12th subjects, 12th subject groups, course eligibility criteria | ✅ Built |
+| 2 | Student Onboarding & ER Number: admin onboarding, admissions portal, document gate, fee gate, ER number, ER form, ID card, batches, payment settings · **course eligibility check (12th)** (step 2.7) | ✅ Built |
 | 2A | In-app workflow notifications (bell, notification page, portal notifications) | ✅ Built |
 | 2B | Academic years, academic periods (semesters / terms), student period history, semester-wise fee structure | ✅ Built |
 | 2C | Scholarship Management: scholarships per institute / course / batch, assignment to students, automatic fee discounts | 🟡 Planned |
@@ -223,7 +223,7 @@ Super Admin passes every permission check. Defaults for the other roles are belo
 | `audit.view` | Audit trail | Institute Admin |
 | `notifications.view` | Notification log | Institute Admin |
 | `serials.manage` | Serial number series | Super Admin |
-| 🟡 `eligibility.override` | Allow a student who doesn't meet the course eligibility criteria (reason required) | Institute Admin |
+| `eligibility.override` | Allow a student who doesn't meet the course eligibility criteria (reason required) | Institute Admin |
 | 🟡 `scholarships.view` | See scholarships and student discounts | Institute Admin, Accounts |
 | 🟡 `scholarships.manage` | Create, edit, deactivate scholarships | Institute Admin |
 | 🟡 `scholarships.assign` | Assign scholarships to students, revoke | Institute Admin |
@@ -397,7 +397,7 @@ Payments arrive by:
 
 A new due added after Gate 2 approval **but before the ER number** reopens Gate 2.
 
-### 6.6 Course eligibility check (12th) 🟡 (Module 2 step 2.7)
+### 6.6 Course eligibility check (12th) ✅ (Module 2 step 2.7)
 
 ```
 Super Admin set-up                       Student / office                           Check
@@ -808,7 +808,7 @@ Columns: **ID** · **Scenario** · **Expected result**. ✅ = verifiable now; �
 | O-10 | Edit details after Gate 1 approval | Gate 1 reopened; admins notified |
 | O-11 | Joining date + 30 days passed without ER | Shown as past deadline; counted on the list header |
 
-### 19.4a Course eligibility (12th) 🟡
+### 19.4a Course eligibility (12th) ✅
 
 | ID | Scenario | Expected |
 | --- | --- | --- |

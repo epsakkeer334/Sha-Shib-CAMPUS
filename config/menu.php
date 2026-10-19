@@ -38,6 +38,10 @@ return [
                             ['label' => 'Qualifications', 'icon' => 'ti ti-certificate-2', 'route' => 'admin.masters.qualifications', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
                             ['label' => 'Matriculation Boards', 'icon' => 'ti ti-building-bank', 'route' => 'admin.masters.matriculation-boards', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
                             ['label' => 'Higher Secondary Boards', 'icon' => 'ti ti-building-bank', 'route' => 'admin.masters.higher-secondary-boards', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
+                            // Course eligibility (Module 2 step 2.7) — 12th subjects, not the Module 3 course subjects
+                            ['label' => '12th Subjects', 'icon' => 'ti ti-book-2', 'route' => 'admin.masters.qualifying-subjects', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
+                            ['label' => '12th Subject Groups', 'icon' => 'ti ti-books', 'route' => 'admin.masters.qualifying-subject-groups', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
+                            ['label' => 'Course Eligibility', 'icon' => 'ti ti-school', 'route' => 'admin.masters.course-eligibility', 'permission' => 'masters.manage', 'roles' => ['super-admin']],
                         ],
                     ],
                     [

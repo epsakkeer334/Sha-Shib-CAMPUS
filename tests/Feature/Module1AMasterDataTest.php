@@ -345,7 +345,7 @@ class Module1AMasterDataTest extends TestCase
         $this->assertSame('Master Data', $master['label']);
         $this->assertSame(['Academic', 'Personal', 'Location', 'Finance'], array_column($master['children'], 'label'));
         $this->assertSame(
-            ['Academic Years', 'Courses', 'Qualifications', 'Matriculation Boards', 'Higher Secondary Boards'],
+            ['Academic Years', 'Courses', 'Qualifications', 'Matriculation Boards', 'Higher Secondary Boards', '12th Subjects', '12th Subject Groups', 'Course Eligibility'],
             array_column($master['children'][0]['children'], 'label')
         );
 
