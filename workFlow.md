@@ -1,7 +1,7 @@
 # CAMP — Workflow Reference & QA Follow-up
 
 **Sha Shib Group · Central Academic Management Portal (Laravel 9 + Livewire 2)**
-Version: 8 Oct 2026 · Source of truth for the detailed design: `plan.md` (tables, fields, components)
+Version: 19 Oct 2026 · Source of truth for the detailed design: `plan.md` (tables, fields, components)
 
 This document describes the workflow agreed so far: who does what, in which order, and under which rules. It also lists what QA should check. Each part is marked:
 
@@ -23,7 +23,7 @@ This document describes the workflow agreed so far: who does what, in which orde
 6. [Student onboarding workflow (admin side + admissions portal)](#6-student-onboarding-workflow)
 7. [ER number generation & rules](#7-er-number-generation--rules)
 8. [ER request form & ID card](#8-er-request-form--id-card)
-9. [Fee structure & fee management (semester-wise)](#9-fee-structure--fee-management)
+9. [Fee structure & fee management (semester-wise, advance payment, scholarships)](#9-fee-structure--fee-management)
 10. [Notifications](#10-notifications)
 11. [Examination workflow (Module 3 + Module 4)](#11-examination-workflow)
 12. [Module 5 — Grading & Result Publication](#12-module-5--grading--result-publication)
@@ -55,6 +55,7 @@ CAMP serves 10+ institutes of the Sha Shib Group from **one application and one 
 | 2 | Student Onboarding & ER Number: admin onboarding, admissions portal, document gate, fee gate, ER number, ER form, ID card, batches, payment settings | ✅ Built |
 | 2A | In-app workflow notifications (bell, notification page, portal notifications) | ✅ Built |
 | 2B | Academic years, academic periods (semesters / terms), student period history, semester-wise fee structure | ✅ Built |
+| 2C | Scholarship Management: scholarships per institute / course / batch, assignment to students, automatic fee discounts | 🟡 Planned |
 | 3 | Examination Lifecycle: subjects, syllabus mapping, exam schedule, exam application, dues gate + BiC bypass, attendance gate, admit card | 🟡 Planned |
 | 4 | Question Bank & Exam Paper | 🟡 Planned |
 | 5 | Grading & Result Publication + **Promotion** to the next semester | 🟡 Planned |
@@ -151,6 +152,8 @@ Student **admissions portal** (`/admissions`, separate from the admin panel): Ho
 
 | Section | Menu | Roles |
 | --- | --- | --- |
+| Institute Management | Scholarships ▸ Scholarships | Super Admin, Institute Admin (Accounts: view) |
+| Institute Management | Scholarships ▸ Assign Scholarship | Super Admin, Institute Admin |
 | Academics | Examinations ▸ Courses & Subjects | Super Admin, Institute Admin |
 | Academics | Examinations ▸ Syllabus Mapping | Super Admin |
 | Academics | Examinations ▸ Exam Schedule | Super Admin, Institute Admin, EM |
@@ -219,6 +222,9 @@ Super Admin passes every permission check. Defaults for the other roles are belo
 | `audit.view` | Audit trail | Institute Admin |
 | `notifications.view` | Notification log | Institute Admin |
 | `serials.manage` | Serial number series | Super Admin |
+| 🟡 `scholarships.view` | See scholarships and student discounts | Institute Admin, Accounts |
+| 🟡 `scholarships.manage` | Create, edit, deactivate scholarships | Institute Admin |
+| 🟡 `scholarships.assign` | Assign scholarships to students, revoke | Institute Admin |
 | 🟡 `promotions.confirm_exam` | Confirm promotion list (results side) | EM |
 | 🟡 `promotions.confirm_institute` | Confirm promotion list (institute side) | Institute Admin |
 
@@ -490,6 +496,33 @@ The ER & ID Cards list has filters and keeps the Students menu highlighted when 
 
 > **Existing data note:** fee lines created before Module 2B are one-time lines for every year. Students who received their ER number before Module 2B have no semester record; they are treated as Semester 1 for fees.
 
+### 9.5 Scholarships 🟡 (Module 2C; Super Admin all institutes, Institute Admin own institute)
+
+**Workflow**
+
+```
+Define scholarship  ──►  Assign to students  ──►  Discount on unpaid semester dues  ──►  Later semesters discounted when charged
+(institute, course,      (one / selected /        (student pays the net amount)          (promotion, new fee line, advance)
+ batch?, year?, % or ₹,   all eligible, with                                              Revoke ─► discount removed from
+ semesters)               preview + confirm)                                              unpaid dues only
+```
+
+| Rule | Detail |
+| --- | --- |
+| Definition | Institute + Course, optional Batch and Academic Year; **percentage** (0–100) or **fixed ₹ per semester**; covers one or several semesters; by default semester fees only (one-time fees only if "all fees" is chosen) |
+| Assignment | Separate **Assign Scholarship** page: one student, selected students, or all eligible students of the course / batch. A preview shows per student and semester: fee · existing discounts · this scholarship · paid · **final payable** |
+| Eligible students | Same institute, course (and batch); ER number issued; not withdrawn |
+| Applies at once | No approval step; audited and notified to the student and the institute's Accounts users |
+| Paid fees | Only the **unpaid balance** is discounted; a fully paid due is skipped ("already paid"); **no refunds** |
+| Several scholarships | Allowed (different schemes); the total discount on a fee is **capped at the fee**. The **same scholarship twice is refused** |
+| Fixed amount | Per semester, split across that semester's fee lines in proportion to their amounts |
+| Future semesters | Semesters charged later (promotion, new fee line, advance payment) are discounted automatically by the active assignments |
+| Revoke | Reason required; removes the discount from unpaid dues only; discounts already covered by a payment stay |
+| Edit / delete | Editing re-applies to unpaid dues only (after a confirmation); a scholarship with assignments can only be **deactivated**, not deleted |
+| Shown on | Student ▸ Fees & Payments and the portal Payment page: "Scholarship − ₹X" under each due, net payable in the totals and on receipts |
+
+**Worked example:** Semester 1 tuition ₹42,000. "Merit 25 %" → − ₹10,500, payable ₹31,500. A second scholarship "Sports ₹5,000" on top → − ₹5,000, payable **₹26,500**. If ₹30,000 had already been paid, the room left is ₹12,000, so the discounts are capped at ₹12,000 and payable becomes ₹0.
+
 ---
 
 ## 10. Notifications ✅
@@ -654,6 +687,10 @@ Draft upload ─► HoT review ─┬─► Returned for correction ─► (re-u
 | D16 | Promotion requires **75 % in every subject** |
 | D17 | Promotion is confirmed by **both the Institute Admin and the Examination Manager**; the Super Admin can override with a reason. *(Supersedes an earlier idea of automatic promotion by semester completion date.)* |
 | D18 | Promotion and grading belong to **Module 5** |
+| D19 | Scholarships are defined by Institute + Course (+ optional Batch / Academic Year), as a percentage or fixed amount, for one or several semesters; managed by the Super Admin and Institute Admin |
+| D20 | A scholarship reduces the **unpaid balance only**; fully paid fees are skipped, no refunds |
+| D21 | Several scholarships per student are allowed; the total discount is **capped at the fee**; the same scholarship can't be assigned twice |
+| D22 | Scholarship assignments **apply at once** (no approval), with audit trail and notifications |
 
 ---
 
@@ -797,6 +834,26 @@ Columns: **ID** · **Scenario** · **Expected result**. ✅ = verifiable now; �
 | DB-08 | Institute Admin's own steps (e.g. documents to verify) | Responsible shows "You"; link reads "Do it" |
 | DB-05 | Click a highlighted item | Opens the matching queue already filtered (e.g. ER & ID Cards → Printed — to sign) |
 | F-24 | Try "Cancel advance" on a normal (non-advance) fee | Refused |
+
+### 19.6a Scholarships 🟡 (Module 2C)
+
+| ID | Scenario | Expected |
+| --- | --- | --- |
+| SC-01 | Create a 25 % scholarship for course X, Semesters 1–2 | Saved; semesters limited to the course's number of periods; course list shows only courses the institute offers |
+| SC-02 | Assign it to one student with a ₹42,000 Semester 1 fee | Preview: discount ₹10,500, payable ₹31,500; after Apply the due shows "Scholarship − ₹10,500" and balance ₹31,500 |
+| SC-03 | Fixed ₹5,000 per semester; semester has two fee lines (₹40,000 + ₹10,000) | Split ₹4,000 + ₹1,000 |
+| SC-04 | Assign to selected students / "all eligible" | Only checked / all eligible students get it; ineligible ones are skipped and listed |
+| SC-05 | Assign the same scholarship to the same student again | Refused ("already assigned"); row disabled in the preview |
+| SC-06 | Two scholarships totalling more than the fee | Total discount capped at the fee; payable ₹0, never negative |
+| SC-07 | Student's Semester 1 fee fully paid | Skipped, shown "already paid"; no refund |
+| SC-08 | Semester 1 fee part paid (₹30,000 of ₹42,000) | Discount limited to the ₹12,000 still open |
+| SC-09 | Scholarship covers Semester 2; student promoted later | Semester 2 dues are charged already discounted |
+| SC-10 | Revoke an assignment | Discount removed from unpaid dues only; paid dues unchanged; audit entry; student notified |
+| SC-11 | Delete a scholarship with assignments | Refused; can be deactivated; inactive scholarships are not offered on Assign |
+| SC-12 | Institute Admin of institute A | Sees and assigns only institute A scholarships / students; direct requests for institute B are refused |
+| SC-13 | Accounts user | Can view scholarships and discounts; no create / assign / revoke |
+| SC-14 | Portal Payment page and receipt | Show the discount and the net amount; the "next fee" order uses the net balance |
+| SC-15 | Scholarship for Batch 1 only | Students of Batch 2 of the same course are not eligible |
 
 ### 19.7 Notifications ✅
 

@@ -77,7 +77,7 @@ Only Super Admin adds/edits institutes. Students are created by Module 2 (onboar
 
 **Side menu** ✅ — role × menu matrix in `config/menu.php`, rendered by `App\Services\MenuService`. An item shows when its route exists and the user has the listed role/permission, so menu items for Modules 2–8 appear automatically as each module is built. Non-Super-Admin dashboards show the same items as quick links.
 
-**Permissions** ✅ — defined in `config/camp.php` → `permissions` (Module 1: `institutes.manage`, `users.view/create/update/delete`, `roles.manage`, `audit.view`, `notifications.view`, `serials.manage`; Module 1A: `masters.manage` ✅ — Super Admin only, hidden from the matrix; `institute_courses.view` / `institute_courses.manage` ✅ — default for Institute Admin, own institute only (Super Admin: all institutes); planned: `payments.collect`, `payments.verify`, `payments.refund` — Accounts, for Module 2); editable per role on the Roles & Permissions screen. Super Admin passes every check (`Gate::before`).
+**Permissions** ✅ — defined in `config/camp.php` → `permissions` (Module 1: `institutes.manage`, `users.view/create/update/delete`, `roles.manage`, `audit.view`, `notifications.view`, `serials.manage`; Module 1A: `masters.manage` ✅ — Super Admin only, hidden from the matrix; `institute_courses.view` / `institute_courses.manage` ✅ — default for Institute Admin, own institute only (Super Admin: all institutes); planned: `payments.collect`, `payments.verify`, `payments.refund` — Accounts, for Module 2; Module 2C 🟡: `scholarships.view` (Institute Admin, Accounts), `scholarships.manage` and `scholarships.assign` (Institute Admin)); editable per role on the Roles & Permissions screen. Super Admin passes every check (`Gate::before`).
 
 ---
 
@@ -635,6 +635,96 @@ Payment rules:
 
 **Migration (as built)**: existing courses got `period_label = Semester`, `period_months = duration_months / total_semesters`; existing fee lines stay one-time lines for every academic year (`period_no` and `academic_year_id` null), so nothing changes until periods and period fees are set up. Students with an ER number but no period row count as period 1 for fees; their `student_periods` row is created at ER issue from now on. No guessing from fee names.
 
+### Module 2C — Scholarship Management 🟡 planned
+
+**Purpose:** the Super Admin (all institutes) and the Institute Admin (own institute) define scholarships and apply them to students. The discount is **calculated automatically** on the student's semester (period) fee dues, and the net amount is what the student pays.
+
+**Decisions (agreed)**
+- (a) A scholarship is defined by **Institute + Course (+ optional Batch, optional Academic Year)** with a **percentage** or a **fixed amount**, for **one or several semesters**.
+- (b) A scholarship reduces the **unpaid balance only**. Fully paid dues are skipped and there are no refunds; a part-paid due is discounted on what is still open.
+- (c) A student may hold **several different scholarships** on the same fee, but the **total discount never exceeds the fee**. The same scholarship can't be assigned to a student twice.
+- (d) **No approval step:** an assignment applies at once. It is audited and notified (student + the institute's Accounts users).
+
+**Tables**
+
+`scholarships` (scheme definition, `BelongsToInstitute`)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| institute_id, course_id | bigint FK | the course must be one the institute offers (`institute_courses`) |
+| batch_id | bigint FK nullable | null = every batch of the course |
+| academic_year_id | bigint FK nullable | null = every academic year |
+| name, code | string | code unique per institute; `description` text nullable |
+| type | enum(percentage, fixed) |  |
+| value | decimal(10,2) | 0–100 for a percentage; ₹ amount **per semester** for a fixed scholarship |
+| applies_to | enum(period_fees, all_fees) | default `period_fees` (semester fee lines only); the admission fee and other one-time fees only with `all_fees` |
+| status | boolean | an inactive scholarship can't be assigned; existing assignments stay |
+|  |  | plus the `BaseModel` columns (created_by, updated_by, soft deletes) |
+
+`scholarship_periods`: scholarship_id, period_no, unique together. One row per semester covered (e.g. Semester 1 only, or 1–4). The allowed range is 1…`courses.total_periods`.
+
+`student_scholarships` (one assignment)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| institute_id, student_id, scholarship_id | bigint FK | **unique (student_id, scholarship_id)** blocks duplicates |
+| status | enum(active, revoked) |  |
+| assigned_by, assigned_at | FK users, datetime |  |
+| revoked_by, revoked_at, remarks | nullable | revoke reason |
+
+`student_due_discounts` (the calculated discount on each due)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| student_due_id, student_scholarship_id | bigint FK | unique together |
+| amount | decimal(10,2) | discount applied to this due |
+
+`student_dues` gets a new **`discount`** decimal(10,2) column, default 0, holding the sum of its discount rows. The balance becomes **`amount_due − discount − amount_paid`**. `StudentDue::balance`, the `Student` outstanding totals, the status recalculation in `FeeService`, the payment order (next payable due), receipts and the portal all use this net balance.
+
+**Calculation (`App\Services\ScholarshipService`)**
+- **Eligible students:** same institute and course (and batch, if the scholarship has one), ER number issued, not withdrawn.
+- **Eligible dues:** dues from a `course_fees` line whose `period_no` is in the scholarship's periods (plus one-time lines with `all_fees`), matching academic year if one is set, not waived.
+- **Per due:**
+  - percentage → `round(amount_due × value / 100, 2)`;
+  - fixed → `value` per semester, split across that semester's fee lines in proportion to their amounts;
+  - then capped at the room left: `amount_due − amount_paid − other discounts`. A fully paid due gets 0 ("already paid").
+- **Future semesters:** semesters not yet charged are discounted when they are. `FeeService` calls `ScholarshipService::applyTo($due)` whenever it charges a due (ER issue, promotion, new fee line, advance payment), so an assignment made in Semester 1 for Semesters 1–4 also applies to Semester 3 when Semester 3 is charged.
+- **Revoke:** sets the assignment to revoked and deletes its discount rows on **unpaid** dues only; discounts already covered by a payment stay. Then `discount` and the due status are recalculated.
+- **Edit a scholarship with assignments:** value / type / periods changes are re-applied to unpaid dues only, after a confirmation that shows how many students are affected.
+- Every action runs in a DB transaction and is written to the audit trail (`scholarship_assigned`, `scholarship_revoked`, `scholarship_updated`). In-app notification `scholarship_awarded` / `scholarship_revoked` goes to the student and the institute's Accounts users.
+
+**Screens** (new menu group **Scholarships** under Institute Management)
+1. **Scholarships** (list + modal CRUD; existing `DataTable` + modal pattern):
+   - Fields: institute (Super Admin chooses; Institute Admin fixed to their own), course (filtered by `institute_courses`), batch (optional), academic year (optional), semesters (checkboxes from the course's number of periods), type + value, applies-to, status.
+   - The list shows each scholarship's institute, course / batch, semesters, value, students assigned and total discount given; filters for institute, course, status.
+2. **Assign Scholarship** (separate page):
+   - Choose a scholarship. The page then lists the eligible students of that course / batch, with search and a batch filter.
+   - Apply to **one student**, **selected students** (checkboxes) or **all eligible**.
+   - A **preview table**, per student and semester: fee amount · existing discounts (other scholarships) · this scholarship · paid · **final payable**, with totals. Already-assigned, fully-paid and ineligible rows are marked and can't be selected.
+   - A confirmation modal (delete-modal style) shows the student count and total discount; **Apply** calls `ScholarshipService::assign()`.
+3. **Student ▸ Fees & Payments** and the **portal Payment page:**
+   - A "Scholarship − ₹X" line under each discounted due, and net payable in the totals.
+   - The student page lists the student's scholarships, with **Revoke** (reason required) for users with `scholarships.assign`.
+
+**Permissions (new)**
+
+| Permission | Meaning | Default roles |
+| --- | --- | --- |
+| `scholarships.view` | See scholarships and assignments | Institute Admin, Accounts |
+| `scholarships.manage` | Create, edit, deactivate scholarships | Institute Admin |
+| `scholarships.assign` | Assign and revoke | Institute Admin |
+
+Super Admin passes every check. **Data isolation:** `BelongsToInstitute` on all new tables, plus a server-side check that the scholarship, student and due belong to the same institute (and to the user's own institute for non-Super-Admin users).
+
+**Rules**
+- No duplicate assignment (unique key + check in the service).
+- The total discount on a due never exceeds `amount_due − amount_paid`.
+- A scholarship with assignments can't be deleted, only deactivated.
+- An assignment is refused if the student's institute / course / batch doesn't match the scholarship.
+
 ### Module 3 — Examination Lifecycle
 
 **Purpose:** implements Phase 2 — Trigger → Approval → Execution.
@@ -1031,6 +1121,7 @@ Export feature: a queued job zips the `document_final_records` of all `documents
 | **Sprint 1a — Master Data (Module 1A)** | ✅ Done (per-institute gateway settings → Sprint 1) | Super Admin CRUD for qualifications, courses (+ institute_courses), countries, states, religions, categories, matriculation & higher secondary boards, payment gateways (+ per-institute gateway settings) |
 | **Sprint 1 — Student Onboarding** | ✅ done (2.1–2.6, admin side + admissions portal) | Student registration (+ user account, academic information), document upload wizard, student dues & payments (online gateways, GPay/UPI, offline + Accounts verification, receipts), dual-gate approval (Admin + Accounts), ER generation, ID card issuance |
 | **Sprint 1b — Academic Years, Academic Periods & Period-wise Fees (Module 2B)** ✅ | 1–2 weeks | Academic years master + seeder, course period structure (semester / term / module / year, length, number of periods), course periods per institute / course / academic year (generate & edit), batches → intake year, period-wise fee structure (academic year + period on fee lines, due on the period start date, period 1 fees at ER issue), dues grouped per period |
+| **Sprint 1c — Scholarship Management (Module 2C)** 🟡 | 1–1.5 weeks | Scholarships (institute + course + optional batch / academic year, percentage or fixed, one or more semesters), Assign Scholarship page (one / selected / all eligible, semester-wise preview of fee, discounts and final payable), automatic discounts on student dues (incl. semesters charged later), revoke, permissions + institute isolation |
 | **Sprint 2 — Exam Application & Approval** | 2 weeks | Subjects per course/syllabus mapping, exam appearance requests, Accounts dues gate + BiC bypass, TM attendance gate, admit card generation |
 | **Sprint 3 — Question Bank & Paper Setup** | 1–2 weeks | Question bank CRUD (Super Admin + Institute), exam paper builder |
 | **Sprint 4 — Grading & Results** | 2 weeks | Marks entry (all three modes), result computation (configurable pass %), Super Admin correction workflow, marksheet + consolidated marksheet generation with unique serials, **promotion to the next period** (75 % per subject eligibility list, Examination Manager + Institute Admin approval, detain / Super Admin override, next-period fees) |
@@ -1059,6 +1150,7 @@ app/
       Notifications/       NotificationLogComponent ✅
       Masters/             QualificationsManager, CoursesManager, ReligionsManager, CategoriesManager, MatriculationBoardsManager, HigherSecondaryBoardsManager, CountriesManager, StatesManager
       Onboarding/          StudentRegistrationForm, StudentAcademicForm, DocumentUploadWizard, AdminDocumentVerification, AccountsFeeVerification, ERRequestGenerator, IDCardIssuance
+      Scholarships/        ScholarshipsComponent, AssignScholarshipComponent (Module 2C)
       Exams/               ExamAppearanceApplication, AccountsDuesApproval, BiCOverridePanel, TMAttendanceApproval, AdmitCardGenerator, ExamScheduleManager, SyllabusMappingManager
       QuestionBank/        QuestionBankManager, QuestionUploadBulk, ExamPaperBuilder
       Grading/             MarksEntryGrid, ResultPublisher, MarkCorrectionPanel, MarksheetGenerator, ConsolidatedMarksheetGenerator
@@ -1069,7 +1161,7 @@ app/
     User.php ✅
     Admin/                 BaseModel ✅, Institute ✅, AuditTrail ✅, Country ✅, State ✅, (one model per new table, extending BaseModel)
   Traits/                  RecordsAuditTrail ✅, BelongsToInstitute
-  Services/                SerialNumberService ✅, NotificationService ✅, MenuService ✅, PaymentService, PdfGenerationService, ComplianceAggregationService
+  Services/                SerialNumberService ✅, NotificationService ✅, MenuService ✅, ScholarshipService (Module 2C), PaymentService, PdfGenerationService, ComplianceAggregationService
     Payments/              PaymentGatewayInterface, RazorpayGateway, GPayUpiGateway, OfflineGateway ... (one driver per payment_gateways.code)
   Http/Controllers/        PaymentWebhookController (signature-verified, idempotent gateway callbacks)
   Policies/                StudentPolicy, ExamApprovalPolicy, DocumentPolicy, MoUPolicy ...
