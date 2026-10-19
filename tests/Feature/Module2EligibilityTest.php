@@ -184,36 +184,66 @@ class Module2EligibilityTest extends TestCase
         $this->assertEquals(9.6, (float) $this->cbse->fresh()->cgpa_factor);
     }
 
-    public function test_super_admin_sets_course_criteria_with_minimums_per_subject()
+    public function test_super_admin_sets_criteria_for_many_courses_and_streams_at_once()
     {
         $this->actingAs($this->super);
-        $course = Course::create(['name' => 'B.Com Aviation', 'code' => 'EBC-' . uniqid(), 'duration_months' => 36, 'total_semesters' => 6, 'status' => true]);
+        $bcom = Course::create(['name' => 'B.Com Aviation', 'code' => 'EBC-' . uniqid(), 'duration_months' => 36, 'total_semesters' => 6, 'status' => true]);
+        $bba = Course::create(['name' => 'BBA Airport Mgmt', 'code' => 'EBB-' . uniqid(), 'duration_months' => 36, 'total_semesters' => 6, 'status' => true]);
 
-        $page = Livewire::test(CourseEligibilityManager::class)
-            ->call('openModal')->set('course_id', $course->id)->set('qualifying_subject_group_id', $this->commerce->id)
-            ->assertSee('Accountancy')->assertSee('Business Studies');
-        $page->call('save')->assertHasErrors(['minimums']); // at least one minimum
+        // Two courses × two streams with one "same minimum for every subject" fill
+        $page = Livewire::test(CourseEligibilityManager::class)->call('openModal')
+            ->call('toggleCourse', $bcom->id)->call('toggleCourse', $bba->id)
+            ->set('quickMin', '45')
+            ->call('toggleGroup', $this->commerce->id)->call('toggleGroup', $this->pcm->id)  // filled with 45 when ticked
+            ->assertSee('Accountancy')->assertSee('Mathematics')->assertSee('= <b>4</b> criteria', false)
+            ->set('quickMin', '40')->set('quickAgg', '50')->call('applyQuick')                // re-fill all
+            ->assertSet("minimums.{$this->commerce->id}.{$this->sub['BST']}", '40')
+            ->set("minimums.{$this->pcm->id}.{$this->sub['MAT']}", '55')                     // one subject stricter
+            ->set("minimums.{$this->commerce->id}.{$this->sub['BST']}", '101');
+        $page->call('save')->assertHasErrors(["minimums.{$this->commerce->id}.{$this->sub['BST']}"]);
+        $page->set("minimums.{$this->commerce->id}.{$this->sub['BST']}", '40')->call('save')->assertHasNoErrors()
+            ->assertDispatchedBrowserEvent('show-toast', fn ($n, $d) => str_contains($d['message'], 'Saved 4 criteria (4 new, 0 updated)'));
 
-        $page->set("minimums.{$this->sub['ACC']}", '55')->set("minimums.{$this->sub['BST']}", '101')->call('save')->assertHasErrors(["minimums.{$this->sub['BST']}"]);
-        $page->set("minimums.{$this->sub['BST']}", '45')->set('min_aggregate', '50')->set('remarks', 'English must be passed')->call('save')->assertHasNoErrors();
-
-        $criterion = CourseEligibilityCriterion::where('course_id', $course->id)->firstOrFail();
-        $this->assertNull($criterion->higher_secondary_board_id); // any board
-        $this->assertEquals(['ACC' => 55.0, 'BST' => 45.0], $criterion->subjects->mapWithKeys(fn ($s) => [$s->subject->code => (float) $s->min_percent])->all());
+        $this->assertSame(4, CourseEligibilityCriterion::whereIn('course_id', [$bcom->id, $bba->id])->count());
+        $pcm = CourseEligibilityCriterion::where('course_id', $bba->id)->where('qualifying_subject_group_id', $this->pcm->id)->firstOrFail();
+        $this->assertNull($pcm->higher_secondary_board_id); // any board
+        $this->assertEquals(50.0, (float) $pcm->min_aggregate);
+        $this->assertEquals(['PHY' => 40.0, 'CHE' => 40.0, 'MAT' => 55.0], $pcm->subjects->mapWithKeys(fn ($s) => [$s->subject->code => (float) $s->min_percent])->all());
         $this->assertTrue(AuditTrail::where('module', 'course_eligibility')->where('action', 'create')->exists());
 
-        // Same course + group + board again → refused; another board is fine
-        $dup = Livewire::test(CourseEligibilityManager::class)->call('openModal')->set('course_id', $course->id)
-            ->set('qualifying_subject_group_id', $this->commerce->id)->set("minimums.{$this->sub['ACC']}", '40');
-        $dup->call('save')->assertHasErrors(['qualifying_subject_group_id']);
-        $dup->set('higher_secondary_board_id', $this->state->id)->call('save')->assertHasNoErrors();
+        // Nothing ticked / a stream with every subject blank → errors
+        Livewire::test(CourseEligibilityManager::class)->call('openModal')->call('save')->assertHasErrors(['courseIds', 'groupIds']);
+        Livewire::test(CourseEligibilityManager::class)->call('openModal')->call('toggleCourse', $bcom->id)->set('quickMin', '')
+            ->call('toggleGroup', $this->commerce->id)->call('save')->assertHasErrors(["minimums.{$this->commerce->id}"]);
+
+        // Saving the same course + stream + board again updates it (no duplicate)
+        Livewire::test(CourseEligibilityManager::class)->call('openModal', $bcom->id)->set('quickMin', '60')->call('toggleGroup', $this->commerce->id)->call('save')
+            ->assertDispatchedBrowserEvent('show-toast', fn ($n, $d) => str_contains($d['message'], '0 new, 1 updated'));
+        $this->assertSame(2, CourseEligibilityCriterion::where('course_id', $bcom->id)->count());
+        // …a stricter rule for one board is a separate criterion
+        Livewire::test(CourseEligibilityManager::class)->call('openModal', $bcom->id)->set('higher_secondary_board_id', $this->state->id)
+            ->call('toggleGroup', $this->commerce->id)->call('save')->assertHasNoErrors();
+        $this->assertSame(3, CourseEligibilityCriterion::where('course_id', $bcom->id)->count());
+
+        // Copy every stream of B.Com to the AME course
+        Livewire::test(CourseEligibilityManager::class)->call('openCopy', $bcom->id)->call('copy')->assertHasErrors(['copyToIds'])
+            ->call('toggleCopyTo', $this->openCourse->id)->call('copy')->assertHasNoErrors();
+        $this->assertSame(3, CourseEligibilityCriterion::where('course_id', $this->openCourse->id)->count());
+
+        // Edit one criterion
+        Livewire::test(CourseEligibilityManager::class)->call('edit', $pcm->id)->assertSee('Edit Eligibility Criterion')
+            ->set("minimums.{$this->pcm->id}.{$this->sub['PHY']}", '65')->set("aggregates.{$this->pcm->id}", '')->call('save')->assertHasNoErrors();
+        $pcm->refresh();
+        $this->assertNull($pcm->min_aggregate);
+        $this->assertEquals(65.0, (float) $pcm->subjects()->where('qualifying_subject_id', $this->sub['PHY'])->value('min_percent'));
+        $this->assertSame(4, CourseEligibilityCriterion::whereIn('course_id', [$bcom->id, $bba->id])->where('higher_secondary_board_id', null)->count());
 
         // Listed per course; deactivate and delete
-        Livewire::test(CourseEligibilityManager::class)->set('courseFilter', $course->id)->assertSee('B.Com Aviation')->assertSee('Any board')->assertSee('State Boards')
-            ->call('toggleStatus', $criterion->id);
-        $this->assertFalse($criterion->fresh()->status);
-        Livewire::test(CourseEligibilityManager::class)->call('confirmDelete', $criterion->id)->call('delete');
-        $this->assertSoftDeleted($criterion);
+        Livewire::test(CourseEligibilityManager::class)->set('courseFilter', $bcom->id)->assertSee('B.Com Aviation')->assertSee('Any board')->assertSee('State Boards')->assertSee('Copy to')
+            ->call('toggleStatus', $pcm->id);
+        $this->assertFalse($pcm->fresh()->status);
+        Livewire::test(CourseEligibilityManager::class)->call('confirmDelete', $pcm->id)->call('delete');
+        $this->assertSoftDeleted($pcm);
     }
 
     // ------------------------------------------------------------------ the check

@@ -457,7 +457,7 @@ Example: *AME B1.1 · Any board · PCM — Physics ≥ 50 %, Chemistry ≥ 45 %,
 - A course with **no criteria** → `not_configured`: subject marks are optional and nothing is blocked (today's behaviour).
 - Existing students keep their data; they are checked the next time their academic details are saved.
 
-**Screens:** Master Data ▸ Academic ▸ **12th Subjects**, **12th Subject Groups** (subject picker), **Course Eligibility** (filter by course; add criterion = course → board or "Any board" → group → min % per subject + aggregate).
+**Screens:** Master Data ▸ Academic ▸ **12th Subjects**, **12th Subject Groups** (subject picker), **Course Eligibility** ✅ (filter by course; **quick add**: tick several courses × several streams, board or "Any board", one "same minimum for every subject" fill (+ average), then adjust single subjects — one save creates / updates every combination; an existing course + stream + board is updated, never duplicated; **Copy to…** copies a course's streams and minimums to other courses; edit / deactivate / delete one criterion).
 
 **Components:**
 - New: `Admin\Masters\QualifyingSubjectsManager`, `QualifyingSubjectGroupsManager` (both on `MasterCrudComponent`), `CourseEligibilityManager`.

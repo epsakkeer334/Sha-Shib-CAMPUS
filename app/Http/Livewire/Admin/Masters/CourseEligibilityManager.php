@@ -6,6 +6,7 @@ use App\Models\Admin\Course;
 use App\Models\Admin\CourseEligibilityCriterion;
 use App\Models\Admin\HigherSecondaryBoard;
 use App\Models\Admin\QualifyingSubjectGroup;
+use App\Services\EligibilityService;
 use App\Traits\RecordsAuditTrail;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +17,10 @@ use Livewire\Component;
  * Master Data → Course Eligibility (Module 2 step 2.7, Super Admin only).
  * Per course: accepted 12th subject group(s), for one board or any board, with a minimum % per
  * subject and an optional minimum aggregate. Students see the criteria when they choose the course.
+ *
+ * Quick set-up: one save covers several courses × several streams, a "same minimum for every subject"
+ * fill, and "Copy to other courses" from a configured course. Saving a course + stream + board that
+ * already exists updates it (no duplicates).
  */
 class CourseEligibilityManager extends Component
 {
@@ -25,12 +30,24 @@ class CourseEligibilityManager extends Component
     public $courseFilter = '';
     public $search = '';
 
-    // form
+    // form (add: many courses × many groups; edit: one criterion)
     public $recordId = null;
-    public $course_id, $higher_secondary_board_id = '', $qualifying_subject_group_id, $min_aggregate, $remarks;
-    public $status = 1;
-    /** @var array<int|string, mixed> subject id => minimum % (blank = not required) */
+    public $courseIds = [];
+    public $groupIds = [];
+    public $higher_secondary_board_id = '';
+    /** @var array<int|string, array<int|string, mixed>> group id => [subject id => minimum %] (blank = not required) */
     public $minimums = [];
+    /** @var array<int|string, mixed> group id => minimum average % */
+    public $aggregates = [];
+    public $remarks;
+    public $status = 1;
+    public $quickMin = '50';
+    public $quickAgg = '';
+    public $courseSearch = '';
+
+    // copy to other courses
+    public $copyFromId = null;
+    public $copyToIds = [];
 
     public $confirmingDeleteId = null;
 
@@ -51,34 +68,38 @@ class CourseEligibilityManager extends Component
         abort_unless(Auth::user() && Auth::user()->isSuperAdmin() && Auth::user()->can('masters.manage'), 403);
     }
 
-    // ------------------------------------------------------------------ form
+    // ------------------------------------------------------------------ add / edit
 
     public function openModal($courseId = null)
     {
         $this->resetValidation();
         $this->resetForm();
-        $this->course_id = $courseId ?: ($this->courseFilter ?: null);
+        $course = $courseId ?: ($this->courseFilter ?: null);
+        $this->courseIds = $course ? [(string) $course] : [];
         $this->dispatchBrowserEvent('open-eligibility-modal');
     }
 
     protected function resetForm()
     {
-        $this->reset(['recordId', 'course_id', 'higher_secondary_board_id', 'qualifying_subject_group_id', 'min_aggregate', 'remarks', 'minimums']);
+        $this->reset(['recordId', 'courseIds', 'groupIds', 'higher_secondary_board_id', 'minimums', 'aggregates', 'remarks', 'courseSearch', 'quickAgg']);
         $this->status = 1;
+        $this->quickMin = '50';
     }
 
     public function edit($id)
     {
         $criterion = CourseEligibilityCriterion::with('subjects')->findOrFail($id);
         $this->resetValidation();
+        $this->resetForm();
+        $group = (string) $criterion->qualifying_subject_group_id;
         $this->recordId = $criterion->id;
-        $this->course_id = $criterion->course_id;
+        $this->courseIds = [(string) $criterion->course_id];
+        $this->groupIds = [$group];
         $this->higher_secondary_board_id = $criterion->higher_secondary_board_id ?: '';
-        $this->qualifying_subject_group_id = $criterion->qualifying_subject_group_id;
-        $this->min_aggregate = $criterion->min_aggregate !== null ? $this->plain($criterion->min_aggregate) : null;
+        $this->minimums = [$group => $criterion->subjects->mapWithKeys(fn ($s) => [$s->qualifying_subject_id => $this->plain($s->min_percent)])->all()];
+        $this->aggregates = [$group => $criterion->min_aggregate !== null ? $this->plain($criterion->min_aggregate) : ''];
         $this->remarks = $criterion->remarks;
         $this->status = $criterion->status ? 1 : 0;
-        $this->minimums = $criterion->subjects->mapWithKeys(fn ($s) => [$s->qualifying_subject_id => $this->plain($s->min_percent)])->all();
         $this->dispatchBrowserEvent('open-eligibility-modal');
     }
 
@@ -87,102 +108,195 @@ class CourseEligibilityManager extends Component
         return rtrim(rtrim((string) $value, '0'), '.');
     }
 
-    /** A new group: start every subject of the group at 0 so the Super Admin only types the minimums. */
-    public function updatedQualifyingSubjectGroupId($value)
+    /** Tick / untick a stream; a newly ticked stream gets the quick minimum in every subject. */
+    public function toggleGroup($groupId)
     {
-        $group = $value ? QualifyingSubjectGroup::with('subjects')->find($value) : null;
-        $old = $this->minimums;
-        $this->minimums = $group ? $group->subjects->mapWithKeys(fn ($s) => [$s->id => $old[$s->id] ?? ''])->all() : [];
+        $groupId = (string) $groupId;
+        if (in_array($groupId, $this->groupIds, true)) {
+            $this->groupIds = array_values(array_diff($this->groupIds, [$groupId]));
+
+            return;
+        }
+        $this->groupIds[] = $groupId;
+        $group = QualifyingSubjectGroup::with('subjects')->find($groupId);
+        if ($group && empty($this->minimums[$groupId])) {
+            $this->minimums[$groupId] = $group->subjects->mapWithKeys(fn ($s) => [$s->id => (string) $this->quickMin])->all();
+            $this->aggregates[$groupId] = (string) $this->quickAgg;
+        }
     }
 
-    protected function groupSubjects()
+    public function toggleCourse($courseId)
     {
-        $group = $this->qualifying_subject_group_id ? QualifyingSubjectGroup::with('subjects')->find($this->qualifying_subject_group_id) : null;
+        $courseId = (string) $courseId;
+        $this->courseIds = in_array($courseId, $this->courseIds, true)
+            ? array_values(array_diff($this->courseIds, [$courseId]))
+            : array_merge($this->courseIds, [$courseId]);
+    }
 
-        return $group ? $group->subjects : collect();
+    /** "Apply to all": the same minimum (and average) for every subject of every ticked stream. */
+    public function applyQuick()
+    {
+        $this->validate(['quickMin' => ['nullable', 'numeric', 'min:0', 'max:100'], 'quickAgg' => ['nullable', 'numeric', 'min:0', 'max:100']], [], ['quickMin' => 'minimum', 'quickAgg' => 'average']);
+        foreach ($this->selectedGroups() as $group) {
+            $this->minimums[$group->id] = $group->subjects->mapWithKeys(fn ($s) => [$s->id => (string) $this->quickMin])->all();
+            $this->aggregates[$group->id] = (string) $this->quickAgg;
+        }
+    }
+
+    protected function selectedGroups()
+    {
+        if (!$this->groupIds) {
+            return collect();
+        }
+        $order = array_flip($this->groupIds);
+
+        return QualifyingSubjectGroup::with('subjects')->whereIn('id', $this->groupIds)->get()->sortBy(fn ($g) => $order[(string) $g->id] ?? 99)->values();
     }
 
     public function save()
     {
-        $subjects = $this->groupSubjects();
+        $groups = $this->selectedGroups();
         $rules = [
-            'course_id' => ['required', Rule::exists('courses', 'id')->whereNull('deleted_at')],
+            'courseIds' => ['required', 'array', 'min:1'],
+            'courseIds.*' => [Rule::exists('courses', 'id')->whereNull('deleted_at')],
+            'groupIds' => ['required', 'array', 'min:1'],
+            'groupIds.*' => [Rule::exists('qualifying_subject_groups', 'id')->whereNull('deleted_at')],
             'higher_secondary_board_id' => ['nullable', Rule::exists('higher_secondary_boards', 'id')->whereNull('deleted_at')],
-            'qualifying_subject_group_id' => ['required', Rule::exists('qualifying_subject_groups', 'id')->whereNull('deleted_at')],
-            'min_aggregate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'remarks' => ['nullable', 'string', 'max:500'],
             'status' => ['boolean'],
         ];
-        $messages = [];
-        foreach ($subjects as $subject) {
-            $rules["minimums.{$subject->id}"] = ['nullable', 'numeric', 'min:0', 'max:100'];
-            $messages["minimums.{$subject->id}.max"] = "{$subject->name}: between 0 and 100.";
-            $messages["minimums.{$subject->id}.min"] = "{$subject->name}: between 0 and 100.";
-            $messages["minimums.{$subject->id}.numeric"] = "{$subject->name}: enter a number.";
+        $messages = ['courseIds.required' => 'Choose at least one course.', 'groupIds.required' => 'Tick at least one 12th stream.'];
+        foreach ($groups as $group) {
+            $rules["aggregates.{$group->id}"] = ['nullable', 'numeric', 'min:0', 'max:100'];
+            $messages["aggregates.{$group->id}.*"] = "{$group->code} average: a number between 0 and 100.";
+            foreach ($group->subjects as $subject) {
+                $rules["minimums.{$group->id}.{$subject->id}"] = ['nullable', 'numeric', 'min:0', 'max:100'];
+                $messages["minimums.{$group->id}.{$subject->id}.*"] = "{$group->code} · {$subject->name}: a number between 0 and 100.";
+            }
         }
-        $this->validate($rules, $messages, [
-            'course_id' => 'course', 'higher_secondary_board_id' => 'board', 'qualifying_subject_group_id' => '12th subject group', 'min_aggregate' => 'minimum aggregate',
-        ]);
+        $this->validate($rules, $messages, ['higher_secondary_board_id' => 'board']);
 
-        $minimums = $subjects->filter(fn ($s) => isset($this->minimums[$s->id]) && $this->minimums[$s->id] !== '' && $this->minimums[$s->id] !== null)
-            ->mapWithKeys(fn ($s) => [$s->id => round((float) $this->minimums[$s->id], 2)]);
-        if ($minimums->isEmpty()) {
-            $this->addError('minimums', 'Enter the minimum % for at least one subject.');
+        // Minimums per ticked stream (at least one subject each)
+        $plan = [];
+        foreach ($groups as $group) {
+            $mins = $group->subjects
+                ->filter(fn ($s) => isset($this->minimums[$group->id][$s->id]) && $this->minimums[$group->id][$s->id] !== '' && $this->minimums[$group->id][$s->id] !== null)
+                ->mapWithKeys(fn ($s) => [$s->id => round((float) $this->minimums[$group->id][$s->id], 2)]);
+            if ($mins->isEmpty()) {
+                $this->addError("minimums.{$group->id}", "{$group->code}: enter the minimum % for at least one subject.");
 
-            return;
+                return;
+            }
+            $agg = $this->aggregates[$group->id] ?? '';
+            $plan[$group->id] = ['mins' => $mins, 'agg' => $agg === '' || $agg === null ? null : round((float) $agg, 2)];
         }
 
         $boardId = $this->higher_secondary_board_id ?: null;
-        $duplicate = CourseEligibilityCriterion::where('course_id', $this->course_id)
-            ->where('qualifying_subject_group_id', $this->qualifying_subject_group_id)
-            ->when($boardId, fn ($q) => $q->where('higher_secondary_board_id', $boardId), fn ($q) => $q->whereNull('higher_secondary_board_id'))
-            ->when($this->recordId, fn ($q) => $q->whereKeyNot($this->recordId))
-            ->exists();
-        if ($duplicate) {
-            $this->addError('qualifying_subject_group_id', 'This course already has a criterion for this group and board. Edit that one instead.');
+        $counts = ['new' => 0, 'updated' => 0];
 
-            return;
-        }
-
-        $data = [
-            'course_id' => (int) $this->course_id,
-            'higher_secondary_board_id' => $boardId,
-            'qualifying_subject_group_id' => (int) $this->qualifying_subject_group_id,
-            'min_aggregate' => $this->min_aggregate === '' || $this->min_aggregate === null ? null : round((float) $this->min_aggregate, 2),
-            'remarks' => trim((string) $this->remarks) ?: null,
-            'status' => (bool) $this->status,
-        ];
-
-        $criterion = DB::transaction(function () use ($data, $minimums) {
-            $criterion = $this->recordId ? CourseEligibilityCriterion::findOrFail($this->recordId) : new CourseEligibilityCriterion();
-            $old = $criterion->exists ? $this->describe($criterion->load('subjects')) : null;
-            $criterion->fill($data)->save();
-            $criterion->subjects()->whereNotIn('qualifying_subject_id', $minimums->keys())->delete();
-            foreach ($minimums as $subjectId => $min) {
-                $criterion->subjects()->updateOrCreate(['qualifying_subject_id' => $subjectId], ['min_percent' => $min]);
+        DB::transaction(function () use ($plan, $boardId, &$counts) {
+            foreach (array_unique($this->courseIds) as $courseId) {
+                foreach ($plan as $groupId => $p) {
+                    $criterion = $this->recordId && count($this->courseIds) === 1
+                        ? CourseEligibilityCriterion::findOrFail($this->recordId)
+                        : CourseEligibilityCriterion::firstOrNew(['course_id' => (int) $courseId, 'qualifying_subject_group_id' => (int) $groupId, 'higher_secondary_board_id' => $boardId]);
+                    $this->store($criterion, (int) $courseId, (int) $groupId, $boardId, $p['mins'], $p['agg'], $counts);
+                }
             }
-            $criterion->load('course', 'group', 'board', 'subjects');
-
-            $label = "{$criterion->course->name} · {$criterion->group->code} · {$criterion->board_label}";
-            if ($old) {
-                $this->auditUpdate($criterion, 'course_eligibility', ['criteria' => $old], ['criteria' => $this->describe($criterion)], "Updated course eligibility: {$label}");
-            } else {
-                $this->auditCreate($criterion, 'course_eligibility', "Added course eligibility: {$label} — " . $this->describe($criterion));
-            }
-
-            return $criterion;
         });
 
-        $this->courseFilter = $this->courseFilter ? (string) $criterion->course_id : '';
         $this->dispatchBrowserEvent('close-eligibility-modal');
-        $this->toast('success', $this->recordId ? 'Eligibility criterion updated.' : 'Eligibility criterion added.');
+        $total = $counts['new'] + $counts['updated'];
+        $this->toast('success', $this->recordId ? 'Eligibility criterion updated.'
+            : "Saved {$total} " . ($total === 1 ? 'criterion' : 'criteria') . " ({$counts['new']} new, {$counts['updated']} updated).");
         $this->resetForm();
     }
 
-    protected function describe(CourseEligibilityCriterion $criterion): string
+    /** Create or update one criterion (and its subject minimums), audited. A board change that hits another row is refused. */
+    protected function store(CourseEligibilityCriterion $criterion, int $courseId, int $groupId, $boardId, $mins, $agg, array &$counts): void
     {
-        return \App\Services\EligibilityService::describe($criterion) . ($criterion->status ? '' : ' (inactive)');
+        if ($criterion->exists && $this->recordId) {
+            $clash = CourseEligibilityCriterion::where('course_id', $courseId)->where('qualifying_subject_group_id', $groupId)
+                ->when($boardId, fn ($q) => $q->where('higher_secondary_board_id', $boardId), fn ($q) => $q->whereNull('higher_secondary_board_id'))
+                ->whereKeyNot($criterion->id)->exists();
+            if ($clash) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['higher_secondary_board_id' => 'This course already has this stream for that board. Edit that one instead.']);
+            }
+        }
+
+        $old = $criterion->exists ? EligibilityService::describe($criterion->load('subjects')) : null;
+        $criterion->fill([
+            'course_id' => $courseId, 'qualifying_subject_group_id' => $groupId, 'higher_secondary_board_id' => $boardId,
+            'min_aggregate' => $agg, 'remarks' => trim((string) $this->remarks) ?: null, 'status' => (bool) $this->status,
+        ])->save();
+        $criterion->subjects()->whereNotIn('qualifying_subject_id', $mins->keys())->delete();
+        foreach ($mins as $subjectId => $min) {
+            $criterion->subjects()->updateOrCreate(['qualifying_subject_id' => $subjectId], ['min_percent' => $min]);
+        }
+        $criterion->load('course', 'group', 'board', 'subjects');
+        $label = "{$criterion->course->name} · {$criterion->group->code} · {$criterion->board_label}";
+
+        if ($old !== null) {
+            $this->auditUpdate($criterion, 'course_eligibility', ['criteria' => $old], ['criteria' => EligibilityService::describe($criterion)], "Updated course eligibility: {$label}");
+            $counts['updated']++;
+        } else {
+            $this->auditCreate($criterion, 'course_eligibility', "Added course eligibility: {$label} — " . EligibilityService::describe($criterion));
+            $counts['new']++;
+        }
     }
+
+    // ------------------------------------------------------------------ copy to other courses
+
+    public function openCopy($courseId)
+    {
+        $this->resetValidation();
+        $this->copyFromId = (int) $courseId;
+        $this->copyToIds = [];
+        $this->courseSearch = '';
+        $this->dispatchBrowserEvent('open-eligibility-copy-modal');
+    }
+
+    public function toggleCopyTo($courseId)
+    {
+        $courseId = (string) $courseId;
+        $this->copyToIds = in_array($courseId, $this->copyToIds, true)
+            ? array_values(array_diff($this->copyToIds, [$courseId]))
+            : array_merge($this->copyToIds, [$courseId]);
+    }
+
+    public function copy()
+    {
+        $this->validate(['copyToIds' => ['required', 'array', 'min:1'], 'copyToIds.*' => [Rule::exists('courses', 'id')->whereNull('deleted_at')]],
+            ['copyToIds.required' => 'Choose at least one course to copy to.']);
+
+        $source = CourseEligibilityCriterion::with('subjects')->where('course_id', $this->copyFromId)->get();
+        $counts = ['new' => 0, 'updated' => 0];
+        DB::transaction(function () use ($source, &$counts) {
+            foreach (array_unique($this->copyToIds) as $courseId) {
+                if ((int) $courseId === (int) $this->copyFromId) {
+                    continue;
+                }
+                foreach ($source as $from) {
+                    $criterion = CourseEligibilityCriterion::firstOrNew([
+                        'course_id' => (int) $courseId, 'qualifying_subject_group_id' => $from->qualifying_subject_group_id, 'higher_secondary_board_id' => $from->higher_secondary_board_id,
+                    ]);
+                    $this->remarks = $from->remarks;
+                    $this->status = $from->status ? 1 : 0;
+                    $mins = $from->subjects->mapWithKeys(fn ($s) => [$s->qualifying_subject_id => (float) $s->min_percent]);
+                    $this->store($criterion, (int) $courseId, $from->qualifying_subject_group_id, $from->higher_secondary_board_id, $mins,
+                        $from->min_aggregate !== null ? (float) $from->min_aggregate : null, $counts);
+                }
+            }
+        });
+
+        $this->remarks = null;
+        $this->status = 1;
+        $this->dispatchBrowserEvent('close-eligibility-copy-modal');
+        $this->toast('success', "Copied: {$counts['new']} new, {$counts['updated']} updated.");
+        $this->copyToIds = [];
+    }
+
+    // ------------------------------------------------------------------ status / delete
 
     public function toggleStatus($id)
     {
@@ -203,7 +317,7 @@ class CourseEligibilityManager extends Component
     {
         $criterion = CourseEligibilityCriterion::with('course', 'group', 'board', 'subjects')->find($this->confirmingDeleteId);
         if ($criterion) {
-            $this->auditDelete($criterion, 'course_eligibility', "Deleted course eligibility: {$criterion->course->name} · {$criterion->group->code} · {$criterion->board_label} — " . $this->describe($criterion));
+            $this->auditDelete($criterion, 'course_eligibility', "Deleted course eligibility: {$criterion->course->name} · {$criterion->group->code} · {$criterion->board_label} — " . EligibilityService::describe($criterion));
             $criterion->delete();
             $this->toast('danger', 'Eligibility criterion deleted.');
         }
@@ -230,17 +344,22 @@ class CourseEligibilityManager extends Component
             ->groupBy('course_id');
 
         $courses = Course::orderBy('name')->get(['id', 'name', 'code', 'status']);
-        $withCriteria = CourseEligibilityCriterion::where('status', true)->distinct()->count('course_id');
+        $configured = CourseEligibilityCriterion::distinct()->pluck('course_id')->all();
+        $term = mb_strtolower(trim($this->courseSearch));
+        $pickable = $courses->filter(fn ($c) => $term === '' || str_contains(mb_strtolower("{$c->name} {$c->code}"), $term));
 
         return view('livewire.admin.masters.course-eligibility', [
             'criteria' => $criteria,
             'courses' => $courses,
+            'pickable' => $pickable,
+            'configured' => $configured,
             'boards' => HigherSecondaryBoard::active()->orderBy('name')->pluck('name', 'id'),
-            'groups' => QualifyingSubjectGroup::where(fn ($q) => $q->where('status', true)->orWhere('id', $this->qualifying_subject_group_id))->orderBy('code')->get(['id', 'code', 'name']),
-            'groupSubjects' => $this->groupSubjects(),
+            'groups' => QualifyingSubjectGroup::with('subjects')->where(fn ($q) => $q->where('status', true)->orWhereIn('id', $this->groupIds ?: [0]))->orderBy('code')->get(),
+            'selectedGroups' => $this->selectedGroups(),
+            'copyFrom' => $this->copyFromId ? $courses->firstWhere('id', $this->copyFromId) : null,
             'stats' => [
                 'courses' => $courses->where('status', true)->count(),
-                'with' => $withCriteria,
+                'with' => CourseEligibilityCriterion::where('status', true)->distinct()->count('course_id'),
                 'criteria' => CourseEligibilityCriterion::count(),
                 'groups' => QualifyingSubjectGroup::active()->count(),
             ],
