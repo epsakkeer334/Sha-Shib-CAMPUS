@@ -161,10 +161,14 @@ class ScholarshipService
      *
      * @return array{groups: array, totals: array}
      */
-    public function structure(Scholarship $scholarship, Student $student): array
+    public function structure(?Scholarship $scholarship, Student $student): array
     {
         $course = $student->course;
-        $calc = $this->calculate($scholarship, $student)->keyBy(fn ($r) => $r['due']->id);
+        // A student who already has this scholarship: show its saved discount once (as "this"), never again
+        // on top of itself as an "existing" discount. Without a scholarship: the student's fees as they are.
+        $own = $scholarship ? StudentScholarship::withoutGlobalScopes()->where('student_id', $student->id)->where('scholarship_id', $scholarship->id)->where('status', 'active')->first() : null;
+        $ownRows = $own ? StudentDueDiscount::where('student_scholarship_id', $own->id)->pluck('amount', 'student_due_id') : collect();
+        $calc = $scholarship ? $this->calculate($scholarship, $student, optional($own)->id)->keyBy(fn ($r) => $r['due']->id) : collect();
         $label = fn ($periodNo) => $periodNo ? ($course ? $course->periodName((int) $periodNo) : "Period {$periodNo}") : 'One-time fees';
         $groups = [];
 
@@ -174,30 +178,37 @@ class ScholarshipService
             $key = $due->period_no === null ? 0 : (int) $due->period_no;
             $row = $calc->get($due->id);
             $waived = $due->status === 'waived';
-            $this_ = $waived || !$row ? 0.0 : (float) $row['amount'];
+            if ($own) {
+                $this_ = $waived ? 0.0 : (float) ($ownRows[$due->id] ?? 0);     // what this scholarship actually gives
+                $existing = max(0, round((float) $due->discount - (float) ($ownRows[$due->id] ?? 0), 2)); // other scholarships only
+            } else {
+                $this_ = $waived || !$row ? 0.0 : (float) $row['amount'];
+                $existing = (float) $due->discount;
+            }
             $groups[$key]['label'] ??= $label($due->period_no);
             $groups[$key]['lines'][] = [
-                'fee' => $due->fee_head, 'amount' => (float) $due->amount_due, 'existing' => (float) $due->discount, 'this' => $this_,
+                'fee' => $due->fee_head, 'amount' => (float) $due->amount_due, 'existing' => $existing, 'this' => $this_,
                 'paid' => (float) $due->amount_paid,
-                'payable' => $waived ? 0.0 : max(0, round((float) $due->amount_due - (float) $due->discount - $this_ - (float) $due->amount_paid, 2)),
+                'payable' => $waived ? 0.0 : max(0, round((float) $due->amount_due - $existing - $this_ - (float) $due->amount_paid, 2)),
                 'status' => $waived ? 'Waived' : ($due->status === 'cleared' ? 'Paid' : ($due->status === 'partial' ? 'Part paid' : 'Due ' . $due->due_date->format('d M Y'))),
                 'covered' => (bool) $row, 'note' => $row['note'] ?? null, 'upcoming' => false, 'waived' => $waived,
+                'balance' => $waived ? 0.0 : (float) $due->balance, // what the student owes today (saved discounts only)
             ];
         }
 
         // Not charged yet: projected discount (same rules as when they are charged)
         $upcoming = app(FeeService::class)->upcomingFees($student)->groupBy(fn ($i) => (int) ($i['period_no'] ?? 0));
         foreach ($upcoming as $key => $items) {
-            $covered = $items->filter(fn ($i) => $scholarship->covers($i['period_no'] ? (int) $i['period_no'] : null)
+            $covered = !$scholarship ? collect() : $items->filter(fn ($i) => $scholarship->covers($i['period_no'] ? (int) $i['period_no'] : null)
                 && (!$scholarship->academic_year_id || !$i['period_no'] || (int) optional(app(PeriodService::class)->periodFor($student, (int) $i['period_no']))->academic_year_id === (int) $scholarship->academic_year_id));
             $coveredTotal = (float) $covered->sum(fn ($i) => (float) $i['fee']->amount);
             // fixed amount is per semester: what the charged fees of this semester already use is not given twice
             $usedNow = (float) collect($groups[$key]['lines'] ?? [])->where('upcoming', false)->sum('this');
-            $fixed = max(0, min((float) $scholarship->value, $coveredTotal + $usedNow) - $usedNow);
+            $fixed = $scholarship ? max(0, min((float) $scholarship->value, $coveredTotal + $usedNow) - $usedNow) : 0.0;
             foreach ($items as $item) {
                 $amount = (float) $item['fee']->amount;
                 $isCovered = $covered->contains(fn ($c) => $c['fee']->id === $item['fee']->id);
-                $this_ = !$isCovered ? 0.0 : ($scholarship->type === 'percentage'
+                $this_ = !$isCovered || !$scholarship ? 0.0 : ($scholarship->type === 'percentage'
                     ? round($amount * (float) $scholarship->value / 100, 2)
                     : round($coveredTotal > 0 ? $fixed * $amount / $coveredTotal : 0, 2));
                 $groups[$key]['label'] ??= $label($item['period_no']);
@@ -210,7 +221,8 @@ class ScholarshipService
         }
         ksort($groups);
 
-        $totals = ['fees' => 0.0, 'existing' => 0.0, 'this_now' => 0.0, 'this_later' => 0.0, 'paid' => 0.0, 'payable_now' => 0.0, 'payable_later' => 0.0];
+        // payable_now = after this scholarship (preview for students who do not have it yet); balance_now = owed today
+        $totals = ['fees' => 0.0, 'existing' => 0.0, 'this_now' => 0.0, 'this_later' => 0.0, 'paid' => 0.0, 'payable_now' => 0.0, 'payable_later' => 0.0, 'balance_now' => 0.0];
         foreach ($groups as $key => $group) {
             $sub = ['amount' => 0.0, 'existing' => 0.0, 'this' => 0.0, 'paid' => 0.0, 'payable' => 0.0];
             foreach ($group['lines'] as $line) {
@@ -225,6 +237,9 @@ class ScholarshipService
                 $totals['paid'] += $line['paid'];
                 $totals[$line['upcoming'] ? 'this_later' : 'this_now'] += $line['this'];
                 $totals[$line['upcoming'] ? 'payable_later' : 'payable_now'] += $line['payable'];
+                if (!$line['upcoming']) {
+                    $totals['balance_now'] += $line['balance'];
+                }
             }
             $groups[$key]['subtotal'] = array_map(fn ($v) => round($v, 2), $sub);
             $groups[$key]['covered'] = collect($group['lines'])->contains('covered', true);

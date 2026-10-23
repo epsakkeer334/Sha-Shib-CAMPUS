@@ -101,6 +101,12 @@ class Student extends BaseModel
         return $this->hasOne(StudentAcademicDetail::class);
     }
 
+    /** Scholarships given to the student (Module 2C), active and revoked. */
+    public function scholarships()
+    {
+        return $this->hasMany(StudentScholarship::class);
+    }
+
     /** ER number history (Module 2 step 2.8), newest first. */
     public function erHistory()
     {

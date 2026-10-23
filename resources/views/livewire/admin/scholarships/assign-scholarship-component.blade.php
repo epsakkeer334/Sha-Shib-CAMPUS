@@ -1,7 +1,10 @@
 <div class="content sc-ui">
     @php
         $fmt = fn ($v) => money_inr($v, false);
-        $periodWord = optional(optional($s)->course)->period_label ?: 'Semester';
+        $filtered = trim($search) !== '' || $batch || $semester || (!$s && ($institute || $course));
+        $pageIds = $students->pluck('id')->map(fn ($id) => (string) $id)->all();
+        $pageEligible = array_map('strval', $eligibleIds);
+        $pageAllPicked = $pageEligible && !array_diff($pageEligible, $selected);
     @endphp
 
     <!-- Header -->
@@ -14,322 +17,417 @@
                 <li class="breadcrumb-item active">Assign</li>
             </ol></nav>
         </div>
-        <a href="{{ route('admin.scholarships') }}" class="btn btn-light border"><i class="ti ti-award me-1"></i> All scholarships</a>
+        <a href="{{ route('admin.scholarships') }}" class="btn btn-light border"><i class="ti ti-award me-1"></i> Manage scholarships</a>
     </div>
 
-    @if(!$s)
-        <!-- Step 1: choose a scholarship -->
-        <div class="as-step-title"><span class="as-num">1</span> Choose a scholarship <small class="text-muted fw-normal ms-1">{{ $scholarships->count() }} active</small></div>
-        @if($scholarships->isEmpty())
-            <div class="sc-panel text-center py-5">
-                <span class="sc-hero-icon mb-3" style="width: 64px; height: 64px;"><i class="ti ti-award"></i></span>
-                <div class="fw-semibold fs-16">No active scholarships</div>
-                <div class="small text-muted mb-3">Create a scholarship first, then assign it to students here.</div>
-                <a href="{{ route('admin.scholarships') }}" class="btn btn-primary"><i class="ti ti-circle-plus me-1"></i> Scholarships</a>
+    <!-- Filters -->
+    @php
+        $activeFilters = collect([
+            $isSuperAdmin && $institute ? 'institute' : null, $course ? 'course' : null, $batch ? 'batch' : null,
+            $semester ? 'semester' : null, trim($search) !== '' ? 'search' : null,
+        ])->filter()->count();
+        $curInst = $isSuperAdmin && $institute ? $institutes->firstWhere('id', (int) $institute) : null;
+        $curCourse = $course ? $courses->firstWhere('id', (int) $course) : null;
+        $curBatch = $batch ? $batches->firstWhere('id', (int) $batch) : null;
+        $valueOf = fn ($o) => $o->type === 'percentage' ? rtrim(rtrim(number_format((float) $o->value, 2), '0'), '.') . '%' : '₹' . number_format((float) $o->value);
+    @endphp
+    <div class="sc-panel ff mb-3">
+        <div class="ff-row">
+            {{-- search --}}
+            <div class="ff-search">
+                <i class="ti ti-search"></i>
+                <input id="fSearch" type="search" placeholder="Search name, ER no., email, phone" wire:model.debounce.400ms="search" aria-label="Search students">
+                <span wire:loading.delay wire:target="search" class="spinner-border text-primary"></span>
             </div>
-        @else
-            @php $cardFiltered = trim($cardSearch) !== '' || $cardInstitute || $cardCourse || $cardType || $cardOnlyEligible; @endphp
-            <div class="as-filterbar mb-3">
-                <div class="sc-search"><i class="ti ti-search"></i><input type="search" class="form-control" placeholder="Search scholarship, code or course…" wire:model.debounce.300ms="cardSearch" aria-label="Search scholarships"></div>
-                @if($cardInstitutes->count() > 1)
-                    <select class="form-select" wire:model="cardInstitute" aria-label="Institute">
-                        <option value="">All institutes</option>
-                        @foreach($cardInstitutes as $inst)<option value="{{ $inst->id }}">{{ $inst->name }}</option>@endforeach
-                    </select>
-                @endif
-                <select class="form-select" wire:model="cardCourse" aria-label="Course">
-                    <option value="">All courses</option>
-                    @foreach($cardCourses as $c)<option value="{{ $c->id }}">{{ $c->name }} ({{ $c->code }})</option>@endforeach
-                </select>
-                <div class="sc-seg" role="group" aria-label="Discount type">
-                    @foreach(['' => 'All types', 'percentage' => '% Percentage', 'fixed' => '₹ Fixed'] as $k => $l)
-                        <button type="button" class="{{ $cardType === $k ? 'is-on' : '' }}" wire:click="$set('cardType', '{{ $k }}')">{{ $l }}</button>
-                    @endforeach
+
+            {{-- scholarship --}}
+            <div class="dropdown ff-dd">
+                <button type="button" class="ff-pill ff-pill-schol {{ $s ? 'is-set' : '' }}" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="true">
+                    <i class="ti ti-award"></i>
+                    <span class="ff-pill-text">{{ $s ? $s->name : 'Scholarship' }}</span>
+                    @if($s)<span class="ff-pill-badge">{{ $valueOf($s) }}</span>@endif
+                    <i class="ti ti-chevron-down ff-caret"></i>
+                </button>
+                <div class="dropdown-menu ff-menu ff-menu-wide">
+                    <div class="ff-menu-head">Scholarship to assign <small>{{ $scholarships->count() }} active</small></div>
+                    <button type="button" class="ff-opt {{ !$s ? 'is-on' : '' }}" wire:click="pickScholarship(null)">
+                        <span class="ff-ico"><i class="ti ti-receipt-2"></i></span>
+                        <span class="ff-opt-main"><b>None — just show fees</b><small>See every student's fees</small></span>
+                        <i class="ti ti-check ff-check"></i>
+                    </button>
+                    <div class="ff-menu-list">
+                        @foreach($scholarships as $opt)
+                            <button type="button" class="ff-opt {{ $s && $s->id === $opt->id ? 'is-on' : '' }}" wire:click="pickScholarship({{ $opt->id }})">
+                                <span class="ff-ico ff-ico-val {{ $opt->type === 'percentage' ? 'is-pct' : 'is-fixed' }}">{{ $valueOf($opt) }}</span>
+                                <span class="ff-opt-main"><b>{{ $opt->name }}</b><small>{{ $opt->code }} · {{ optional($opt->course)->code }} · {{ $opt->periods_label }}</small></span>
+                                <i class="ti ti-check ff-check"></i>
+                            </button>
+                        @endforeach
+                    </div>
                 </div>
-                <label class="as-toggle"><input type="checkbox" class="form-check-input m-0" wire:model="cardOnlyEligible"> With eligible students</label>
-                @if($cardFiltered)<button type="button" class="btn btn-sm btn-link text-muted" wire:click="clearCardFilters"><i class="ti ti-x"></i> Clear</button>@endif
-                <span class="as-count ms-auto">{{ $cards->count() }} of {{ $scholarships->count() }}</span>
             </div>
-            @if($cards->isEmpty())
-                <div class="sc-panel text-center py-5">
-                    <i class="ti ti-filter-off fs-1 text-muted d-block mb-2"></i>
-                    <div class="fw-semibold">No scholarship matches these filters</div>
-                    <button type="button" class="btn btn-sm btn-light border mt-2" wire:click="clearCardFilters">Clear filters</button>
-                </div>
-            @endif
-            <div class="sc-grid">
-                @foreach($cards as $card)
-                    @php $cc = $cardCounts[$card->id] ?? ['eligible' => 0, 'assigned' => 0]; @endphp
-                    <button type="button" class="sc-card as-choose" wire:click="chooseScholarship({{ $card->id }})" wire:key="card-{{ $card->id }}">
-                        <div class="sc-card-top">
-                            <div class="sc-value {{ $card->type === 'percentage' ? 'is-pct' : 'is-fixed' }}">
-                                @if($card->type === 'percentage')<b>{{ rtrim(rtrim(number_format((float) $card->value, 2), '0'), '.') }}<small>%</small></b><span>off</span>
-                                @else<b><small>₹</small>{{ number_format((float) $card->value) }}</b><span>/ {{ strtolower(optional($card->course)->period_label ?: 'semester') }}</span>@endif
-                            </div>
-                            <div class="min-w-0 flex-grow-1 text-start">
-                                <span class="sc-code">{{ $card->code }}</span>
-                                <h5 class="sc-name text-truncate" title="{{ $card->name }}">{{ $card->name }}</h5>
-                                <div class="small text-muted text-truncate">{{ optional($card->course)->name }} · {{ $card->batch ? 'Batch ' . $card->batch->code : 'every batch' }}</div>
-                            </div>
-                        </div>
-                        <div class="sc-periods">
-                            @foreach(range(1, max(1, (int) optional($card->course)->total_periods)) as $n)
-                                <span class="{{ in_array($n, $card->periods, true) ? 'is-on' : '' }}">{{ $n }}</span>
+            @if($s)<button type="button" class="ff-x" wire:click="pickScholarship(null)" title="Clear scholarship" aria-label="Clear scholarship"><i class="ti ti-x"></i></button>@endif
+
+            <span class="ff-sep"></span>
+
+            {{-- institute (Super Admin) --}}
+            @if($isSuperAdmin)
+                <div class="dropdown ff-dd">
+                    <button type="button" class="ff-pill {{ $curInst ? 'is-on' : '' }}" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="ti ti-building"></i><span class="ff-pill-text">{{ $curInst ? $curInst->name : 'Institute' }}</span><i class="ti ti-chevron-down ff-caret"></i>
+                    </button>
+                    <div class="dropdown-menu ff-menu">
+                        <div class="ff-menu-head">Institute</div>
+                        <button type="button" class="ff-opt {{ !$curInst ? 'is-on' : '' }}" wire:click="pickInstitute(null)"><span class="ff-opt-main"><b>All institutes</b></span><i class="ti ti-check ff-check"></i></button>
+                        <div class="ff-menu-list">
+                            @foreach($institutes as $i)
+                                <button type="button" class="ff-opt {{ $curInst && $curInst->id === $i->id ? 'is-on' : '' }}" wire:click="pickInstitute({{ $i->id }})">
+                                    <span class="ff-opt-main"><b>{{ $i->name }}</b><small>{{ $i->code }}</small></span><i class="ti ti-check ff-check"></i>
+                                </button>
                             @endforeach
                         </div>
-                        <div class="sc-card-foot">
-                            <div class="sc-metric text-start"><b class="{{ $cc['eligible'] ? 'text-primary' : '' }}">{{ $cc['eligible'] }}</b><span>eligible</span></div>
-                            <div class="sc-metric text-start"><b>{{ $cc['assigned'] }}</b><span>assigned</span></div>
-                            <span class="as-choose-cta ms-auto">{{ $cc['eligible'] ? 'Select students' : 'View' }} <i class="ti ti-arrow-right"></i></span>
-                        </div>
-                    </button>
-                @endforeach
-            </div>
-        @endif
-    @else
-        <!-- Selected scholarship -->
-        <div class="as-selected mb-3">
-            <div class="sc-value {{ $s->type === 'percentage' ? 'is-pct' : 'is-fixed' }}">
-                @if($s->type === 'percentage')<b>{{ rtrim(rtrim(number_format((float) $s->value, 2), '0'), '.') }}<small>%</small></b><span>off</span>
-                @else<b><small>₹</small>{{ number_format((float) $s->value) }}</b><span>/ {{ strtolower($periodWord) }}</span>@endif
-            </div>
-            <div class="min-w-0 flex-grow-1">
-                <div class="fw-bold fs-15">{{ $s->name }} <span class="sc-code ms-1">{{ $s->code }}</span></div>
-                <div class="small text-muted">{{ optional($s->course)->name }} · {{ $s->batch ? 'Batch ' . $s->batch->code : 'every batch' }}{{ $s->academicYear ? ' · ' . $s->academicYear->name : '' }}</div>
-                <div class="as-covers mt-1">
-                    @foreach(range(1, max(1, (int) optional($s->course)->total_periods)) as $n)
-                        <span class="{{ in_array($n, $s->periods, true) ? 'is-on' : '' }}" title="{{ optional($s->course)->periodName($n) }}">{{ $n }}</span>
-                    @endforeach
-                    <small class="text-muted ms-1">{{ $s->periods_label }}{{ $s->applies_to === 'all_fees' ? ' + one-time fees' : ' · semester fees only' }}</small>
+                    </div>
+                </div>
+            @endif
+
+            {{-- course --}}
+            <div class="dropdown ff-dd">
+                <button type="button" class="ff-pill {{ $curCourse ? 'is-on' : '' }}" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="ti ti-books"></i><span class="ff-pill-text">{{ $curCourse ? $curCourse->code : 'Course' }}</span><i class="ti ti-chevron-down ff-caret"></i>
+                </button>
+                <div class="dropdown-menu ff-menu">
+                    <div class="ff-menu-head">Course</div>
+                    <button type="button" class="ff-opt {{ !$curCourse ? 'is-on' : '' }}" wire:click="pickCourse(null)"><span class="ff-opt-main"><b>All courses</b></span><i class="ti ti-check ff-check"></i></button>
+                    <div class="ff-menu-list">
+                        @foreach($courses as $c)
+                            <button type="button" class="ff-opt {{ $curCourse && $curCourse->id === $c->id ? 'is-on' : '' }}" wire:click="pickCourse({{ $c->id }})">
+                                <span class="ff-tag">{{ $c->code }}</span><span class="ff-opt-main"><b>{{ $c->name }}</b></span><i class="ti ti-check ff-check"></i>
+                            </button>
+                        @endforeach
+                    </div>
                 </div>
             </div>
-            @if($scholarships->count() > 1)
-                <select class="form-select form-select-sm as-switch" wire:change="chooseScholarship($event.target.value)" aria-label="Switch scholarship">
-                    @foreach($scholarships as $opt)<option value="{{ $opt->id }}" @if((int) $opt->id === (int) $s->id) selected @endif>{{ $opt->name }} ({{ $opt->code }})</option>@endforeach
-                </select>
-            @endif
-            <button type="button" class="btn btn-sm btn-light border" wire:click="changeScholarship"><i class="ti ti-layout-grid me-1"></i> All scholarships</button>
-        </div>
 
-        <div class="row g-3">
-            <!-- Step 2: students -->
-            <div class="{{ $tab === 'eligible' ? 'col-xxl-8' : 'col-12' }}">
-                <div class="sc-panel">
-                    <div class="sc-panel-head">
-                        <div class="sc-tabs">
-                            <button type="button" class="{{ $tab === 'eligible' ? 'is-on' : '' }}" wire:click="setTab('eligible')"><i class="ti ti-users me-1"></i> Eligible <span class="badge bg-primary-transparent text-primary ms-1">{{ $counts['eligible'] }}</span></button>
-                            <button type="button" class="{{ $tab === 'assigned' ? 'is-on' : '' }}" wire:click="setTab('assigned')"><i class="ti ti-award me-1"></i> Assigned <span class="badge bg-success-transparent text-success ms-1">{{ $counts['assigned'] }}</span></button>
-                        </div>
-                        @if($tab === 'eligible')
-                            <div class="sc-search ms-md-auto"><i class="ti ti-search"></i><input type="search" class="form-control form-control-sm" placeholder="Name, ER number, email…" wire:model.debounce.400ms="search"></div>
-                        @endif
-                    </div>
-                    @if($tab === 'eligible')
-                        <div class="as-filterbar as-filterbar-sm">
-                            <span class="as-filter-label"><i class="ti ti-filter"></i> Filter</span>
-                            @if($batches->isNotEmpty())
-                                <select class="form-select form-select-sm" wire:model="batch" aria-label="Batch">
-                                    <option value="">All batches</option>
-                                    @foreach($batches as $b)<option value="{{ $b->id }}">{{ $b->code }}</option>@endforeach
-                                </select>
-                            @endif
-                            <select class="form-select form-select-sm" wire:model="semester" aria-label="Current semester">
-                                <option value="">Any {{ strtolower($periodWord) }}</option>
-                                @foreach(range(1, $semesterCount) as $n)<option value="{{ $n }}">Now in {{ optional($s->course)->periodName($n) }}</option>@endforeach
-                            </select>
-                            <select class="form-select form-select-sm" wire:model="feeState" aria-label="Fee status">
-                                <option value="">Any fee status</option>
-                                <option value="open">Has fees to pay</option>
-                                <option value="settled">Nothing to pay now</option>
-                            </select>
-                            @if(trim($search) !== '' || $batch || $semester || $feeState)
-                                <button type="button" class="btn btn-sm btn-link text-muted" wire:click="clearStudentFilters"><i class="ti ti-x"></i> Clear filters</button>
-                            @endif
-                            <span class="as-count ms-auto">{{ $students instanceof \Illuminate\Pagination\AbstractPaginator ? $students->total() : 0 }} {{ \Illuminate\Support\Str::plural('student', $students instanceof \Illuminate\Pagination\AbstractPaginator ? $students->total() : 0) }}</span>
-                        </div>
-                    @endif
-
-                    @if($tab === 'eligible')
-                        @php
-                            $pageIds = $students->pluck('id')->map(fn ($id) => (string) $id)->all();
-                            $pageFree = array_values(array_diff($pageIds, array_map('strval', $have)));
-                            $pageAllPicked = $pageFree && !array_diff($pageFree, $selected);
-                        @endphp
-                        <div class="as-toolbar">
-                            <div class="d-flex align-items-center gap-2 flex-wrap">
-                                @if($s->status && $pageFree)
-                                    <label class="as-check-all"><input type="checkbox" class="form-check-input m-0" @if($pageAllPicked) checked @endif wire:click="selectPage({{ json_encode($pageFree) }})"> Select this page</label>
-                                    @if($counts['eligible'] > count($pageFree))
-                                        <button type="button" class="btn btn-sm btn-link px-1" wire:click="selectAllEligible">Select all {{ $counts['eligible'] }} eligible</button>
-                                    @endif
-                                @endif
-                            </div>
-                        </div>
-
-                        <div class="as-legend">
-                            <span><i class="as-dot as-dot-fee"></i> Total fees</span>
-                            <span><i class="as-dot as-dot-other"></i> Existing discounts</span>
-                            <span><i class="as-dot as-dot-this"></i> This scholarship</span>
-                            <span><i class="as-dot as-dot-pay"></i> Final payable</span>
-                        </div>
-
-                        <div class="as-list">
-                            @forelse($students as $st)
-                                @php
-                                    $has = in_array($st->id, $have);
-                                    $picked = in_array((string) $st->id, $selected, true);
-                                    $struct = $structures[$st->id] ?? ['groups' => [], 'totals' => []];
-                                    $t = $struct['totals'];
-                                @endphp
-                                <div class="as-row {{ $picked ? 'is-picked' : '' }} {{ $has ? 'is-has' : '' }}" wire:key="row-{{ $st->id }}">
-                                    <div class="as-row-main">
-                                        <div class="as-pick">
-                                            @if(!$has && $s->status)
-                                                <input type="checkbox" class="form-check-input" @if($picked) checked @endif wire:click="toggle({{ $st->id }})" aria-label="Select {{ $st->full_name }}">
-                                            @else
-                                                <i class="ti ti-award text-success" title="Already has this scholarship"></i>
-                                            @endif
-                                        </div>
-                                        <div class="as-who">
-                                            <span class="sc-av">{{ $st->initials }}</span>
-                                            <div class="min-w-0">
-                                                <a href="{{ route('admin.students.fees', $st->id) }}" class="fw-semibold text-dark d-block text-truncate">{{ $st->full_name }}</a>
-                                                <div class="small text-muted"><span class="font-monospace">{{ $st->er_number }}</span>{{ optional($st->batch)->code ? ' · ' . $st->batch->code : '' }}</div>
-                                                @if($st->current_period_label)<div class="small text-muted">{{ $st->current_period_label }}</div>@endif
-                                            </div>
-                                        </div>
-                                        <div class="as-metrics">
-                                            <div class="as-m"><span>Total fees</span><b>{{ $fmt($t['fees'] ?? 0) }}</b></div>
-                                            <div class="as-m as-m-other"><span>Existing disc.</span><b>{{ ($t['existing'] ?? 0) > 0 ? '− ' . $fmt($t['existing']) : '—' }}</b></div>
-                                            <div class="as-m as-m-this">
-                                                <span>Scholarship</span>
-                                                @if($has)<b class="text-success">Assigned</b>
-                                                @else<b>{{ ($t['this_now'] ?? 0) > 0 ? '− ' . $fmt($t['this_now']) : '—' }}</b>
-                                                    @if(($t['this_later'] ?? 0) > 0)<small>+ {{ $fmt($t['this_later']) }} later</small>@endif
-                                                @endif
-                                            </div>
-                                            <div class="as-m as-m-pay"><span>Final payable</span><b>{{ $fmt($t['payable_now'] ?? 0) }}</b>
-                                                @if(($t['payable_later'] ?? 0) > 0)<small>+ {{ $fmt($t['payable_later']) }} upcoming</small>@endif</div>
-                                        </div>
-                                        <div class="as-act">
-                                            <button type="button" class="btn btn-sm btn-light border" wire:click="showFees({{ $st->id }})" title="Complete fee structure">
-                                                <i class="ti ti-receipt-2"></i><span class="d-none d-md-inline ms-1">Fees</span>
-                                            </button>
-                                            @if(!$has && $s->status)
-                                                <button type="button" class="btn btn-sm btn-primary" wire:click="confirmAssign({{ $st->id }})">Assign</button>
-                                            @endif
-                                        </div>
-                                    </div>
-
-                                </div>
+            {{-- batch --}}
+            <div class="dropdown ff-dd">
+                <button type="button" class="ff-pill {{ $curBatch ? 'is-on' : '' }}" data-bs-toggle="dropdown" aria-expanded="false" @if(!$course) disabled title="Choose a course first" @endif>
+                    <i class="ti ti-users-group"></i><span class="ff-pill-text">{{ $curBatch ? $curBatch->code : 'Batch' }}</span><i class="ti ti-chevron-down ff-caret"></i>
+                </button>
+                @if($course)
+                    <div class="dropdown-menu ff-menu">
+                        <div class="ff-menu-head">Batch <small>{{ $batches->count() }} in this course</small></div>
+                        <button type="button" class="ff-opt {{ !$batch ? 'is-on' : '' }}" wire:click="pickBatch(null)"><span class="ff-opt-main"><b>All batches</b></span><span class="ff-n">{{ $batchTotal }}</span><i class="ti ti-check ff-check"></i></button>
+                        <div class="ff-menu-list">
+                            @forelse($batches as $b)
+                                @php $n = (int) ($batchCounts[$b->id] ?? 0); @endphp
+                                <button type="button" class="ff-opt {{ (int) $batch === $b->id ? 'is-on' : '' }} {{ $n ? '' : 'is-empty' }}" wire:click="pickBatch({{ $b->id }})">
+                                    <span class="ff-opt-main"><b>{{ $b->code }} @unless($b->status)<em class="ff-closed">closed</em>@endunless</b><small>{{ $b->name }}{{ $b->start_date ? ' · ' . $b->start_date->format('M Y') : '' }}</small></span>
+                                    <span class="ff-n">{{ $n }}</span><i class="ti ti-check ff-check"></i>
+                                </button>
                             @empty
-                                <div class="text-center text-muted py-5">
-                                    <i class="ti ti-users-minus fs-1 d-block mb-2 opacity-50"></i>
-                                    No admitted students of {{ optional($s->course)->name }}{{ $s->batch ? ' (batch ' . $s->batch->code . ')' : '' }}{{ $search ? ' match the search' : ' yet' }}.
-                                </div>
+                                <div class="ff-empty">No batches for this course.</div>
                             @endforelse
                         </div>
-                        @if($students instanceof \Illuminate\Pagination\AbstractPaginator && $students->hasPages())<div class="px-3 py-2 border-top">{{ $students->links() }}</div>@endif
-                    @else
-                        <div class="table-responsive">
-                            <table class="sc-students">
-                                <thead><tr><th>Student</th><th>Status</th><th class="text-end">Discount</th><th>Given by</th><th class="text-end">Action</th></tr></thead>
-                                <tbody>
-                                    @forelse($assigned as $a)
-                                        <tr wire:key="a-{{ $a->id }}" class="{{ $a->status === 'active' ? '' : 'is-muted' }}">
-                                            <td>
-                                                <div class="d-flex gap-2 align-items-center">
-                                                    <span class="sc-av">{{ optional($a->student)->initials }}</span>
-                                                    <div class="min-w-0">
-                                                        <a href="{{ route('admin.students.fees', $a->student_id) }}" class="fw-semibold text-dark">{{ optional($a->student)->full_name }}</a>
-                                                        <div class="small text-muted font-monospace">{{ optional($a->student)->er_number }} · {{ optional(optional($a->student)->batch)->code }}</div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                @if($a->status === 'active')<span class="sc-tag sc-tag-ok"><i class="ti ti-circle-check"></i> Active</span>
-                                                @else<span class="sc-tag sc-tag-off"><i class="ti ti-ban"></i> Revoked</span>
-                                                    <div class="small text-muted mt-1">{{ optional($a->revoker)->name }} · {{ optional($a->revoked_at)->format('d M Y') }}</div>@endif
-                                            </td>
-                                            <td class="text-end font-monospace fw-bold text-primary">{{ $fmt($a->discount_total ?? 0) }}</td>
-                                            <td>
-                                                <div class="small">{{ optional($a->assigner)->name }}</div>
-                                                <div class="small text-muted">{{ optional($a->assigned_at)->format('d M Y, h:i A') }}</div>
-                                                @if($a->remarks)<div class="small text-muted fst-italic text-truncate" style="max-width: 260px;" title="{{ $a->remarks }}">“{{ $a->remarks }}”</div>@endif
-                                            </td>
-                                            <td class="text-end">
-                                                @if($a->status === 'active')
-                                                    <button type="button" class="btn btn-sm btn-outline-danger" wire:click="openRevoke({{ $a->id }})"><i class="ti ti-award-off me-1"></i> Revoke</button>
-                                                @endif
-                                            </td>
-                                        </tr>
-                                    @empty
-                                        <tr><td colspan="5" class="text-center text-muted py-5">Nobody has this scholarship yet.</td></tr>
-                                    @endforelse
-                                </tbody>
-                            </table>
-                        </div>
-                        @if($assigned instanceof \Illuminate\Pagination\AbstractPaginator && $assigned->hasPages())<div class="px-3 py-2">{{ $assigned->links() }}</div>@endif
-                    @endif
+                    </div>
+                @endif
+            </div>
+
+            {{-- semester --}}
+            <div class="dropdown ff-dd">
+                <button type="button" class="ff-pill {{ $semester ? 'is-on' : '' }}" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="ti ti-calendar-time"></i><span class="ff-pill-text">{{ $semester ? $periodWord . ' ' . $semester : $periodWord }}</span><i class="ti ti-chevron-down ff-caret"></i>
+                </button>
+                <div class="dropdown-menu ff-menu">
+                    <div class="ff-menu-head">Current {{ strtolower($periodWord) }}</div>
+                    <button type="button" class="ff-opt {{ !$semester ? 'is-on' : '' }}" wire:click="pickSemester(0)"><span class="ff-opt-main"><b>Any {{ strtolower($periodWord) }}</b></span><span class="ff-n">{{ $semesterTotal }}</span><i class="ti ti-check ff-check"></i></button>
+                    <div class="ff-sem-grid">
+                        @foreach(range(1, $semesterCount) as $n)
+                            @php $c = (int) ($semesterCounts[$n] ?? 0); @endphp
+                            <button type="button" class="ff-sem {{ (int) $semester === $n ? 'is-on' : '' }} {{ $c ? '' : 'is-empty' }}" wire:click="pickSemester({{ $n }})" title="Now in {{ $periodWord }} {{ $n }} · {{ $c }} {{ \Illuminate\Support\Str::plural('student', $c) }}">
+                                <b>{{ $n }}</b><span>{{ $c }}</span>
+                            </button>
+                        @endforeach
+                    </div>
                 </div>
             </div>
 
-            <!-- Step 3: review the selection -->
-            @if($tab === 'eligible')
-                <div class="col-xxl-4">
-                    <div class="sc-panel as-review">
-                        <div class="as-review-head">
-                            <span class="as-num">2</span>
-                            <div><div class="fw-bold">Review selection</div><small class="text-muted">{{ $summary && $summary['count'] ? $summary['count'] . ' ' . \Illuminate\Support\Str::plural('student', $summary['count']) . ' selected' : 'Tick students on the left' }}</small></div>
-                            @if($selected)<button type="button" class="btn btn-sm btn-link text-muted ms-auto" wire:click="clearSelection">Clear</button>@endif
-                        </div>
-                        @if(!$summary || !$summary['count'])
-                            <div class="as-review-empty">
-                                <i class="ti ti-list-check"></i>
-                                <div>Select one or more students to see the combined fees, the scholarship amount and the final payable before you assign.</div>
-                            </div>
-                        @else
-                            <div class="as-totals">
-                                <div><span>Total fees</span><b>{{ $fmt($summary['fees']) }}</b></div>
-                                <div class="as-m-other"><span>Existing discounts</span><b>{{ $summary['existing'] > 0 ? '− ' . $fmt($summary['existing']) : '—' }}</b></div>
-                                <div class="as-m-this"><span>This scholarship now</span><b>− {{ $fmt($summary['this_now']) }}</b></div>
-                                <div class="as-m-this"><span>…later semesters</span><b>{{ $summary['this_later'] > 0 ? '− ' . $fmt($summary['this_later']) : '—' }}</b></div>
-                                <div><span>Already paid</span><b>{{ $summary['paid'] > 0 ? $fmt($summary['paid']) : '—' }}</b></div>
-                                <div class="as-m-pay as-total-pay"><span>Final payable now</span><b>{{ $fmt($summary['payable_now']) }}</b></div>
-                            </div>
-                            <div class="as-picked">
-                                @foreach($summary['students'] as $p)
-                                    <div class="as-picked-row" wire:key="p-{{ $p['id'] }}">
-                                        <span class="sc-av" style="width: 30px; height: 30px; font-size: 11px;">{{ $p['initials'] }}</span>
-                                        <div class="min-w-0 flex-grow-1">
-                                            <div class="fw-semibold text-truncate small">{{ $p['name'] }}</div>
-                                            <div class="text-muted" style="font-size: 11.5px;">pays {{ $fmt($p['payable']) }}</div>
-                                        </div>
-                                        <div class="text-end">
-                                            <div class="as-this-amt">− {{ $fmt($p['this']) }}</div>
-                                            @if($p['later'] > 0)<div class="text-muted" style="font-size: 11px;">+ {{ $fmt($p['later']) }} later</div>@endif
-                                        </div>
-                                        <button type="button" class="btn btn-sm btn-icon btn-light" wire:click="toggle({{ $p['id'] }})" title="Remove from selection" aria-label="Remove {{ $p['name'] }}"><i class="ti ti-x"></i></button>
-                                    </div>
-                                @endforeach
-                            </div>
-                            <div class="p-3 border-top">
-                                <input type="text" class="form-control form-control-sm mb-2" wire:model.defer="remarks" placeholder="Note (optional), e.g. Merit list 2026">
-                                <button type="button" class="btn as-assign-btn w-100" wire:click="confirmAssign"><i class="ti ti-award me-1"></i> Assign to {{ $summary['count'] }} {{ \Illuminate\Support\Str::plural('student', $summary['count']) }}</button>
-                            </div>
-                        @endif
+            @if($filtered)<button type="button" class="ff-clear" wire:click="clearFilters" title="Clear filters"><i class="ti ti-filter-off"></i> Clear{{ $activeFilters ? ' (' . $activeFilters . ')' : '' }}</button>@endif
+            <span class="ff-total ms-auto"><b>{{ $students->total() }}</b> {{ \Illuminate\Support\Str::plural('student', $students->total()) }}</span>
+        </div>
+    </div>
+
+    <style>
+        .sc-ui .ff { padding: 8px 10px; position: relative; z-index: 3; overflow: visible; }
+        .sc-ui .ff-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+        .sc-ui .ff-search { position: relative; display: flex; align-items: center; flex: 1 1 220px; max-width: 300px; }
+        .sc-ui .ff-search > i { position: absolute; left: 10px; color: #9CA3AF; font-size: 15px; pointer-events: none; }
+        .sc-ui .ff-search input { width: 100%; height: 34px; padding: 0 28px 0 32px; border: 1px solid #E5E7EB; border-radius: 9px; background: #F9FAFB; font-size: 13px; outline: none; transition: border-color .15s, background .15s, box-shadow .15s; }
+        .sc-ui .ff-search input:focus { background: #fff; border-color: #A5B4FC; box-shadow: 0 0 0 3px rgba(99, 102, 241, .12); }
+        .sc-ui .ff-search .spinner-border { position: absolute; right: 9px; width: 13px; height: 13px; border-width: 2px; }
+        .sc-ui .ff-dd { display: inline-flex; }
+        .sc-ui .ff-pill { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 9px 0 10px; border: 1px solid #E5E7EB; border-radius: 9px; background: #fff; font-size: 12.5px; font-weight: 500; color: #374151; white-space: nowrap; transition: border-color .15s, background .15s; }
+        .sc-ui .ff-pill > i:first-child { font-size: 14px; color: #9CA3AF; }
+        .sc-ui .ff-pill-text { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+        .sc-ui .ff-caret { font-size: 12px !important; color: #9CA3AF; margin-left: 1px; }
+        .sc-ui .ff-pill:hover:not(:disabled) { border-color: #C7D2FE; background: #FAFAFF; }
+        .sc-ui .ff-pill[aria-expanded="true"] { border-color: #818CF8; box-shadow: 0 0 0 3px rgba(99, 102, 241, .12); }
+        .sc-ui .ff-pill:disabled { opacity: .5; cursor: not-allowed; }
+        .sc-ui .ff-pill.is-on { border-color: #FDBA8C; background: #FFF7F2; color: #C2410C; font-weight: 600; }
+        .sc-ui .ff-pill.is-on > i { color: #EA580C; }
+        .sc-ui .ff-pill-schol { border-style: dashed; border-color: #C7D2FE; background: #F8F9FF; color: #4338CA; font-weight: 600; }
+        .sc-ui .ff-pill-schol > i:first-child { color: #D97706; font-size: 15px; }
+        .sc-ui .ff-pill-schol .ff-pill-text { max-width: 190px; }
+        .sc-ui .ff-pill-schol.is-set { border: 1px solid #4F46E5; background: #EEF2FF; color: #312E81; }
+        .sc-ui .ff-pill-badge { padding: 1px 7px; border-radius: 999px; background: #4F46E5; color: #fff; font-size: 11px; font-weight: 700; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+        .sc-ui .ff-x { width: 26px; height: 26px; border: 0; border-radius: 7px; background: none; color: #9CA3AF; display: inline-flex; align-items: center; justify-content: center; margin-left: -4px; }
+        .sc-ui .ff-x:hover { background: #FEF2F2; color: #DC2626; }
+        .sc-ui .ff-sep { width: 1px; height: 20px; background: #E5E7EB; margin: 0 2px; }
+        .sc-ui .ff-clear { border: 0; background: none; color: #6B7280; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 3px; padding: 4px 6px; border-radius: 7px; }
+        .sc-ui .ff-clear:hover { background: #FEF2F2; color: #DC2626; }
+        .sc-ui .ff-total { font-size: 12.5px; color: #6B7280; white-space: nowrap; }
+        .sc-ui .ff-total b { color: #111827; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+        /* menus */
+        .sc-ui .ff-menu { min-width: 230px; max-width: 280px; padding: 4px; border: 1px solid #E5E7EB; border-radius: 11px; box-shadow: 0 12px 28px rgba(17, 24, 39, .12); margin-top: 4px !important; font-size: 12.5px; }
+        .sc-ui .ff-menu-wide { min-width: 290px; max-width: 330px; }
+        .sc-ui .ff-menu-head { display: flex; align-items: center; padding: 5px 8px 4px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #9CA3AF; }
+        .sc-ui .ff-menu-head small { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+        .sc-ui .ff-menu-list { max-height: 240px; overflow-y: auto; border-top: 1px solid #F3F4F6; margin-top: 3px; padding-top: 3px; }
+        .sc-ui .ff-opt { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; background: none; border-radius: 8px; text-align: left; }
+        .sc-ui .ff-opt:hover { background: #F5F7FF; }
+        .sc-ui .ff-opt.is-on { background: #FFF7F2; }
+        .sc-ui .ff-opt.is-empty .ff-opt-main { opacity: .55; }
+        .sc-ui .ff-opt-main { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.25; }
+        .sc-ui .ff-opt-main b { font-size: 12.5px; font-weight: 600; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sc-ui .ff-opt-main small { font-size: 11px; color: #6B7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sc-ui .ff-ico { width: 26px; height: 26px; border-radius: 7px; background: #F3F4F6; color: #6B7280; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+        .sc-ui .ff-ico-val { width: auto; min-width: 42px; padding: 0 6px; font-size: 10.5px; font-weight: 800; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+        .sc-ui .ff-ico-val.is-pct { background: #EEF2FF; color: #3730A3; }
+        .sc-ui .ff-ico-val.is-fixed { background: #FEF3C7; color: #92400E; }
+        .sc-ui .ff-tag { padding: 1px 6px; border-radius: 5px; background: #EEF2FF; color: #4338CA; font-size: 10.5px; font-weight: 700; flex-shrink: 0; }
+        .sc-ui .ff-closed { font-style: normal; font-size: 9.5px; font-weight: 700; color: #991B1B; background: #FEE2E2; padding: 0 5px; border-radius: 999px; margin-left: 3px; }
+        .sc-ui .ff-n { min-width: 22px; padding: 1px 6px; border-radius: 999px; background: #F3F4F6; color: #4B5563; font-size: 10.5px; font-weight: 700; text-align: center; }
+        .sc-ui .ff-opt.is-on .ff-n { background: #FED7AA; color: #9A3412; }
+        .sc-ui .ff-check { color: #EA580C; font-size: 14px; visibility: hidden; }
+        .sc-ui .ff-opt.is-on .ff-check { visibility: visible; }
+        .sc-ui .ff-empty { padding: 10px; color: #9CA3AF; text-align: center; }
+        .sc-ui .ff-sem-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 5px 4px 3px; border-top: 1px solid #F3F4F6; margin-top: 3px; }
+        .sc-ui .ff-sem { display: flex; flex-direction: column; align-items: center; padding: 5px 2px; border: 1px solid #E5E7EB; border-radius: 8px; background: #fff; line-height: 1.15; }
+        .sc-ui .ff-sem:hover { border-color: #A5B4FC; background: #F5F7FF; }
+        .sc-ui .ff-sem b { font-size: 14px; color: #111827; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+        .sc-ui .ff-sem span { font-size: 10px; color: #6B7280; }
+        .sc-ui .ff-sem.is-empty { opacity: .45; }
+        .sc-ui .ff-sem.is-on { border-color: #F26522; background: #FFF7F2; }
+        .sc-ui .ff-sem.is-on b { color: #C2410C; }
+        @media (max-width: 767px) {
+            .sc-ui .ff-search { flex: 1 1 100%; max-width: none; }
+            .sc-ui .ff-sep { display: none; }
+            .sc-ui .ff-total { width: 100%; text-align: right; }
+        }
+    </style>
+
+    <div class="row g-3">
+        <!-- Students -->
+        <div class="col-xxl-8">
+            <div class="sc-panel">
+                <div class="sc-panel-head">
+                    <div class="sc-tabs">
+                        @foreach($tabs as $key => [$label, $icon, $n])
+                            <button type="button" class="{{ $show === $key ? 'is-on' : '' }}" wire:click="setShow('{{ $key }}')">
+                                <i class="{{ $icon }} me-1"></i> {{ $label }} <span class="badge {{ $key === 'revoked' ? 'bg-danger-transparent text-danger' : ($key === 'assigned' || $key === 'with' ? 'bg-success-transparent text-success' : 'bg-primary-transparent text-primary') }} ms-1">{{ $n }}</span>
+                            </button>
+                        @endforeach
                     </div>
                 </div>
-            @endif
+
+                @if($s && $show === 'eligible' && $pageEligible)
+                    <div class="as-toolbar">
+                        <label class="as-check-all"><input type="checkbox" class="form-check-input m-0" @if($pageAllPicked) checked @endif wire:click="selectPage({{ json_encode($pageEligible) }})"> Select this page</label>
+                        @if($tabs['eligible'][2] > count($pageEligible))
+                            <button type="button" class="btn btn-sm btn-link px-1" wire:click="selectAllEligible">Select all {{ $tabs['eligible'][2] }} eligible</button>
+                        @endif
+                        @if($selected)<span class="as-count ms-auto">{{ count($selected) }} selected</span>@endif
+                    </div>
+                @elseif(!$s)
+                    <div class="as-hint"><i class="ti ti-info-circle"></i> Choose a <b>scholarship</b> in the filters (or on the right) to see who is eligible, the discount and the payable after assigning.</div>
+                @endif
+
+                <div class="as-legend">
+                    <span><i class="as-dot as-dot-fee"></i> Total fees</span>
+                    <span><i class="as-dot as-dot-other"></i> Existing discounts</span>
+                    @if($s)<span><i class="as-dot as-dot-this"></i> {{ $s->code }}</span>@endif
+                    <span><i class="as-dot as-dot-pay"></i> Payable now{{ $s && $show === 'eligible' ? ' (→ after assigning)' : '' }}</span>
+                </div>
+
+                <div class="as-list">
+                    @forelse($students as $st)
+                        @php
+                            $t = $structures[$st->id]['totals'];
+                            $isEligible = in_array($st->id, $eligibleIds);
+                            $has = $s && $st->scholarships->contains('scholarship_id', $s->id);
+                            $picked = in_array((string) $st->id, $selected, true);
+                            $rv = $revoked[$st->id] ?? null;
+                            $existingOnly = $has ? max(0, $t['existing']) : $t['existing'];
+                        @endphp
+                        <div class="as-row {{ $picked ? 'is-picked' : '' }} {{ $has ? 'is-has' : '' }}" wire:key="row-{{ $st->id }}">
+                            <div class="as-row-main">
+                                <div class="as-pick">
+                                    @if($s && $isEligible && $s->status)
+                                        <input type="checkbox" class="form-check-input" @if($picked) checked @endif wire:click="toggle({{ $st->id }})" aria-label="Select {{ $st->full_name }}">
+                                    @elseif($has)
+                                        <i class="ti ti-award text-success" title="Has {{ $s->name }}"></i>
+                                    @else
+                                        <span class="as-pick-off" title="{{ $s ? 'Not eligible for this scholarship' : 'Choose a scholarship to select students' }}"></span>
+                                    @endif
+                                </div>
+                                <div class="as-who">
+                                    <span class="sc-av">{{ $st->initials }}</span>
+                                    <div class="min-w-0">
+                                        <a href="{{ route('admin.students.fees', $st->id) }}" class="fw-semibold text-dark d-block text-truncate">{{ $st->full_name }}</a>
+                                        <div class="small text-muted"><span class="font-monospace">{{ $st->er_number }}</span> · {{ optional($st->course)->code }}{{ $st->batch ? ' · ' . $st->batch->code : '' }}</div>
+                                        <div class="small text-muted text-truncate">{{ $st->current_period_label ?: '—' }}@if($isSuperAdmin && $st->institute) · {{ $st->institute->name }}@endif</div>
+                                        @if($st->scholarships->isNotEmpty())
+                                            <div class="as-has-chips">
+                                                @foreach($st->scholarships as $ss)<span class="sc-code" title="{{ optional($ss->scholarship)->name }}">{{ optional($ss->scholarship)->code }}</span>@endforeach
+                                            </div>
+                                        @endif
+                                    </div>
+                                </div>
+                                <div class="as-metrics {{ $s ? '' : 'as-metrics-3' }}">
+                                    <div class="as-m"><span>Total fees</span><b>{{ $fmt($t['fees']) }}</b></div>
+                                    <div class="as-m as-m-other"><span>Existing disc.</span><b>{{ $existingOnly > 0 ? '− ' . $fmt($existingOnly) : '—' }}</b></div>
+                                    @if($s)
+                                        <div class="as-m as-m-this"><span>{{ $s->code }}</span>
+                                            @if($has)<b>− {{ $fmt($t['this_now']) }}</b><small class="text-success">given</small>
+                                            @elseif($isEligible)<b>{{ $t['this_now'] > 0 ? '− ' . $fmt($t['this_now']) : '—' }}</b>@if($t['this_later'] > 0)<small>+ {{ $fmt($t['this_later']) }} later</small>@endif
+                                            @else<b class="text-muted">—</b><small>{{ $rv ? 'revoked' : 'not eligible' }}</small>@endif
+                                        </div>
+                                    @endif
+                                    <div class="as-m as-m-pay">
+                                        <span>Payable now</span><b>{{ $fmt($t['balance_now']) }}</b>
+                                        @if($s && $isEligible && $t['this_now'] > 0)<small class="as-after">→ {{ $fmt($t['payable_now']) }} after assigning</small>
+                                        @elseif($t['payable_later'] > 0)<small>+ {{ $fmt($t['payable_later']) }} upcoming</small>@endif
+                                    </div>
+                                </div>
+                                <div class="as-act">
+                                    <button type="button" class="btn btn-sm btn-light border" wire:click="showFees({{ $st->id }})" title="Complete fee structure"><i class="ti ti-receipt-2"></i><span class="d-none d-md-inline ms-1">Fees</span></button>
+                                    @if($s && $isEligible && $s->status)
+                                        <button type="button" class="btn btn-sm btn-primary" wire:click="confirmAssign({{ $st->id }})">{{ $rv ? 'Assign again' : 'Assign' }}</button>
+                                    @elseif($has)
+                                        <button type="button" class="btn btn-sm btn-outline-danger" wire:click="openRevokeFor({{ $st->id }})" title="Revoke {{ $s->code }}"><i class="ti ti-award-off"></i><span class="d-none d-md-inline ms-1">Revoke</span></button>
+                                    @endif
+                                </div>
+                            </div>
+                            @if($rv)
+                                @php [$givenNote, $why] = array_pad(explode(' | Revoked: ', (string) $rv->remarks, 2), 2, null); if (str_starts_with((string) $givenNote, 'Revoked: ')) { [$givenNote, $why] = [null, substr($givenNote, 9)]; } @endphp
+                                <div class="as-rv">
+                                    <span><i class="ti ti-award text-success"></i> Given by {{ optional($rv->assigner)->name }} · {{ optional($rv->assigned_at)->format('d M Y') }}</span>
+                                    <span><i class="ti ti-award-off text-danger"></i> Revoked by {{ optional($rv->revoker)->name }} · {{ optional($rv->revoked_at)->format('d M Y, h:i A') }}</span>
+                                    @if($why)<span class="text-danger">Reason: {{ $why }}</span>@endif
+                                    <span class="ms-auto">Discount kept on paid fees: <b class="font-monospace">{{ $fmt($rv->kept ?? 0) }}</b></span>
+                                </div>
+                            @endif
+                        </div>
+                    @empty
+                        <div class="text-center text-muted py-5">
+                            <i class="ti ti-users-minus fs-1 d-block mb-2 opacity-50"></i>
+                            @if($s && $show === 'assigned')Nobody has this scholarship yet.
+                            @elseif($s && $show === 'revoked')No revoked assignments.
+                            @elseif($s)No eligible students{{ $filtered ? ' match these filters' : '' }} — the scholarship is for {{ optional($s->course)->name }}{{ $s->batch ? ' (batch ' . $s->batch->code . ')' : '' }}, admitted students only.
+                            @else No admitted students{{ $filtered ? ' match these filters' : ' yet' }}.@endif
+                            @if($filtered)<div class="mt-2"><button type="button" class="btn btn-sm btn-light border" wire:click="clearFilters">Clear filters</button></div>@endif
+                        </div>
+                    @endforelse
+                </div>
+                @if($students->hasPages())<div class="px-3 py-2 border-top">{{ $students->links() }}</div>@endif
+            </div>
         </div>
-    @endif
+
+        <!-- Scholarship + review -->
+        <div class="col-xxl-4">
+            <div class="sc-panel as-review">
+                @if(!$s)
+                    <div class="as-review-head"><span class="as-num">1</span><div><div class="fw-bold">Choose a scholarship</div><small class="text-muted">{{ $scholarships->count() }} active{{ $course ? ' · matching course first' : '' }}</small></div></div>
+                    <div class="as-quick">
+                        @forelse($scholarships->sortByDesc(fn ($o) => $course && (int) $o->course_id === (int) $course)->take(8) as $opt)
+                            <button type="button" class="as-quick-item" wire:click="chooseScholarship({{ $opt->id }})">
+                                <span class="sc-value {{ $opt->type === 'percentage' ? 'is-pct' : 'is-fixed' }}">
+                                    @if($opt->type === 'percentage')<b>{{ rtrim(rtrim(number_format((float) $opt->value, 2), '0'), '.') }}<small>%</small></b>
+                                    @else<b><small>₹</small>{{ number_format((float) $opt->value) }}</b>@endif
+                                </span>
+                                <span class="min-w-0 text-start">
+                                    <span class="d-block fw-semibold text-truncate">{{ $opt->name }}</span>
+                                    <small class="text-muted d-block text-truncate">{{ $opt->code }} · {{ optional($opt->course)->name }} · {{ $opt->periods_label }}</small>
+                                </span>
+                                <i class="ti ti-chevron-right ms-auto text-muted"></i>
+                            </button>
+                        @empty
+                            <div class="small text-muted p-3">No active scholarships. <a href="{{ route('admin.scholarships') }}">Create one</a>.</div>
+                        @endforelse
+                    </div>
+                @else
+                    <div class="as-chosen">
+                        <div class="sc-value {{ $s->type === 'percentage' ? 'is-pct' : 'is-fixed' }}">
+                            @if($s->type === 'percentage')<b>{{ rtrim(rtrim(number_format((float) $s->value, 2), '0'), '.') }}<small>%</small></b><span>off</span>
+                            @else<b><small>₹</small>{{ number_format((float) $s->value) }}</b><span>/ {{ strtolower($periodWord) }}</span>@endif
+                        </div>
+                        <div class="min-w-0 flex-grow-1">
+                            <div class="fw-bold text-truncate">{{ $s->name }} <span class="sc-code ms-1">{{ $s->code }}</span></div>
+                            <div class="small text-muted text-truncate">{{ optional($s->course)->name }} · {{ $s->batch ? 'Batch ' . $s->batch->code : 'every batch' }}</div>
+                            <div class="as-covers mt-1">
+                                @foreach(range(1, max(1, (int) optional($s->course)->total_periods)) as $n)<span class="{{ in_array($n, $s->periods, true) ? 'is-on' : '' }}">{{ $n }}</span>@endforeach
+                                <small class="text-muted ms-1">{{ $s->applies_to === 'all_fees' ? '+ one-time' : 'semester fees' }}</small>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-light border" wire:click="$set('scholarship', '')" title="Clear scholarship"><i class="ti ti-x"></i></button>
+                    </div>
+                    <div class="as-review-head"><span class="as-num">2</span>
+                        <div><div class="fw-bold">Review selection</div><small class="text-muted">{{ $summary && $summary['count'] ? $summary['count'] . ' ' . \Illuminate\Support\Str::plural('student', $summary['count']) . ' selected' : 'Tick eligible students on the left' }}</small></div>
+                        @if($selected)<button type="button" class="btn btn-sm btn-link text-muted ms-auto" wire:click="clearSelection">Clear</button>@endif
+                    </div>
+                    @if(!$summary || !$summary['count'])
+                        <div class="as-review-empty"><i class="ti ti-list-check"></i><div>Select one or more eligible students to see the combined fees, the scholarship amount and the payable after assigning.</div></div>
+                    @else
+                        <div class="as-totals">
+                            <div><span>Total fees</span><b>{{ $fmt($summary['fees']) }}</b></div>
+                            <div class="as-m-other"><span>Existing discounts</span><b>{{ $summary['existing'] > 0 ? '− ' . $fmt($summary['existing']) : '—' }}</b></div>
+                            <div class="as-m-this"><span>{{ $s->code }} now</span><b>− {{ $fmt($summary['this_now']) }}</b></div>
+                            <div class="as-m-this"><span>…later semesters</span><b>{{ $summary['this_later'] > 0 ? '− ' . $fmt($summary['this_later']) : '—' }}</b></div>
+                            <div><span>Payable now</span><b>{{ $fmt($summary['balance_now']) }}</b></div>
+                            <div><span>Already paid</span><b>{{ $summary['paid'] > 0 ? $fmt($summary['paid']) : '—' }}</b></div>
+                            <div class="as-m-pay as-total-pay"><span>Payable after assigning</span><b>{{ $fmt($summary['payable_now']) }}</b></div>
+                        </div>
+                        <div class="as-picked">
+                            @foreach($summary['students'] as $p)
+                                <div class="as-picked-row" wire:key="p-{{ $p['id'] }}">
+                                    <span class="sc-av" style="width: 30px; height: 30px; font-size: 11px;">{{ $p['initials'] }}</span>
+                                    <div class="min-w-0 flex-grow-1">
+                                        <div class="fw-semibold text-truncate small">{{ $p['name'] }}</div>
+                                        <div class="text-muted" style="font-size: 11.5px;">pays {{ $fmt($p['payable']) }}</div>
+                                    </div>
+                                    <div class="text-end">
+                                        <div class="as-this-amt">− {{ $fmt($p['this']) }}</div>
+                                        @if($p['later'] > 0)<div class="text-muted" style="font-size: 11px;">+ {{ $fmt($p['later']) }} later</div>@endif
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-icon btn-light" wire:click="toggle({{ $p['id'] }})" title="Remove from selection" aria-label="Remove {{ $p['name'] }}"><i class="ti ti-x"></i></button>
+                                </div>
+                            @endforeach
+                        </div>
+                        <div class="p-3 border-top">
+                            <input type="text" class="form-control form-control-sm mb-2" wire:model.defer="remarks" placeholder="Note (optional), e.g. Merit list 2026">
+                            <button type="button" class="btn as-assign-btn w-100" wire:click="confirmAssign"><i class="ti ti-award me-1"></i> Assign to {{ $summary['count'] }} {{ \Illuminate\Support\Str::plural('student', $summary['count']) }}</button>
+                        </div>
+                    @endif
+                @endif
+            </div>
+        </div>
+    </div>
 
     <!-- Complete fee structure -->
     <div class="modal fade" id="feesModal" tabindex="-1" aria-hidden="true" wire:ignore.self>
         <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
             <div class="modal-content border-0 shadow-lg as-fm">
                 @if($feeStudent && $feeStructure)
-                    @php $ft = $feeStructure['totals']; $fHas = in_array($feeStudent->id, $have); $fPicked = in_array((string) $feeStudent->id, $selected, true); @endphp
+                    @php $ft = $feeStructure['totals']; $fHas = $feeHas; $fPicked = in_array((string) $feeStudent->id, $selected, true); @endphp
                     <div class="as-fm-head">
                         <span class="sc-av as-fm-av">{{ $feeStudent->initials }}</span>
                         <div class="min-w-0 flex-grow-1">
@@ -342,16 +440,19 @@
                                 @if($feeStudent->current_period_label)<span>{{ $feeStudent->current_period_label }}</span>@endif
                             </div>
                         </div>
-                        <div class="as-fm-schol"><i class="ti ti-award"></i><div><small>Scholarship</small><b>{{ optional($s)->name }}</b><span>{{ optional($s)->value_label }}</span></div></div>
+                        @if($s)<div class="as-fm-schol"><i class="ti ti-award"></i><div><small>Scholarship</small><b>{{ $s->name }}</b><span>{{ $s->value_label }}</span></div></div>@endif
                         <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body p-4">
                         <div class="as-fm-cards">
                             <div class="as-fm-card"><span><i class="ti ti-receipt"></i> Total fees</span><b>{{ $fmt($ft['fees']) }}</b><small>all semesters</small></div>
                             <div class="as-fm-card is-other"><span><i class="ti ti-discount-2"></i> Existing discounts</span><b>{{ $ft['existing'] > 0 ? '− ' . $fmt($ft['existing']) : '—' }}</b><small>other scholarships</small></div>
-                            <div class="as-fm-card is-this"><span><i class="ti ti-award"></i> This scholarship</span><b>{{ $fHas ? 'Assigned' : '− ' . $fmt($ft['this_now']) }}</b><small>{{ $fHas ? 'already given' : ($ft['this_later'] > 0 ? '+ ' . $fmt($ft['this_later']) . ' on later semesters' : 'on the charged fees') }}</small></div>
+                            <div class="as-fm-card is-this"><span><i class="ti ti-award"></i> {{ $s ? $s->code : 'Scholarship' }}</span><b>{{ $s ? '− ' . $fmt($ft['this_now']) : '—' }}</b><small>{{ !$s ? 'choose one to preview' : ($fHas ? 'given — saved on the fees' : (!$feeEligible ? 'not eligible' : ($ft['this_later'] > 0 ? 'if assigned · + ' . $fmt($ft['this_later']) . ' later' : 'if assigned'))) }}</small></div>
                             <div class="as-fm-card is-paid"><span><i class="ti ti-circle-check"></i> Already paid</span><b>{{ $fmt($ft['paid']) }}</b><small>confirmed payments</small></div>
-                            <div class="as-fm-card is-pay"><span><i class="ti ti-wallet"></i> Final payable</span><b>{{ $fmt($ft['payable_now']) }}</b><small>{{ $ft['payable_later'] > 0 ? '+ ' . $fmt($ft['payable_later']) . ' upcoming' : 'nothing upcoming' }}</small></div>
+                            <div class="as-fm-card is-pay">
+                                <span><i class="ti ti-wallet"></i> Payable now</span><b>{{ $fmt($ft['balance_now']) }}</b>
+                                <small>@if($s && $feeEligible && $ft['this_now'] > 0)→ <b class="as-after-b">{{ $fmt($ft['payable_now']) }}</b> after assigning @else{{ $ft['payable_later'] > 0 ? '+ ' . $fmt($ft['payable_later']) . ' upcoming' : 'nothing upcoming' }}@endif</small>
+                            </div>
                         </div>
 
                         @foreach($feeStructure['groups'] as $g)
@@ -361,11 +462,11 @@
                                     <span class="fw-bold">{{ $g['label'] }}</span>
                                     @if($g['covered'])<span class="sc-tag sc-tag-has"><i class="ti ti-award"></i> covered by this scholarship</span>@endif
                                     @if($g['upcoming'])<span class="sc-tag sc-tag-no"><i class="ti ti-clock"></i> not charged yet</span>@endif
-                                    <span class="ms-auto as-fm-sem-total">Payable <b>{{ $fmt($g['subtotal']['payable']) }}</b></span>
+                                    <span class="ms-auto as-fm-sem-total">{{ ($fHas || !$s || !$feeEligible) ? 'Payable' : 'After assigning' }} <b>{{ $fmt($g['subtotal']['payable']) }}</b></span>
                                 </div>
                                 <div class="table-responsive">
                                     <table class="as-fees">
-                                        <thead><tr><th>Fee</th><th>Amount</th><th>Existing disc.</th><th>This scholarship</th><th>Paid</th><th>Payable</th><th>Status</th></tr></thead>
+                                        <thead><tr><th>Fee</th><th>Amount</th><th>Existing disc.</th><th>{{ $s ? $s->code : 'Scholarship' }}</th><th>Paid</th><th>{{ ($fHas || !$s || !$feeEligible) ? 'Payable' : 'After assigning' }}</th><th>Status</th></tr></thead>
                                         <tbody>
                                             @foreach($g['lines'] as $line)
                                                 <tr class="{{ $line['upcoming'] ? 'is-upcoming' : '' }} {{ $line['waived'] ? 'is-waived' : '' }}">
@@ -403,18 +504,20 @@
                             <div><span>All fees</span><b>{{ $fmt($ft['fees']) }}</b></div>
                             <div><span>Discounts (existing + this)</span><b>− {{ $fmt($ft['existing'] + $ft['this_now'] + $ft['this_later']) }}</b></div>
                             <div><span>Paid</span><b>{{ $fmt($ft['paid']) }}</b></div>
-                            <div class="is-pay"><span>Still to pay (incl. upcoming)</span><b>{{ $fmt($ft['payable_now'] + $ft['payable_later']) }}</b></div>
+                            <div class="is-pay"><span>{{ ($fHas || !$s || !$feeEligible) ? 'Still to pay (incl. upcoming)' : 'Still to pay after assigning (incl. upcoming)' }}</span><b>{{ $fmt($ft['payable_now'] + $ft['payable_later']) }}</b></div>
                         </div>
                         <div class="as-detail-note"><i class="ti ti-info-circle"></i> Fully paid fees are not discounted (no refunds). Fees not charged yet get the scholarship automatically when they are charged ("projected").</div>
                     </div>
                     <div class="modal-footer bg-light as-fm-foot">
                         <a href="{{ route('admin.students.fees', $feeStudent->id) }}" class="btn btn-light border me-auto"><i class="ti ti-external-link me-1"></i> Student fees page</a>
                         <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
-                        @if(!$fHas && optional($s)->status)
+                        @if($s && $feeEligible && $s->status)
                             <button type="button" class="btn {{ $fPicked ? 'btn-outline-secondary' : 'btn-outline-primary' }}" wire:click="toggle({{ $feeStudent->id }})">
                                 <i class="ti ti-{{ $fPicked ? 'square-minus' : 'square-plus' }} me-1"></i> {{ $fPicked ? 'Remove from selection' : 'Add to selection' }}
                             </button>
                             <button type="button" class="btn btn-primary" data-bs-dismiss="modal" wire:click="confirmAssign({{ $feeStudent->id }})"><i class="ti ti-award me-1"></i> Assign to {{ $feeStudent->first_name }}</button>
+                        @elseif($s && $fHas)
+                            <button type="button" class="btn btn-outline-danger bg-white" data-bs-dismiss="modal" wire:click="openRevokeFor({{ $feeStudent->id }})"><i class="ti ti-award-off me-1"></i> Revoke from {{ $feeStudent->first_name }}</button>
                         @endif
                     </div>
                 @endif
@@ -436,7 +539,7 @@
                     <div><span>Existing discounts</span><b>{{ ($confirm['existing'] ?? 0) > 0 ? '− ' . $fmt($confirm['existing']) : '—' }}</b></div>
                     <div class="is-this"><span>This scholarship now</span><b>− {{ $fmt($confirm['total']) }}</b></div>
                     @if(($confirm['later'] ?? 0) > 0)<div class="is-this"><span>Later semesters (when charged)</span><b>− {{ $fmt($confirm['later']) }}</b></div>@endif
-                    <div class="is-pay"><span>Final payable now</span><b>{{ $fmt($confirm['payable'] ?? 0) }}</b></div>
+                    <div class="is-pay"><span>Payable after assigning</span><b>{{ $fmt($confirm['payable'] ?? 0) }}</b></div>
                 </div>
                 <p class="small text-muted text-center mt-3 mb-3">Fully paid fees are not refunded. Every assignment is recorded in the audit trail and the student is notified.</p>
             @endif
@@ -456,6 +559,15 @@
         <div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-body text-center py-4">
             <i class="ti ti-award-off text-danger fs-1 mb-3"></i>
             <h5>Revoke this scholarship?</h5>
+            @if($revokeInfo)
+                <div class="as-revoke-info">
+                    <div class="fw-semibold">{{ $revokeInfo['name'] }} · {{ $revokeInfo['scholarship'] }}</div>
+                    <div class="d-flex justify-content-center gap-3 flex-wrap mt-1">
+                        <span>Removed from unpaid fees: <b class="text-danger">{{ money_inr($revokeInfo['removed'], false) }}</b></span>
+                        @if($revokeInfo['kept'] > 0)<span>Kept on paid fees: <b>{{ money_inr($revokeInfo['kept'], false) }}</b></span>@endif
+                    </div>
+                </div>
+            @endif
             <p class="small text-muted">The discount is removed from fees that have no payment yet. Paid fees keep their discount.</p>
             <textarea rows="2" class="form-control text-start @error('revokeReason') is-invalid @enderror" wire:model.defer="revokeReason" placeholder="Reason (required)"></textarea>
             @error('revokeReason')<div class="invalid-feedback text-start">{{ $message }}</div>@enderror
@@ -468,6 +580,10 @@
 
     @include('livewire.admin.scholarships.partials.styles')
     <style>
+        .sc-ui .as-revoke-info { margin: 8px 0 10px; padding: 10px 12px; border-radius: 12px; background: #FEF2F2; border: 1px solid #FECACA; font-size: 13px; color: #374151; }
+        .sc-ui .as-act .btn-outline-danger { background: #fff; }
+        .sc-ui .as-m small.as-after { color: #4338CA; font-weight: 600; }
+        .sc-ui .as-after-b { font-size: 12px !important; color: #FDE68A !important; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
         .sc-ui .as-fm-foot { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 20px; }
         .sc-ui .as-fm-foot > * { margin: 0 !important; }
         .sc-ui .as-fm-foot > .me-auto { margin-right: auto !important; }
@@ -609,6 +725,34 @@
             .sc-ui .as-review { position: static; }
         }
     </style>
+    <style>
+        .sc-ui .as-filters { padding: 14px 18px; }
+        .sc-ui .as-filters-grid { display: grid; grid-template-columns: minmax(220px, 2fr) repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 12px; align-items: end; }
+        .sc-ui .as-f { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .sc-ui .as-f .sc-search { flex: none; max-width: none; width: 100%; }
+        .sc-ui .as-m small { white-space: normal !important; line-height: 1.25; }
+        .sc-ui .as-m small.as-after { display: block; margin-top: 2px; }
+        .sc-ui .as-f-label { font-size: 11.5px; font-weight: 700; color: #6B7280; text-transform: uppercase; letter-spacing: .04em; margin: 0; }
+        .sc-ui .as-f-schol .as-f-label { color: #4338CA; }
+        .sc-ui .as-f-schol .form-select { border-color: #C7D2FE; background-color: #F5F7FF; font-weight: 600; }
+        .sc-ui .as-f-schol .form-select.is-chosen { border: 2px solid #4F46E5; }
+        .sc-ui .as-filters-foot { margin-top: 6px; }
+        .sc-ui .as-hint { padding: 10px 18px; font-size: 13px; color: #3730A3; background: #F5F7FF; border-bottom: 1px solid #E0E7FF; }
+        .sc-ui .as-pick-off { width: 16px; height: 16px; border-radius: 4px; border: 1.5px dashed #D1D5DB; display: inline-block; }
+        .sc-ui .as-has-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+        .sc-ui .as-has-chips .sc-code { font-size: 10.5px; }
+        .sc-ui .as-metrics-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .sc-ui .as-rv { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 0 18px 12px 62px; font-size: 12px; color: #4B5563; }
+        .sc-ui .as-quick { display: flex; flex-direction: column; padding: 6px; max-height: 520px; overflow-y: auto; }
+        .sc-ui .as-quick-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; background: #fff; border-radius: 12px; text-align: left; transition: background .15s; }
+        .sc-ui .as-quick-item:hover { background: #F5F7FF; }
+        .sc-ui .as-quick-item .sc-value { width: 54px; height: 46px; border-radius: 10px; flex-shrink: 0; }
+        .sc-ui .as-quick-item .sc-value b { font-size: 15px; }
+        .sc-ui .as-chosen { display: flex; gap: 12px; align-items: center; padding: 14px 18px; background: linear-gradient(135deg, #EEF2FF, #F5F3FF); border-bottom: 1px solid #E0E7FF; }
+        .sc-ui .as-chosen .sc-value { width: 64px; height: 58px; flex-shrink: 0; }
+        .sc-ui .as-totals .as-total-pay { grid-column: 1 / -1; }
+        @media (max-width: 767px) { .sc-ui .as-filters-grid { grid-template-columns: 1fr 1fr; } .sc-ui .as-f-search, .sc-ui .as-f-schol { grid-column: 1 / -1; } .sc-ui .as-rv { padding-left: 18px; } }
+    </style>
 
     <script>
         document.addEventListener('livewire:load', function () {
@@ -619,3 +763,4 @@
         });
     </script>
 </div>
+

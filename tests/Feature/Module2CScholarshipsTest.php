@@ -275,68 +275,145 @@ class Module2CScholarshipsTest extends TestCase
         $this->get(route('admin.scholarships.assign'))->assertForbidden();
     }
 
-    public function test_assign_page_preview_select_all_assign_and_revoke()
+    public function test_assign_page_lists_students_first_then_scholarship_preview_select_and_assign()
     {
         $this->actingAs($this->admin);
         $a = $this->admitted('Anu');
         $b = $this->admitted('Binu');
         $s = $this->scholarship();
 
-        $page = Livewire::test(AssignScholarshipComponent::class)->assertSee('Choose a scholarship')->assertSee($s->name)->assertSee('Select students') // card with eligible students
-            ->call('chooseScholarship', $s->id)->assertSet('scholarship', $s->id)->assertSee('Anu')->assertSee('Binu')
-            ->assertSee('Total fees')->assertSee('52,500')   // final payable now: 15,000 + 30,000 + 7,500
-            ->assertSee('+ ₹10,500 later', false)             // Semester 2 (not charged yet): 25 % of 42,000
+        // default: admitted students with their fees, no scholarship chosen yet
+        $page = Livewire::test(AssignScholarshipComponent::class)
+            ->assertSee('Anu')->assertSee('Binu')->assertSee('Choose a scholarship')->assertSee($s->name)
+            ->assertSee('Total fees')->assertSee('Payable now')->assertSee('65,000')   // 15,000 + 40,000 + 10,000 owed today
+            ->call('confirmAssign')->assertDispatchedBrowserEvent('show-toast', fn ($n, $d) => str_contains($d['message'], 'Choose the scholarship'));
+
+        // choosing the scholarship: filters follow it, preview appears
+        $page->set('scholarship', $s->id)->assertSet('course', (string) $this->course->id)->assertSet('show', 'eligible')
+            ->assertSee('52,500 after assigning')                // 15,000 + 30,000 + 7,500
+            ->assertSee('+ ₹10,500 later', false)                 // Semester 2 (not charged yet): 25 % of 42,000
             ->call('showFees', $a->id)->assertSet('feesFor', $a->id)->assertDispatchedBrowserEvent('open-fees-modal')
             ->assertSee('Complete fee structure')->assertSee('Semester 1 total')->assertSee('37,500')->assertSee('not charged yet')->assertSee('projected');
 
         $page->call('confirmAssign')->assertDispatchedBrowserEvent('show-toast'); // nothing selected
         $page->call('selectAllEligible')->assertSet('selected', [(string) $a->id, (string) $b->id])
-            ->assertSee('Review selection')->assertSee('Final payable now')->assertSee('1,05,000')  // 2 × 52,500 (Indian grouping)
-            ->call('confirmAssign', $a->id)->assertSet('confirm.count', 1)->assertSet('assignOnly', (string) $a->id) // single row
+            ->assertSee('Review selection')->assertSee('Payable after assigning')->assertSee('1,05,000')  // 2 × 52,500
+            ->call('confirmAssign', $a->id)->assertSet('confirm.count', 1)->assertSet('assignOnly', (string) $a->id)   // one row
             ->call('confirmAssign')->assertSet('confirm.count', 2)->assertSet('confirm.total', 25000.0)->assertSet('confirm.later', 21000.0)
             ->set('remarks', 'Merit list 2026')->call('assign');
         $this->assertSame(2, StudentScholarship::where('scholarship_id', $s->id)->active()->count());
         $this->assertTrue(AuditTrail::where('action', 'scholarship_assigned')->exists());
 
+        // without a scholarship again: "With a scholarship" shows their codes
+        Livewire::test(AssignScholarshipComponent::class)->call('setShow', 'with')->assertSee('Anu')->assertSee($s->code)
+            ->call('setShow', 'without')->assertDontSee('Anu');
+
         $assignment = StudentScholarship::where('student_id', $a->id)->firstOrFail();
-        Livewire::test(AssignScholarshipComponent::class)->set('scholarship', $s->id)->assertSee('Already has this scholarship')
-            ->call('setTab', 'assigned')->assertSee('Anu')->assertSee('12,500')
+        Livewire::test(AssignScholarshipComponent::class)->set('scholarship', $s->id)->call('setShow', 'assigned')->assertSee('Anu')->assertSee('given')
             ->call('openRevoke', $assignment->id)->call('revoke')->assertHasErrors('revokeReason')
             ->set('revokeReason', 'Did not meet attendance')->call('revoke')->assertHasNoErrors();
         $this->assertSame('revoked', $assignment->fresh()->status);
         $this->assertEquals(0.0, (float) $this->due($a, 'Tuition S1')->discount);
     }
 
-    public function test_assign_page_search_and_filters()
+    public function test_assign_page_filters_institute_course_batch_semester_scholarship()
     {
-        $this->actingAs($this->admin);
+        $this->actingAs($this->super);
         $a = $this->admitted('Filtera');
         $b = $this->admitted('Filterb');
         app(PeriodService::class)->placeInPeriod($b, 2);
         app(FeeService::class)->generateDues($b->fresh());
-        $merit = $this->scholarship(['name' => 'Merit Gold', 'code' => 'MGOLD']);
-        $this->scholarship(['name' => 'Sports Silver', 'code' => 'SSILV', 'type' => 'fixed', 'value' => 3000], [1]);
-        $none = Course::create(['name' => 'Empty course', 'code' => 'EC-' . substr(uniqid(), -5), 'duration_months' => 12, 'total_semesters' => 2, 'status' => true]);
-        InstituteCourse::create(['institute_id' => $this->inst->id, 'course_id' => $none->id, 'status' => true]);
-        $this->scholarship(['name' => 'Nobody Eligible', 'code' => 'NOBODY', 'course_id' => $none->id], [1]);
+        $c = $this->admitted('Otherinst', $this->other);
+        $dec = Batch::create(['institute_id' => $this->inst->id, 'course_id' => $this->course->id, 'name' => 'Dec', 'code' => 'SF-' . substr(uniqid(), -6), 'start_date' => '2025-12-01', 'status' => true]);
+        $d = $this->admitted('Decbatch', null, $dec);
+        $merit = $this->scholarship(['name' => 'Merit Gold', 'code' => 'MGOLD', 'batch_id' => $this->batch->id]);
+        $otherCourse = Course::create(['name' => 'Second course', 'code' => 'SC2-' . substr(uniqid(), -5), 'duration_months' => 12, 'total_semesters' => 2, 'status' => true]);
+        InstituteCourse::create(['institute_id' => $this->inst->id, 'course_id' => $otherCourse->id, 'status' => true]);
 
-        // scholarship cards
         Livewire::test(AssignScholarshipComponent::class)
-            ->assertSee('Merit Gold')->assertSee('Sports Silver')->assertSee('Nobody Eligible')
-            ->set('cardSearch', 'gold')->assertSee('Merit Gold')->assertDontSee('Sports Silver')
-            ->set('cardSearch', '')->set('cardType', 'fixed')->assertSee('Sports Silver')->assertDontSee('Merit Gold')
-            ->set('cardType', '')->set('cardOnlyEligible', true)->assertDontSee('Nobody Eligible')
-            ->set('cardCourse', $none->id)->assertSee('No scholarship matches these filters')
-            ->call('clearCardFilters')->assertSee('Nobody Eligible');
+            ->assertSee('Filtera')->assertSee('Filterb')->assertSee('Otherinst')->assertSee('Decbatch')
+            ->set('institute', $this->other->id)->assertSee('Otherinst')->assertDontSee('Filtera')
+            ->set('institute', $this->inst->id)->set('course', $this->course->id)->assertSee('Filtera')->assertDontSee('Otherinst')
+            ->call('pickBatch', $dec->id)->assertSet('batch', (string) $dec->id)->assertSee('Decbatch')->assertDontSee('Filtera')
+            ->call('pickBatch', null)->call('pickSemester', 2)->assertSet('semester', '2')->assertSee('Filterb')->assertDontSee('Filtera')
+            ->call('pickSemester', 0)->assertSet('semester', '')->set('search', 'filtera')->assertSee('Filtera')->assertDontSee('Filterb')
+            ->call('clearFilters')->assertSet('search', '')->assertSee('Otherinst')
+            // scholarship: only its institute / course / batch are eligible
+            ->set('scholarship', $merit->id)->assertSet('batch', (string) $this->batch->id)
+            ->assertSee('Filtera')->assertSee('Filterb')->assertDontSee('Decbatch')->assertDontSee('Otherinst')
+            // switching to another course drops the scholarship (it belongs to one course)
+            ->set('course', $otherCourse->id)->assertSet('scholarship', '')->assertSet('show', 'all')
+            // the dropdowns' click handlers
+            ->call('pickScholarship', $merit->id)->assertSet('scholarship', (string) $merit->id)->assertSet('show', 'eligible')
+            ->call('pickCourse', $otherCourse->id)->assertSet('scholarship', '')
+            ->call('pickInstitute', $this->other->id)->assertSet('course', '')->assertSee('Otherinst')->assertDontSee('Filtera')
+            ->call('pickInstitute', null)->assertSet('institute', '');
+    }
 
-        // eligible students: search, current semester, fee status
-        Livewire::test(AssignScholarshipComponent::class)->call('chooseScholarship', $merit->id)
-            ->assertSee('Filtera')->assertSee('Filterb')
-            ->set('search', 'filtera')->assertSee('Filtera')->assertDontSee('Filterb')
-            ->set('search', '')->set('semester', 2)->assertSee('Filterb')->assertDontSee('Filtera')
-            ->call('clearStudentFilters')->assertSet('semester', '')
-            ->set('feeState', 'settled')->assertDontSee('Filtera')->assertSee('No admitted students')
-            ->set('feeState', 'open')->assertSee('Filtera')->assertSee('Filterb');
+    public function test_assigned_student_discount_is_counted_once_on_the_assign_page()
+    {
+        $this->actingAs($this->admin);
+        $a = $this->admitted('Oncea');
+        $s = $this->scholarship(['value' => 10], [1]);                  // 10 % of Semester 1 (40,000 + 10,000)
+        app(ScholarshipService::class)->assign($s, [$a->id]);
+        $this->assertEquals(36000.0, $this->due($a, 'Tuition S1')->balance);  // saved: 40,000 − 4,000
+
+        $t = app(ScholarshipService::class)->structure($s, $a->fresh());
+        $sem1 = collect($t['groups'])->firstWhere('label', 'Semester 1');
+        $tuition = collect($sem1['lines'])->firstWhere('fee', 'Tuition S1');
+        $this->assertEquals(0.0, $tuition['existing']);   // its own discount is not an "existing" one
+        $this->assertEquals(4000.0, $tuition['this']);
+        $this->assertEquals(36000.0, $tuition['payable']); // not 32,000
+        $this->assertEquals(15000 + 36000 + 9000, $t['totals']['payable_now']);
+
+        // with another scholarship on top, only that one is "existing"
+        $other = $this->scholarship(['name' => 'Sports', 'type' => 'fixed', 'value' => 1000], [1]);
+        app(ScholarshipService::class)->assign($other, [$a->id]);
+        $t = app(ScholarshipService::class)->structure($s, $a->fresh());
+        $tuition = collect(collect($t['groups'])->firstWhere('label', 'Semester 1')['lines'])->firstWhere('fee', 'Tuition S1');
+        $this->assertEquals(800.0, $tuition['existing']);  // Sports: 1,000 split 80/20
+        $this->assertEquals(4000.0, $tuition['this']);
+        $this->assertEquals(35200.0, $tuition['payable']);
+        $this->assertEquals($this->due($a, 'Tuition S1')->balance, $tuition['payable']); // same as the saved balance
+        $this->assertEquals($t['totals']['payable_now'], $t['totals']['balance_now']);       // assigned: preview = today
+
+        // after a revoke the student owes the full fee again; the page shows that as "Payable now"
+        app(ScholarshipService::class)->revoke(StudentScholarship::where('student_id', $a->id)->where('scholarship_id', $s->id)->firstOrFail(), 'Committee decision');
+        $this->assertEquals(40000.0 - 800, $this->due($a, 'Tuition S1')->balance);           // only the Sports discount is left
+        $t = app(ScholarshipService::class)->structure($s, $a->fresh());
+        $this->assertEquals(15000 + 39200 + 9800, $t['totals']['balance_now']);               // owed today
+        $this->assertEquals(15000 + 35200 + 8800, $t['totals']['payable_now']);               // if assigned again
+        Livewire::test(AssignScholarshipComponent::class)->set('scholarship', $s->id)
+            ->assertSee('Payable now')->assertSee('64,000')->assertSee('59,000 after assigning');
+    }
+
+    public function test_revoke_from_the_student_list_and_fee_popup()
+    {
+        $this->actingAs($this->admin);
+        $a = $this->admitted('Revokea');
+        $s = $this->scholarship();
+        app(ScholarshipService::class)->assign($s, [$a->id]);
+
+        Livewire::test(AssignScholarshipComponent::class)->set('scholarship', $s->id)->call('setShow', 'assigned')
+            ->assertSee('Revoke')
+            ->call('showFees', $a->id)->assertSee('Revoke from Revokea')
+            ->call('openRevokeFor', $a->id)->assertDispatchedBrowserEvent('open-revoke-modal')
+            ->assertSet('revokeInfo.removed', 12500.0)->assertSee('Removed from unpaid fees')
+            ->set('revokeReason', 'Attendance below 75 %')->call('revoke')->assertHasNoErrors();
+        $this->assertSame('revoked', StudentScholarship::where('student_id', $a->id)->value('status'));
+        $this->assertEquals(0.0, (float) $this->due($a, 'Tuition S1')->discount);
+
+        // Assigned / Revoked tabs; assign again from Revoked
+        Livewire::test(AssignScholarshipComponent::class)->set('scholarship', $s->id)
+            ->call('setShow', 'assigned')->assertSee('Nobody has this scholarship yet')
+            ->call('setShow', 'revoked')->assertSet('show', 'revoked')->assertSee('Revokea')->assertSee('Reason: Attendance below 75 %')->assertSee('Assign again')
+            ->call('confirmAssign', $a->id)->assertSet('confirm.count', 1)->call('assign');
+        $this->assertSame('active', StudentScholarship::where('student_id', $a->id)->value('status'));
+        $this->assertEquals(10000.0, (float) $this->due($a, 'Tuition S1')->discount);
+        Livewire::test(AssignScholarshipComponent::class)->set('scholarship', $s->id)->call('setShow', 'revoked')->assertSee('No revoked assignments');
+
+        // links from the Scholarships page
+        $this->get(route('admin.scholarships.assign', ['scholarship' => $s->id, 'tab' => 'assigned']))->assertOk()->assertSee('Revokea');
     }
 
     public function test_student_fees_page_and_portal_show_the_discount()
