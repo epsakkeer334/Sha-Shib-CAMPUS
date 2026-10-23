@@ -411,7 +411,7 @@ class Module1CoreTest extends TestCase
         // group switch: grants the whole group, a second click revokes it
         $page->call('toggleGroup', 'Students')
             ->assertSet('matrix.hot.students__view', true)->assertSet('matrix.hot.students__delete', true)
-            ->assertSee('4 unsaved changes');
+            ->assertSee('6 unsaved changes'); // Students: view, create, update, delete, manage_er, bulk_update
         $page->call('toggleGroup', 'Students')->assertSet('matrix.hot.students__view', false)->assertSee('All changes saved');
 
         // search narrows the list

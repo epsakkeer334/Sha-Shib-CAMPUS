@@ -88,6 +88,8 @@ Route::prefix('admin')->middleware(['auth', 'staff', 'active.user'])->group(func
     Route::prefix('students')->name('admin.students')->group(function () {
         Route::get('/', StudentsComponent::class)->middleware('permission:students.view');
         Route::get('/create', StudentOnboardingComponent::class)->name('.create')->middleware('permission:students.create');
+        // 2.9 bulk update of existing students (CSV template → preview → apply)
+        Route::get('/bulk-update', \App\Http\Livewire\Admin\Students\BulkUpdateComponent::class)->name('.bulk')->middleware('permission:students.bulk_update');
         Route::get('/{student}/onboarding', StudentOnboardingComponent::class)->name('.edit')->middleware('permission:students.view');
         Route::get('/documents/{document}', [StudentDocumentController::class, 'show'])->name('.documents.show')->middleware('permission:students.view');
 

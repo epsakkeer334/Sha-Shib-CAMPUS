@@ -499,6 +499,7 @@ class OnboardingService
                 'tm_signature_status' => 'pending',
             ]);
 
+            \App\Models\Admin\StudentErNumber::create(['student_id' => $student->id, 'institute_id' => $student->institute_id, 'er_number' => $erNumber, 'action' => 'issued', 'changed_by' => Auth::id()]);
             $this->audit('issue_er', 'enrollment', $student, ['new' => ['er_number' => $erNumber], 'description' => "ER number {$erNumber} issued to {$student->full_name}"]);
         });
 
@@ -513,6 +514,69 @@ class OnboardingService
             . 'Your ID card will be ready after it is signed by the Training Manager.' . "\n\n" . optional($student->institute)->name);
 
         return true;
+    }
+
+    /**
+     * Existing student (step 2.8): already studying before CAMP. Admitted directly with the given ER number —
+     * both gates recorded as approved by the admin, ER form / ID card in the state chosen, the current
+     * semester set (earlier ones completed). Fees are charged only when asked (current semester lines).
+     *
+     * $options: semester (int|null), card_issued (bool), form_archived (bool), charge_fees (bool), source (existing|import)
+     *
+     * @return array warnings (e.g. no academic calendar for the semester)
+     */
+    public function admitExisting(Student $student, string $erNumber, array $options = []): array
+    {
+        $warnings = [];
+        $remark = 'Existing student — admitted before CAMP';
+
+        DB::transaction(function () use ($student, $erNumber, $options, $remark) {
+            foreach ([EnrollmentApproval::DOCUMENTS, EnrollmentApproval::FEES] as $gate) {
+                EnrollmentApproval::updateOrCreate(
+                    ['student_id' => $student->id, 'gate' => $gate],
+                    ['institute_id' => $student->institute_id, 'status' => 'approved', 'approved_by' => Auth::id(), 'approved_at' => now(), 'remarks' => $remark]
+                );
+            }
+
+            $cardIssued = !empty($options['card_issued']);
+            $student->update([
+                'er_number' => $erNumber,
+                'status' => $cardIssued ? 'active' : 'er_issued',
+                'admission_source' => $options['source'] ?? 'existing',
+                'submitted_at' => $student->submitted_at ?? now(),
+            ]);
+
+            $form = ErRequest::firstOrCreate(['student_id' => $student->id], [
+                'institute_id' => $student->institute_id, 'generated_at' => now(), 'status' => 'generated', 'tm_signature_status' => 'pending',
+            ]);
+            if (!empty($options['form_archived'])) {
+                $form->update(['status' => 'archived', 'printed_at' => $form->printed_at ?? now(), 'tm_signature_status' => 'physically_signed',
+                    'tm_signed_at' => $form->tm_signed_at ?? now(), 'archived_at' => now(), 'archived_by' => Auth::id()]);
+            }
+
+            $card = IdCard::firstOrCreate(['student_id' => $student->id], [
+                'institute_id' => $student->institute_id, 'status' => 'pending', 'tm_signature_status' => 'pending',
+            ]);
+            if ($cardIssued) {
+                $card->update(['print_count' => max(1, (int) $card->print_count), 'tm_signature_status' => 'physically_signed',
+                    'status' => 'issued', 'issue_date' => $card->issue_date ?? now()->toDateString()]);
+            }
+
+            $this->audit('admit_existing', 'enrollment', $student, [
+                'new' => ['er_number' => $erNumber, 'status' => $student->status, 'semester' => $options['semester'] ?? null],
+                'description' => "{$student->full_name} admitted as an existing student with ER number {$erNumber}",
+            ]);
+        });
+
+        $semester = (int) ($options['semester'] ?? 0);
+        if ($semester > 0 && !app(PeriodService::class)->placeInPeriod($student->fresh(), $semester, 'Before CAMP')) {
+            $warnings[] = "No academic calendar for Semester {$semester} of this batch / intake yet — set it under Academic Periods, then set the semester again.";
+        }
+        if (!empty($options['charge_fees'])) {
+            $this->fees->chargeCurrentPeriodFees($student->fresh());
+        }
+
+        return $warnings;
     }
 
     // ------------------------------------------------------------------ 2.4 ER request form

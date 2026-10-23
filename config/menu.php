@@ -102,6 +102,7 @@ return [
                     ['label' => 'All Students', 'icon' => 'ti ti-list', 'route' => 'admin.students', 'permission' => 'students.view',
                         'active' => ['admin.students', 'admin.students.edit', 'admin.students.fees', 'admin.students.enrollment']],
                     ['label' => 'Add Student', 'icon' => 'ti ti-user-plus', 'route' => 'admin.students.create', 'permission' => 'students.create'],
+                    ['label' => 'Bulk Update', 'icon' => 'ti ti-table-import', 'route' => 'admin.students.bulk', 'permission' => 'students.bulk_update'],
                 ],
             ],
             [

@@ -39,6 +39,9 @@
             @can('onboarding.verify_documents')
                 <a href="{{ route('admin.onboarding.documents') }}" class="btn btn-light border sl-hero-btn"><i class="ti ti-file-check me-1"></i> Document queue</a>
             @endcan
+            @if($canBulk)
+                <a href="{{ route('admin.students.bulk') }}" class="btn btn-light border sl-hero-btn"><i class="ti ti-table-import me-1"></i> Bulk update</a>
+            @endif
             @can('students.create')
                 <a href="{{ route('admin.students.create') }}" class="sl-hero-cta"><i class="ti ti-user-plus"></i> Add Student</a>
             @endcan
@@ -140,6 +143,67 @@
             @endif
         </div>
 
+        {{-- Inline grid toggle (step 2.9) --}}
+        @if($canBulk && $students->count())
+            <div class="grid-bar {{ $grid ? 'is-on' : '' }}">
+                @if($grid)
+                    <span><i class="ti ti-table-options"></i> <b>Editing {{ count($gridRows) }} students</b> — change cells, then save. Blank ER = none yet; typing one admits the student as existing.</span>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-light border" wire:click="cancelGrid">Cancel</button>
+                        <button type="button" class="btn btn-sm btn-success" wire:click="saveGrid" wire:loading.attr="disabled"><i class="ti ti-device-floppy me-1"></i> Save changes</button>
+                    </div>
+                @else
+                    <span class="text-muted"><i class="ti ti-table-options"></i> Quick changes to batch, semester, status, ER number or contacts?</span>
+                    <button type="button" class="btn btn-sm btn-outline-primary" wire:click="enterGrid"><i class="ti ti-edit me-1"></i> Edit this page in a grid</button>
+                @endif
+            </div>
+        @endif
+
+        @if($grid)
+            <div class="table-responsive">
+                <table class="table align-middle mb-0 grid-table">
+                    <thead>
+                        <tr><th>Student</th><th>ER number</th><th>Batch</th><th style="width: 90px;">Semester</th><th>Status</th><th>Phone</th><th>Email</th><th>Emergency</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach($students as $student)
+                            @continue(!isset($gridRows[$student->id]))
+                            @php $err = $gridErrors[$student->id] ?? []; $orig = $gridOriginal[$student->id] ?? []; @endphp
+                            <tr wire:key="grid-{{ $student->id }}" class="{{ $err ? 'grid-row-bad' : '' }}">
+                                <td>
+                                    <div class="fw-semibold text-truncate" style="max-width: 180px;">{{ $student->full_name }}</div>
+                                    <small class="text-muted">#{{ $student->id }} · {{ optional($student->course)->code }}</small>
+                                    @isset($err['_row'])<div class="small text-danger">{{ $err['_row'] }}</div>@endisset
+                                </td>
+                                @foreach(['er_number' => 'text', 'batch_code' => 'batch', 'current_semester' => 'number', 'status' => 'status', 'phone' => 'text', 'email' => 'email', 'emergency_contact' => 'text'] as $col => $type)
+                                    @php $dirty = trim((string) ($gridRows[$student->id][$col] ?? '')) !== trim((string) ($orig[$col] ?? '')); @endphp
+                                    <td>
+                                        @if($type === 'batch')
+                                            <select class="form-select form-select-sm {{ $dirty ? 'is-dirty' : '' }} {{ isset($err[$col]) ? 'is-invalid' : '' }}" wire:model.defer="gridRows.{{ $student->id }}.{{ $col }}">
+                                                <option value="">—</option>
+                                                @foreach(($gridBatches[$student->course_id] ?? collect())->where('institute_id', $student->institute_id) as $b)<option value="{{ $b->code }}">{{ $b->code }}</option>@endforeach
+                                            </select>
+                                        @elseif($type === 'status')
+                                            <select class="form-select form-select-sm {{ $dirty ? 'is-dirty' : '' }} {{ isset($err[$col]) ? 'is-invalid' : '' }}" wire:model.defer="gridRows.{{ $student->id }}.{{ $col }}">
+                                                @foreach(array_unique(array_merge([$student->status], ['er_issued', 'active'], $isSuperAdmin ? ['alumni'] : [])) as $st)
+                                                    <option value="{{ $st }}">{{ config("camp.student_statuses.{$st}.0", $st) }}</option>
+                                                @endforeach
+                                            </select>
+                                        @else
+                                            <input type="{{ $type === 'number' ? 'number' : ($type === 'email' ? 'email' : 'text') }}"
+                                                   class="form-control form-control-sm {{ $col === 'er_number' ? 'font-monospace text-uppercase' : '' }} {{ $dirty ? 'is-dirty' : '' }} {{ isset($err[$col]) ? 'is-invalid' : '' }}"
+                                                   wire:model.defer="gridRows.{{ $student->id }}.{{ $col }}" @if($col === 'er_number' && !$canEr) readonly title="No permission to change ER numbers" @endif
+                                                   @if($col === 'current_semester') min="1" max="{{ optional($student->course)->total_periods }}" @endif>
+                                        @endif
+                                        @isset($err[$col])<div class="invalid-feedback d-block">{{ $err[$col] }}</div>@endisset
+                                    </td>
+                                @endforeach
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @else
         {{-- Table --}}
         <div class="table-responsive position-relative">
             <div wire:loading.delay.flex class="table-loading"><span class="spinner-border spinner-border-sm text-primary"></span></div>
@@ -196,6 +260,9 @@
                                         <a href="{{ route('admin.students.fees', $student->id) }}" class="btn btn-sm btn-outline-success" data-bs-toggle="tooltip" title="Fees & payments"><i class="ti ti-cash"></i></a>
                                     @endif
                                     <a href="{{ route('admin.students.enrollment', $student->id) }}" class="btn btn-sm btn-outline-info" data-bs-toggle="tooltip" title="Gates, ER & ID card"><i class="ti ti-id"></i></a>
+                                    @if($canEr && \App\Services\ErNumberService::canAssign($student))
+                                        <a href="{{ route('admin.students.enrollment', ['student' => $student->id, 'assign' => 1]) }}" class="btn btn-sm btn-outline-primary" data-bs-toggle="tooltip" title="Assign ER number (existing student)"><i class="ti ti-id-badge-2"></i></a>
+                                    @endif
                                     @if($canDelete)
                                         <button type="button" class="btn btn-sm btn-outline-danger" wire:click="confirmDelete({{ $student->id }})" data-bs-toggle="tooltip"
                                                 title="{{ $student->status === 'draft' ? 'Delete' : 'Delete (only draft students can be deleted)' }}"><i class="ti ti-trash"></i></button>
@@ -215,6 +282,7 @@
                 </tbody>
             </table>
         </div>
+        @endif
 
         {{-- Footer --}}
         <div class="card-footer bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
@@ -247,6 +315,13 @@
     </div>
 
     <style>
+        .grid-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid #F1F2F4; font-size: 13px; background: #FAFBFC; }
+        .grid-bar.is-on { background: #FFF7F2; border-bottom-color: #FDBA8C; }
+        .grid-table th { font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: #6B7280; background: #F9FAFB; white-space: nowrap; }
+        .grid-table td { padding: 6px 8px; min-width: 120px; vertical-align: top; }
+        .grid-table td:first-child { min-width: 170px; }
+        .grid-table .is-dirty { border-color: #F59E0B; background: #FFFBEB; }
+        .grid-row-bad td { background: #FFFBFB; }
         .students-list .filter-label { font-size: 12px; font-weight: 500; color: #6B7280; margin-bottom: 4px; display: block; }
         .students-list .filter-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px 3px 10px; border-radius: 999px; background: #F3F4F6; border: 1px solid #E5E7EB; font-size: 12px; color: #374151; }
         .students-list .students-table thead th { background: #F9FAFB; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: #6B7280; border-bottom: 1px solid #E5E7EB; white-space: nowrap; padding: 12px 14px; }

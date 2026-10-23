@@ -158,6 +158,41 @@ class PeriodService
     }
 
     /**
+     * Existing students / corrections (steps 2.8–2.9): make period N the current one — earlier periods are
+     * recorded as completed, later rows removed. Returns false when the calendar has no period N.
+     */
+    public function placeInPeriod(Student $student, int $periodNo, string $remarks = 'Set by admin'): bool
+    {
+        $calendar = $this->calendarFor($student);
+        if (!$calendar->firstWhere('period_no', $periodNo)) {
+            return false;
+        }
+        $current = $student->currentPeriod()->first();
+        if ($current && (int) $current->period_no === $periodNo) {
+            return true;
+        }
+
+        DB::transaction(function () use ($student, $periodNo, $calendar, $remarks) {
+            $student->periods()->where('period_no', '>', $periodNo)->get()->each->delete();
+            foreach ($calendar->where('period_no', '<=', $periodNo) as $period) {
+                $isCurrent = (int) $period->period_no === $periodNo;
+                $row = $student->periods()->where('period_no', $period->period_no)->first()
+                    ?? new StudentPeriod(['institute_id' => $student->institute_id, 'student_id' => $student->id, 'period_no' => $period->period_no]);
+                $row->fill([
+                    'course_period_id' => $period->id,
+                    'status' => $isCurrent ? 'current' : 'completed',
+                    'started_on' => $row->started_on ?? $period->start_date,
+                    'completed_on' => $isCurrent ? null : ($row->completed_on ?? $period->end_date),
+                    'remarks' => $row->exists ? $row->remarks : $remarks,
+                ])->save();
+            }
+        });
+        $this->audit('set_period', 'student_periods', $student, ['new' => ['period_no' => $periodNo], 'description' => "{$student->full_name} set to period {$periodNo} ({$remarks})"]);
+
+        return true;
+    }
+
+    /**
      * Admission confirmed (ER number): the student starts period 1 of their calendar.
      * Nothing happens when the course has no periods set up yet.
      */

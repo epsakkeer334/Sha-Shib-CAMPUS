@@ -21,7 +21,7 @@ class Student extends BaseModel
         'religion_id', 'category_id', 'joining_date', 'onboarding_deadline',
         'address', 'country_id', 'state_id', 'city', 'pincode',
         'parent_name', 'parent_phone', 'parent_email', 'parent_occupation',
-        'status', 'submitted_at', 'created_by', 'updated_by',
+        'status', 'admission_source', 'submitted_at', 'created_by', 'updated_by',
     ];
 
     protected $casts = [
@@ -99,6 +99,12 @@ class Student extends BaseModel
     public function academicDetail()
     {
         return $this->hasOne(StudentAcademicDetail::class);
+    }
+
+    /** ER number history (Module 2 step 2.8), newest first. */
+    public function erHistory()
+    {
+        return $this->hasMany(StudentErNumber::class)->latest('id');
     }
 
     /** 12th marks per subject (course eligibility, Module 2 step 2.7). */

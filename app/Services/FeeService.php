@@ -96,6 +96,25 @@ class FeeService
     }
 
     /**
+     * Existing student (step 2.8, only when asked): the fee lines of their current period that they do not
+     * have yet. One-time fees (admission …) are not charged — they were collected before CAMP.
+     */
+    public function chargeCurrentPeriodFees(Student $student): int
+    {
+        $fees = CourseFee::active()->where('institute_id', $student->institute_id)->where('course_id', $student->course_id)
+            ->whereNotNull('period_no')
+            ->whereNotIn('id', $student->dues()->whereNotNull('course_fee_id')->pluck('course_fee_id'))
+            ->orderBy('sort_order')->get()
+            ->filter(fn ($fee) => $this->appliesTo($fee, $student))->values();
+
+        foreach ($fees as $fee) {
+            $this->createDue($student, $fee->fee_head, (float) $fee->amount, $fee->dueDateFor($student), $fee->id, $fee);
+        }
+
+        return $fees->count();
+    }
+
+    /**
      * Keep the course fees of a student in step with their course and joining date while
      * they register (portal). Fees that already have a payment (pending or confirmed) are left
      * alone; others are replaced when the course changes and re-dated when the joining date changes.

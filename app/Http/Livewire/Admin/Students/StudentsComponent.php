@@ -40,6 +40,15 @@ class StudentsComponent extends Component
 
     public $confirmingDeleteId = null;
 
+    // Inline grid (step 2.9): quick edits of the current page
+    public $grid = false;
+    /** @var array<int|string, array<string, mixed>> student id => [column => value] */
+    public $gridRows = [];
+    public $gridOriginal = [];
+    public $gridErrors = [];
+
+    const GRID_COLUMNS = ['er_number', 'batch_code', 'current_semester', 'status', 'phone', 'email', 'emergency_contact'];
+
     protected $queryString = [
         'search' => ['except' => ''],
         'institute' => ['except' => ''],
@@ -72,6 +81,9 @@ class StudentsComponent extends Component
 
     public function updating($property)
     {
+        if ($this->grid && !str_starts_with($property, 'grid')) {
+            $this->cancelGrid();
+        }
         if (in_array($property, ['search', 'institute', 'course', 'period', 'status', 'docsGate', 'feesGate', 'payment', 'overdue', 'perPage'], true)) {
             $this->resetPage();
         }
@@ -254,6 +266,81 @@ class StudentsComponent extends Component
         $this->dispatchBrowserEvent('show-toast', ['type' => $type, 'message' => $message]);
     }
 
+    // ------------------------------------------------------------------ inline grid (step 2.9)
+
+    public function enterGrid()
+    {
+        abort_unless(Auth::user()->can('students.bulk_update'), 403);
+        $service = app(\App\Services\StudentBulkService::class);
+        $this->gridRows = [];
+        foreach ($this->pageStudents()->getCollection() as $student) {
+            $student->loadMissing(['institute', 'course', 'batch', 'qualification', 'religion', 'category', 'state', 'country', 'academicDetail']);
+            $this->gridRows[$student->id] = array_intersect_key($service->rowFor($student), array_flip(self::GRID_COLUMNS));
+        }
+        $this->gridOriginal = $this->gridRows;
+        $this->gridErrors = [];
+        $this->grid = true;
+    }
+
+    public function cancelGrid()
+    {
+        $this->reset(['grid', 'gridRows', 'gridOriginal', 'gridErrors']);
+    }
+
+    public function saveGrid()
+    {
+        abort_unless(Auth::user()->can('students.bulk_update'), 403);
+        $service = app(\App\Services\StudentBulkService::class);
+
+        $rows = [];
+        foreach ($this->gridRows as $id => $values) {
+            $changed = array_filter($values, fn ($v, $col) => trim((string) $v) !== trim((string) ($this->gridOriginal[$id][$col] ?? '')), ARRAY_FILTER_USE_BOTH);
+            if ($changed) {
+                $rows[(int) $id] = ['student_id' => (string) $id] + array_map(fn ($v) => trim((string) $v), $changed);
+            }
+        }
+        if (!$rows) {
+            $this->toast('info', 'No changes to save.');
+
+            return;
+        }
+
+        $preview = $service->validateRows($rows, Auth::user());
+        $this->gridErrors = [];
+        foreach ($preview['rows'] as $row) {
+            if ($row['errors']) {
+                $this->gridErrors[$row['line']] = $row['errors'];
+            }
+        }
+        $result = $service->apply($preview['rows']);
+        foreach ($result['skipped'] as $line => $why) {
+            $this->gridErrors[$line]['_row'] = $why;
+        }
+        $saved = $result['updated'];
+
+        if (!$this->gridErrors) {
+            $this->cancelGrid();
+            $this->toast('success', "Saved {$saved} " . ($saved === 1 ? 'student' : 'students') . '.' . ($result['warnings'] ? ' ' . implode(' ', array_slice($result['warnings'], 0, 3)) : ''));
+
+            return;
+        }
+        // keep the grid open on the rows with errors; saved rows become the new originals
+        foreach ($rows as $id => $row) {
+            if (!isset($this->gridErrors[$id])) {
+                $this->gridOriginal[$id] = $this->gridRows[$id];
+            }
+        }
+        $this->toast('warning', "Saved {$saved}. " . count($this->gridErrors) . ' ' . (count($this->gridErrors) === 1 ? 'row has' : 'rows have') . ' errors — see the red cells.');
+    }
+
+    protected function pageStudents()
+    {
+        return $this->query()
+            ->with(['course', 'institute', 'batch', 'approvals', 'dues', 'payments', 'erRequest', 'currentPeriod.coursePeriod.academicYear'])
+            ->orderBy(in_array($this->sortField, self::SORTABLE, true) ? $this->sortField : 'id', $this->sortDirection === 'asc' ? 'asc' : 'desc')
+            ->paginate(in_array((int) $this->perPage, [10, 15, 25, 50], true) ? (int) $this->perPage : 15);
+    }
+
     // ------------------------------------------------------------------ render
 
     public function render()
@@ -261,10 +348,7 @@ class StudentsComponent extends Component
         $user = Auth::user();
         $isSuperAdmin = $user->isSuperAdmin();
 
-        $students = $this->query()
-            ->with(['course', 'institute', 'batch', 'approvals', 'dues', 'payments', 'erRequest', 'currentPeriod.coursePeriod.academicYear'])
-            ->orderBy(in_array($this->sortField, self::SORTABLE, true) ? $this->sortField : 'id', $this->sortDirection === 'asc' ? 'asc' : 'desc')
-            ->paginate(in_array((int) $this->perPage, [10, 15, 25, 50], true) ? (int) $this->perPage : 15);
+        $students = $this->pageStudents();
 
         // Courses for the filter: those offered by the chosen (or own) institute
         $instituteForCourses = $isSuperAdmin ? $this->institute : $user->institute_id;
@@ -304,6 +388,11 @@ class StudentsComponent extends Component
             'selectedCourse' => $this->course ? Course::find($this->course) : null,
             'statuses' => collect(config('camp.student_statuses'))->map(fn ($s) => $s[0]),
             'canDelete' => $user->can('students.delete'),
+            'canBulk' => $user->can('students.bulk_update'),
+            'canEr' => $user->can('students.manage_er'),
+            'gridBatches' => $this->grid
+                ? \App\Models\Admin\Batch::whereIn('course_id', $students->pluck('course_id')->unique())->orderBy('code')->get(['id', 'code', 'course_id', 'institute_id'])->groupBy('course_id')
+                : collect(),
             'canFees' => $user->can('fees.manage') || $user->can('payments.collect') || $user->can('payments.verify'),
         ])->layout('layouts.admin.master');
     }

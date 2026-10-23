@@ -60,10 +60,22 @@
             <span class="er-number-label">ER number</span>
             @if($student->er_number)
                 <span class="er-number-value">{{ $student->er_number }}</span>
-                <span class="er-number-sub">Issued {{ optional(optional($form)->generated_at)->format('d M Y') }}</span>
+                <span class="er-number-sub">{{ $student->admission_source === 'onboarding' ? 'Issued' : 'Existing student · since' }} {{ optional(optional($form)->generated_at)->format('d M Y') }}</span>
+                @if($canManageEr)
+                    <div class="er-number-actions">
+                        <button type="button" class="btn btn-sm btn-light" wire:click="openErModal('change')"><i class="ti ti-pencil"></i> Change</button>
+                        @if($isSuperAdmin)<button type="button" class="btn btn-sm btn-light text-danger" wire:click="openErModal('clear')" title="Super Admin: remove the number"><i class="ti ti-eraser"></i></button>@endif
+                    </div>
+                @endif
             @else
                 <span class="er-number-value er-number-none">Not issued yet</span>
                 <span class="er-number-sub">Issued automatically after Gate 1 &amp; Gate 2</span>
+                @if($canManageEr && $canAssignEr)
+                    <div class="er-number-actions">
+                        <button type="button" class="btn btn-sm btn-primary" wire:click="openErModal('assign')"><i class="ti ti-id-badge-2"></i> Assign ER number</button>
+                    </div>
+                    <span class="er-number-sub">Already studying? Enter their existing ER number.</span>
+                @endif
             @endif
         </div>
     </div>
@@ -210,9 +222,32 @@
             @endif
         </div>
 
-        {{-- Side: gates, student details, fees --}}
+        {{-- Side: ER history, gates, student details, fees --}}
         <div class="col-xxl-4">
             <div class="row g-3">
+                @if($student->erHistory->isNotEmpty())
+                    <div class="col-md-6 col-xxl-12">
+                        <div class="er-panel">
+                            <div class="er-panel-head"><div class="er-panel-title"><span class="er-title-icon er-title-icon-info"><i class="ti ti-history"></i></span> ER number history</div></div>
+                            <div class="er-panel-body">
+                                <ul class="er-hist">
+                                    @foreach($student->erHistory as $h)
+                                        <li class="er-hist-{{ $h->action }}">
+                                            <div class="d-flex justify-content-between gap-2 flex-wrap">
+                                                <span class="fw-semibold font-monospace">
+                                                    @if($h->previous_er_number)<s class="text-muted">{{ $h->previous_er_number }}</s> → @endif{{ $h->er_number ?? '—' }}
+                                                </span>
+                                                <span class="er-hist-tag">{{ $h->action_label }}</span>
+                                            </div>
+                                            <div class="er-sub">{{ optional($h->changer)->name ?? 'System' }} · {{ optional($h->created_at)->format('d M Y, h:i A') }}</div>
+                                            @if($h->reason)<div class="er-sub fst-italic">“{{ $h->reason }}”</div>@endif
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                @endif
                 <div class="col-md-6 col-xxl-12">
                     <div class="er-panel">
                         <div class="er-panel-head"><div class="er-panel-title"><span class="er-title-icon er-title-icon-ok"><i class="ti ti-shield-check"></i></span> Approval gates</div></div>
@@ -280,6 +315,104 @@
         </div>
     </div>
 
+    {{-- ER number modal (step 2.8) --}}
+    @if($canManageEr)
+        <div class="modal fade" id="erModal" tabindex="-1" aria-hidden="true" wire:ignore.self>
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content border-0 shadow-lg">
+                    <div class="modal-header">
+                        <div>
+                            <h5 class="modal-title fw-semibold mb-0">
+                                @if($erAction === 'assign')<i class="ti ti-id-badge-2 text-primary me-1"></i> Assign ER number — existing student
+                                @elseif($erAction === 'change')<i class="ti ti-pencil text-warning me-1"></i> Change ER number
+                                @else<i class="ti ti-eraser text-danger me-1"></i> Clear ER number @endif
+                            </h5>
+                            <small class="text-muted">{{ $student->full_name }} · {{ optional($student->course)->name }}</small>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        @if($erAction === 'assign')
+                            <div class="er-mode mb-3" role="radiogroup">
+                                <label class="er-mode-opt {{ $erMode === 'existing' ? 'is-on' : '' }}">
+                                    <input type="radio" class="d-none" value="existing" wire:model="erMode">
+                                    <i class="ti ti-keyboard"></i><span><b>Enter existing ER number</b><small>Exactly as issued in the old register, e.g. ER-2024-00087</small></span>
+                                </label>
+                                <label class="er-mode-opt {{ $erMode === 'generate' ? 'is-on' : '' }}">
+                                    <input type="radio" class="d-none" value="generate" wire:model="erMode">
+                                    <i class="ti ti-wand"></i><span><b>Generate next number</b><small>From the CAMP series (ER-{{ date('Y') }}-#####)</small></span>
+                                </label>
+                            </div>
+                            <div class="row g-3">
+                                @if($erMode === 'existing')
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-medium small" for="erValue">ER number <span class="text-danger">*</span></label>
+                                        <input id="erValue" type="text" class="form-control font-monospace text-uppercase @error('erValue') is-invalid @enderror" wire:model.defer="erValue" placeholder="ER-2024-00087" maxlength="40">
+                                        @error('erValue')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
+                                    </div>
+                                @endif
+                                <div class="col-md-6">
+                                    <label class="form-label fw-medium small" for="erSemester">Current semester <span class="text-danger">*</span></label>
+                                    <select id="erSemester" class="form-select @error('erSemester') is-invalid @enderror" wire:model.defer="erSemester">
+                                        @foreach($semesterOptions as $n => $label)<option value="{{ $n }}">{{ $label }}</option>@endforeach
+                                    </select>
+                                    @error('erSemester')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
+                                    @if($erMode === 'generate')@error('erValue')<div class="text-danger small">{{ $message }}</div>@enderror @endif
+                                </div>
+                                <div class="col-12">
+                                    <div class="er-checks">
+                                        <label><input type="checkbox" class="form-check-input" wire:model.defer="erCardIssued"> <span><b>ID card already issued</b><small>Student becomes Active; card recorded as printed & signed</small></span></label>
+                                        <label><input type="checkbox" class="form-check-input" wire:model.defer="erFormArchived"> <span><b>ER form already signed & archived</b><small>Paper form filed before CAMP</small></span></label>
+                                        <label><input type="checkbox" class="form-check-input" wire:model.defer="erChargeFees"> <span><b>Charge this semester's fees</b><small>From the fee structure; earlier fees were collected outside CAMP</small></span></label>
+                                        <label><input type="checkbox" class="form-check-input" wire:model.defer="erNotify"> <span><b>Notify the student</b><small>In-app notification on the portal</small></span></label>
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <input type="text" class="form-control form-control-sm" wire:model.defer="erReason" placeholder="Note (optional), e.g. Joined June 2025 batch — from the ER register">
+                                </div>
+                            </div>
+                            <div class="alert alert-info d-flex gap-2 mt-3 mb-0 small py-2"><i class="ti ti-info-circle"></i>
+                                <div>Both gates are recorded as approved (<em>Existing student — admitted before CAMP</em>). Missing documents or address details stay listed on the student page.</div></div>
+                        @elseif($erAction === 'change')
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-medium small">Current</label>
+                                    <input type="text" class="form-control font-monospace bg-light" value="{{ $student->er_number }}" readonly>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-medium small" for="erValueNew">New ER number <span class="text-danger">*</span></label>
+                                    <input id="erValueNew" type="text" class="form-control font-monospace text-uppercase @error('erValue') is-invalid @enderror" wire:model.defer="erValue" maxlength="40">
+                                    @error('erValue')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label fw-medium small" for="erReasonC">Reason <span class="text-danger">*</span></label>
+                                    <textarea id="erReasonC" rows="2" class="form-control @error('erReason') is-invalid @enderror" wire:model.defer="erReason" placeholder="e.g. Typing error — register shows ER-2024-00078"></textarea>
+                                    @error('erReason')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
+                                </div>
+                            </div>
+                            @if(optional($card)->print_count || optional($form)->printed_at)
+                                <div class="alert alert-warning d-flex gap-2 mt-3 mb-0 small py-2"><i class="ti ti-alert-triangle"></i>
+                                    <div>The printed papers show the old number: the ID card will need a reprint{{ optional($form)->status !== 'archived' && optional($form)->printed_at ? ' and the ER form a new print' : '' }}. The old number stays in the history and cannot be given to anyone else.</div></div>
+                            @endif
+                        @else
+                            <p class="small text-muted">Removes <b class="font-monospace">{{ $student->er_number }}</b>. Only possible while the ER form and ID card are not printed. The student goes back to <em>Pending approval</em>; the number stays in the history.</p>
+                            <label class="form-label fw-medium small" for="erReasonX">Reason <span class="text-danger">*</span></label>
+                            <textarea id="erReasonX" rows="2" class="form-control @error('erReason') is-invalid @enderror" wire:model.defer="erReason"></textarea>
+                            @error('erReason')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
+                        @endif
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn {{ $erAction === 'clear' ? 'btn-danger' : 'btn-primary' }}" wire:click="saveEr" wire:loading.attr="disabled">
+                            <span wire:loading.remove wire:target="saveEr"><i class="ti ti-device-floppy me-1"></i> {{ ['assign' => 'Assign & admit', 'change' => 'Change number', 'clear' => 'Clear number'][$erAction] }}</span>
+                            <span wire:loading wire:target="saveEr"><span class="spinner-border spinner-border-sm me-1"></span> Saving…</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
+
     {{-- Reprint modal --}}
     <div class="modal fade" id="reprintModal" tabindex="-1" aria-hidden="true" wire:ignore.self>
         <div class="modal-dialog modal-dialog-centered">
@@ -300,6 +433,21 @@
     @include('livewire.admin.onboarding.partials.styles')
     @include('livewire.admin.onboarding.partials.enrollment-styles')
     <style>
+        .er-number-actions { display: flex; gap: 6px; margin-top: 8px; justify-content: center; flex-wrap: wrap; }
+        .er-hist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+        .er-hist li { padding: 8px 10px 8px 12px; border-left: 3px solid #CBD5E1; background: #F8FAFC; border-radius: 0 8px 8px 0; }
+        .er-hist li.er-hist-changed { border-left-color: #F59E0B; } .er-hist li.er-hist-cleared { border-left-color: #DC2626; }
+        .er-hist li.er-hist-assigned, .er-hist li.er-hist-generated { border-left-color: #0284C7; } .er-hist li.er-hist-issued { border-left-color: #16A34A; }
+        .er-hist-tag { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: #E2E8F0; color: #334155; }
+        .er-mode { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 10px; }
+        .er-mode-opt { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1px solid #E5E7EB; border-radius: 12px; cursor: pointer; }
+        .er-mode-opt i { font-size: 22px; color: #9CA3AF; }
+        .er-mode-opt span { display: flex; flex-direction: column; } .er-mode-opt small { color: #6B7280; font-size: 12px; }
+        .er-mode-opt.is-on { border: 2px solid #F26522; padding: 11px 13px; background: #FFF7F2; } .er-mode-opt.is-on i { color: #F26522; }
+        .er-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 8px; }
+        .er-checks label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid #E5E7EB; border-radius: 10px; cursor: pointer; }
+        .er-checks label .form-check-input { margin-top: 3px; flex-shrink: 0; }
+        .er-checks span { display: flex; flex-direction: column; font-size: 13px; } .er-checks small { color: #6B7280; font-size: 12px; }
         /* header: details on the left, ER number card always on the right */
         .er-detail .er-profile { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px 24px; }
         .er-detail .er-profile .er-number-card { justify-self: end; }
@@ -387,6 +535,15 @@ document.addEventListener('livewire:load', function () {
             }
         };
     }
+
+    window.addEventListener('open-er-modal', () => bootstrap.Modal.getOrCreateInstance(document.getElementById('erModal')).show());
+    window.addEventListener('close-er-modal', () => {
+        const instance = bootstrap.Modal.getInstance(document.getElementById('erModal'));
+        if (instance) { instance.hide(); }
+    });
+    @if($openEr && $canManageEr && $canAssignEr)
+        @this.call('openErModal', 'assign');
+    @endif
 
     window.addEventListener('close-reprint-modal', () => {
         const instance = bootstrap.Modal.getInstance(document.getElementById('reprintModal'));

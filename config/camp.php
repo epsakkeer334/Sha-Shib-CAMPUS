@@ -56,6 +56,8 @@ return [
             'students.create' => 'Add students (admin onboarding)',
             'students.update' => 'Edit students',
             'students.delete' => 'Delete draft students',
+            'students.manage_er' => 'Assign / generate / change ER numbers of existing students',
+            'students.bulk_update' => 'Bulk update students (CSV upload, inline grid)',
         ],
         'Onboarding' => [
             'onboarding.verify_documents' => 'Verify KYC documents & approve Gate 1 (Admin)',
@@ -92,7 +94,7 @@ return [
 
     // Default permissions per role (super-admin gets everything through Gate::before).
     'default_role_permissions' => [
-        'institute-admin' => ['users.view', 'users.create', 'users.update', 'users.delete', 'audit.view', 'notifications.view', 'institute_courses.view', 'institute_courses.manage', 'batches.manage', 'periods.manage', 'students.view', 'students.create', 'students.update', 'students.delete', 'onboarding.verify_documents', 'eligibility.override', 'enrollment.manage', 'fees.manage', 'payments.collect'],
+        'institute-admin' => ['users.view', 'users.create', 'users.update', 'users.delete', 'audit.view', 'notifications.view', 'institute_courses.view', 'institute_courses.manage', 'batches.manage', 'periods.manage', 'students.view', 'students.create', 'students.update', 'students.delete', 'students.manage_er', 'students.bulk_update', 'onboarding.verify_documents', 'eligibility.override', 'enrollment.manage', 'fees.manage', 'payments.collect'],
         'accounts' => ['students.view', 'fees.manage', 'payments.collect', 'payments.verify'],
         'training-manager' => ['students.view', 'enrollment.manage'],
         'bic' => [],

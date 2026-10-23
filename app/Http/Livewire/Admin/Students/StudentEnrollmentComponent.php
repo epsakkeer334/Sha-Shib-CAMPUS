@@ -4,7 +4,9 @@ namespace App\Http\Livewire\Admin\Students;
 
 use App\Models\Admin\EnrollmentApproval;
 use App\Models\Admin\Student;
+use App\Services\ErNumberService;
 use App\Services\OnboardingService;
+use App\Services\PeriodService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
 use RuntimeException;
@@ -24,6 +26,18 @@ class StudentEnrollmentComponent extends Component
     // Opened from the ER & ID cards queue (admin.onboarding.enrollment.student): back link + menu stay on the queue
     public $fromQueue = false;
 
+    // ER number management (step 2.8)
+    public $erAction = 'assign';      // assign | change | clear
+    public $erMode = 'existing';      // existing (type the number) | generate (next from the series)
+    public $erValue = '';
+    public $erSemester = '';
+    public $erCardIssued = false;
+    public $erFormArchived = false;
+    public $erChargeFees = false;
+    public $erNotify = false;
+    public $erReason = '';
+    public $openEr = false;           // ?assign=1 from the students list
+
     public function mount($student)
     {
         abort_unless(Auth::user()->can('students.view'), 403);
@@ -33,6 +47,72 @@ class StudentEnrollmentComponent extends Component
         if (Auth::user()->hasRole('training-manager')) {
             $this->formSignerId = $this->cardSignerId = Auth::id();
         }
+        $this->openEr = request()->boolean('assign') && Auth::user()->can('students.manage_er');
+    }
+
+    // ------------------------------------------------------------------ ER number (step 2.8)
+
+    public function openErModal($action = 'assign')
+    {
+        abort_unless(Auth::user()->can('students.manage_er'), 403);
+        $this->resetValidation();
+        $this->reset(['erMode', 'erValue', 'erCardIssued', 'erFormArchived', 'erChargeFees', 'erNotify', 'erReason']);
+        $this->erAction = in_array($action, ['assign', 'change', 'clear'], true) ? $action : 'assign';
+        $this->erSemester = (string) app(PeriodService::class)->currentPeriodNo($this->student());
+        $this->dispatchBrowserEvent('open-er-modal');
+    }
+
+    public function saveEr()
+    {
+        abort_unless(Auth::user()->can('students.manage_er'), 403);
+        $student = $this->student();
+        $service = app(ErNumberService::class);
+        $total = (int) optional($student->course)->total_periods ?: 1;
+        abort_if($this->erAction === 'clear' && !Auth::user()->isSuperAdmin(), 403); // before try: HttpException is a RuntimeException
+
+        try {
+            if ($this->erAction === 'assign') {
+                $this->validate([
+                    'erMode' => 'required|in:existing,generate',
+                    'erValue' => $this->erMode === 'existing' ? 'required|string|max:40' : 'nullable',
+                    'erSemester' => "required|integer|min:1|max:{$total}",
+                    'erReason' => 'nullable|string|max:300',
+                ], [], ['erValue' => 'ER number', 'erSemester' => 'current semester']);
+                if ($this->erMode === 'existing' && ($problem = $service->problem($this->erValue, $student))) {
+                    $this->addError('erValue', $problem);
+
+                    return;
+                }
+                $result = $service->assign($student, $this->erMode === 'generate' ? null : $this->erValue, [
+                    'semester' => (int) $this->erSemester, 'card_issued' => (bool) $this->erCardIssued, 'form_archived' => (bool) $this->erFormArchived,
+                    'charge_fees' => (bool) $this->erChargeFees, 'notify' => (bool) $this->erNotify, 'reason' => trim($this->erReason) ?: null,
+                ]);
+                $message = "ER number {$result['er_number']} given — {$student->full_name} is admitted as an existing student." . ($result['warnings'] ? ' ' . implode(' ', $result['warnings']) : '');
+                $type = $result['warnings'] ? 'warning' : 'success';
+            } elseif ($this->erAction === 'change') {
+                $this->validate(['erValue' => 'required|string|max:40', 'erReason' => 'required|string|min:5|max:300'], [], ['erValue' => 'new ER number', 'erReason' => 'reason']);
+                if ($problem = $service->problem($this->erValue, $student)) {
+                    $this->addError('erValue', $problem);
+
+                    return;
+                }
+                $new = $service->change($student, $this->erValue, trim($this->erReason));
+                $message = "ER number changed to {$new}." . (optional($student->idCard)->print_count ? ' Reprint the ID card with the new number.' : '');
+                $type = 'success';
+            } else {
+                $this->validate(['erReason' => 'required|string|min:5|max:300'], [], ['erReason' => 'reason']);
+                $service->clear($student, trim($this->erReason));
+                $message = 'ER number cleared.';
+                $type = 'warning';
+            }
+        } catch (RuntimeException $e) {
+            $this->addError($this->erAction === 'clear' ? 'erReason' : 'erValue', $e->getMessage());
+
+            return;
+        }
+
+        $this->dispatchBrowserEvent('close-er-modal');
+        $this->dispatchBrowserEvent('show-toast', ['type' => $type, 'message' => $message]);
     }
 
     public function hydrate()
@@ -42,7 +122,7 @@ class StudentEnrollmentComponent extends Component
 
     protected function student(): Student
     {
-        return Student::with(['course', 'institute', 'state', 'country', 'approvals.approver', 'erRequest.signer', 'erRequest.archiver', 'idCard.signer', 'documents', 'dues'])
+        return Student::with(['course', 'institute', 'state', 'country', 'approvals.approver', 'erRequest.signer', 'erRequest.archiver', 'idCard.signer', 'documents', 'dues', 'erHistory.changer'])
             ->findOrFail($this->studentId);
     }
 
@@ -119,6 +199,11 @@ class StudentEnrollmentComponent extends Component
             'card' => $student->idCard,
             'photo' => $student->documents->where('document_type', 'kyc_photo')->sortByDesc('uploaded_at')->first(),
             'canManage' => Auth::user()->can('enrollment.manage'),
+            'canManageEr' => Auth::user()->can('students.manage_er'),
+            'canAssignEr' => ErNumberService::canAssign($student),
+            'isSuperAdmin' => Auth::user()->isSuperAdmin(),
+            'semesterOptions' => collect(range(1, max(1, (int) optional($student->course)->total_periods)))
+                ->mapWithKeys(fn ($n) => [$n => optional($student->course)->periodName($n) . (app(PeriodService::class)->periodFor($student, $n) ? '' : ' (no calendar yet)')]),
             'trainingManagers' => $onboarding->trainingManagers($student),
             // TM: records their own signature; Super Admin / Institute Admin: choose the TM (dropdown)
             'canSign' => $onboarding->canRecordSignature($student),

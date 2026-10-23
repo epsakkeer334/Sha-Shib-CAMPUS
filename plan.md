@@ -77,7 +77,7 @@ Only Super Admin adds/edits institutes. Students are created by Module 2 (onboar
 
 **Side menu** ✅ — role × menu matrix in `config/menu.php`, rendered by `App\Services\MenuService`. An item shows when its route exists and the user has the listed role/permission, so menu items for Modules 2–8 appear automatically as each module is built. Non-Super-Admin dashboards show the same items as quick links.
 
-**Permissions** ✅ — defined in `config/camp.php` → `permissions` (Module 1: `institutes.manage`, `users.view/create/update/delete`, `roles.manage`, `audit.view`, `notifications.view`, `serials.manage`; Module 1A: `masters.manage` ✅ — Super Admin only, hidden from the matrix; `institute_courses.view` / `institute_courses.manage` ✅ — default for Institute Admin, own institute only (Super Admin: all institutes); planned: `payments.collect`, `payments.verify`, `payments.refund` — Accounts, for Module 2; Module 2C 🟡: `scholarships.view` (Institute Admin, Accounts), `scholarships.manage` and `scholarships.assign` (Institute Admin); Module 2.7 🟡: `eligibility.override` (Institute Admin)); editable per role on the Roles & Permissions screen. Super Admin passes every check (`Gate::before`).
+**Permissions** ✅ — defined in `config/camp.php` → `permissions` (Module 1: `institutes.manage`, `users.view/create/update/delete`, `roles.manage`, `audit.view`, `notifications.view`, `serials.manage`; Module 1A: `masters.manage` ✅ — Super Admin only, hidden from the matrix; `institute_courses.view` / `institute_courses.manage` ✅ — default for Institute Admin, own institute only (Super Admin: all institutes); planned: `payments.collect`, `payments.verify`, `payments.refund` — Accounts, for Module 2; Module 2C 🟡: `scholarships.view` (Institute Admin, Accounts), `scholarships.manage` and `scholarships.assign` (Institute Admin); Module 2.7 ✅: `eligibility.override` (Institute Admin); Module 2.8–2.9 ✅: `students.manage_er`, `students.bulk_update` (Institute Admin)); editable per role on the Roles & Permissions screen. Super Admin passes every check (`Gate::before`).
 
 ---
 
@@ -311,6 +311,8 @@ Fixed lists kept in `config/camp.php` (not tables): `higher_secondary_subjects` 
 | 2.5 ID card | Card preview with KYC photo, print (count kept), Mark signed & issued → student `active`; reprint with reason | ✅ |
 | 2.6 Admissions portal (student website) | `/admissions`: home → **Apply** (Step 1 Your details: creates the student login + draft application; institute → course) → Step 2 Academic (segmented % / CGPA, stream cards) → Step 3 Documents (upload on select, re-upload rejected, submit application → fees generated from the fee structure) → Step 4 Payment (fees list, GPay/UPI: QR / UPI app link / UPI ID, UTR + screenshot → Accounts verification; office payment info; receipts) → Application status (timeline, action-needed banners, documents). Student sign-in at `/admissions/login` (throttled). Course fees are shown in Step 1 once a course is chosen and are added to the student at registration (kept in step with course / joining date until a payment exists), with a fee summary on every step; **Pay now** / **Save and pay now** and the Payment step open only once all required documents are uploaded (or a payment already exists), then stay open until everything is paid (also before submitting). Details, academic and documents stay editable at any stage until a fee payment is **confirmed** (course change refused once a payment is submitted; edits after Gate 1 approval reopen Gate 1). Free navigation between all steps; unsaved field entries are auto-saved as a draft (`students.portal_drafts`) and restored; sign-in resumes at the last step visited (`students.portal_last_step`, `App\Support\PortalProgress`). Same rules/services as the admin side (`App\Support\StudentRules`, `OnboardingService`, `FeeService`). Students are kept out of the admin panel and staff out of the portal. | ✅ |
 | 2.7 Course eligibility criteria (12th) | Super Admin sets per course the accepted 12th subject groups (PCM, PCB, Commerce …) with a minimum % per subject + optional aggregate (any board or per board); criteria shown when the student picks a course; marks entered per subject (% or CGPA, converted by the board factor); live check; submission blocked when not eligible (override with reason) — see *Course Eligibility Criteria* below | ✅ |
+| 2.8 ER number management (existing students) | Super Admin / Institute Admin (`students.manage_er`) assign an existing (legacy) ER number or generate the next one, change it with a reason (history kept, series counter protected), and admit an already-studying student directly (gates recorded as *existing student*, current semester set, no automatic fees) — see *Existing Students* below | ✅ |
+| 2.9 Bulk student update | `students.bulk_update`: CSV template (pre-filled with filtered students or blank) → upload → validation preview (new / update / error per row, old → new per cell) → apply valid rows; creates and updates; inline grid on the students list for small changes; import history + error report — see *Existing Students* below | ✅ |
 
 Admin: Institute Management ▸ **Payment Settings** (`admin.institute-payment-settings`, `fees.manage`) — per institute: which methods are accepted, UPI ID, payee name, QR image, office instructions (shown on the portal payment step).
 
@@ -464,6 +466,158 @@ Example: *AME B1.1 · Any board · PCM — Physics ≥ 50 %, Chemistry ≥ 45 %,
 - Extended: `StudentOnboardingComponent` (Basic + Academic tabs), `Portal\AcademicPage` and portal Step 1; `App\Support\StudentRules` for the mark ranges.
 
 **Permissions:** `masters.manage` (masters and criteria — Super Admin); new **`eligibility.override`** (Institute Admin by default; Super Admin passes every check).
+
+#### Existing Students — ER Number Management & Bulk Update ✅ built (steps 2.8 – 2.9)
+
+**Status (built):** migration `2026_10_23_000001_existing_students_er_and_bulk_update` (applied to the test and working databases; history back-filled for the students who already had an ER number); models `StudentErNumber`, `StudentImport`; services `ErNumberService`, `StudentBulkService`, `SerialNumberService::reserve()`, `OnboardingService::admitExisting()`, `PeriodService::placeInPeriod()`, `FeeService::chargeCurrentPeriodFees()`; screens: ER number panel + history on Student ▸ Gates, ER & ID card, **Assign ER** action and **Edit this page in a grid** on the students list, Students ▸ **Bulk Update**; tests `Module2ExistingStudentsTest`. Implementation notes:
+- `student_er_numbers.er_number` is indexed, not unique (a cleared row repeats the old number); "never reused" is enforced by `ErNumberService::problem()` over students (incl. deleted) and the history.
+- The *Charge this semester's fees* option charges only the current semester's lines (no one-time / admission fee).
+- A missing academic calendar is a **warning** (the semester is not set), not an error, so existing batches can be loaded before Academic Periods are set up.
+- A wrong parent value (religion / country / course) hides the dependent column's error until it is fixed.
+
+**Why:** batches had already started before CAMP went live. Those students already study, many already hold an ER number from the old register, and their details must be brought into CAMP quickly, without sending each one through the online onboarding gates. To be built **before Module 2C (Scholarships)**, since scholarships need the existing students in CAMP.
+
+**Decisions (agreed)**
+- (a) **Manual ER numbers accept the legacy format as issued** (e.g. `ER-2024-00087` or an older style). The checks are uniqueness and allowed characters only. If the value matches the CAMP series `ER-YYYY-#####`, the series counter of that year is moved past it, so automatic numbers never clash.
+- (b) Assigning an ER number to an existing student **admits them directly** (the "existing student" path): both gates are recorded as approved by the admin with the reason *Existing student — admitted before CAMP*, the status becomes ER Issued (or Active when the ID card was already issued), and the current semester is set by the admin. No document or fee gate is required.
+- (c) Bulk update = **CSV template → upload → validation preview → apply valid rows**, plus a quick **inline grid** on the students list for small changes. Native CSV (`fgetcsv`): no new Composer package. Excel opens and saves the template as CSV.
+- (d) Bulk upload **creates and updates**: a row without a CAMP student ID creates the student (as an existing admitted student when an ER number is given, else a draft onboarding student); a row with an ID updates that student.
+
+##### 2.8 ER number management
+
+**Who:** Super Admin (all institutes) and Institute Admin (own institute), with the new permission **`students.manage_er`**. Accounts / TM only see the number.
+
+**Screens**
+- Student ▸ **Gates, ER & ID card** page: new panel **"ER number"**:
+  - No ER yet → **Assign ER number** with two choices: *Enter existing ER number* (text) or *Generate next from the CAMP series* (`SerialNumberService::next('ER')`).
+  - ER present → **Change ER number** (new value + **reason required**) and the **history** list (old → new, by, when, reason).
+  - Existing-student options shown when the student is not admitted yet: *current semester* (from the batch / intake calendar), *ID card already issued* (yes → status Active, card marked issued, print count 1), *ER request form already signed & archived* (yes → form archived), *notify the student* (off by default).
+- Students list: row action **"Assign ER"** (when blank) opening the same modal; ER column searchable (as now).
+- Bulk: the `er_number` column of the bulk template (2.9) uses the same rules.
+
+**Rules (`App\Services\ErNumberService`)**
+- Format: trimmed and upper-cased; `^[A-Z0-9][A-Z0-9/_.-]{2,39}$`.
+- Unique across **all** students of all institutes, including soft-deleted ones (`students.er_number` is already unique).
+- `ER-YYYY-#####` values: `SerialNumberService::reserve('ER', $value)` locks the counter row of that year and sets `last_value = max(last_value, number)`. Values in older or other formats do not touch the counter.
+- **Change:** reason required. Allowed while no marksheet / admit card refers to the student (Module 3+ check, added when those modules exist). Effects of a change:
+  - the ID card, if already printed, is flagged *"ER changed — reprint required"* through the existing reprint flow (print count kept);
+  - an ER request form not yet archived goes back to *generated* so it is printed again with the new number;
+  - the old number stays in the history and remains reserved: it cannot be given to another student.
+- **Clear ER** (back to no number): Super Admin only, reason required, and only while nothing depends on it (no ID card printed, no exams).
+- Every action runs in a transaction, is audited (`assign_er`, `change_er`, `clear_er`) and adds a history row. An in-app notification is sent to the student only if *notify* is ticked.
+- **Existing-student admission** (`OnboardingService::admitExisting($student, $options)`):
+  - institute, course, basic details and academic details must be present (address / documents are optional for existing students; the missing items stay listed on the student page);
+  - both `enrollment_approvals` rows → approved, remarks *Existing student*, approver = the admin;
+  - `ErRequest` / `IdCard` created in the chosen state;
+  - `student_periods`: the chosen semester becomes *current* and earlier semesters are recorded as *completed* (remarks *before CAMP*);
+  - fees: **not charged automatically**. The *Add fees from the current semester onwards* option is off by default; earlier fees were collected outside CAMP;
+  - `students.admission_source` = `existing`.
+
+**Database (additive migration)**
+- `students.admission_source` string(20), default `onboarding` (`onboarding` | `existing` | `import`); existing rows stay `onboarding`.
+- New table **`student_er_numbers`** (history):
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| student_id, institute_id | bigint FK |  |
+| er_number | string | the number assigned at that time (unique index → an old number is never reused) |
+| action | enum(issued, assigned, generated, changed, cleared) | `issued` = by the gates as today (written by `issueErIfReady` from now on) |
+| previous_er_number | string nullable |  |
+| reason | text nullable | required for changed / cleared |
+| changed_by | FK users nullable |  |
+| created_at | timestamp |  |
+
+- Back-fill: one `issued` history row for every student that already has an ER number.
+
+##### 2.9 Bulk student update (existing batches)
+
+**Who:** Super Admin (all institutes; `institute_code` column) and Institute Admin (own institute only), with the new permission **`students.bulk_update`**. Assigning or changing ER numbers in a file also needs `students.manage_er`, otherwise that column is ignored with a warning.
+
+**Screen:** Students ▸ **Bulk Update** (`admin.students.bulk`), a 4-step page:
+1. **Template:** choose institute (Super Admin) / course / batch / status, then
+   - *Download students* gives a CSV pre-filled with the filtered students (one row each, `student_id` filled), or
+   - *Download blank template* gives headers plus one example row.
+   A "Column guide" panel lists each column, whether it is required for a new row, and the accepted values (codes / names of masters).
+2. **Upload:** `.csv` up to 2 MB / 1,000 rows. UTF-8 with or without BOM, comma or semicolon separator, dates `DD-MM-YYYY` or `YYYY-MM-DD`. The file is stored privately (random name, `SecureUpload`).
+3. **Preview** (nothing saved yet). One line per row:
+   - status **New / Update / No change / Error**;
+   - for updates, the changed cells shown *old → new*;
+   - errors listed per cell ("Row 14 · batch_code: BTC-9 is not a batch of AME B1.1").
+   Totals and filters (All / Errors / New / Updates), plus *Download error report* (the file with an `errors` column, to fix and re-upload).
+4. **Apply:** *Apply N valid rows* (error rows skipped) behind a confirmation pop-up (delete-modal style), shows a progress bar, then a summary *created / updated / skipped*. The import is kept in **Import history** (who, when, file, counts, error report).
+
+**Template columns:**
+- Blank cell on an update = **keep the current value**. Required columns apply to new rows only.
+- Masters are matched by **code or name** (case-insensitive). An unknown value is an error, with the closest suggestion.
+
+| Group | Columns |
+| --- | --- |
+| Identity | `student_id` (blank = new), `institute_code` (Super Admin only), `er_number` |
+| Course | `course_code`*, `batch_code`, `current_semester` (1…N), `joining_date`*, `status` (`draft`, `er_issued`, `active`; `alumni` Super Admin only) |
+| Personal | `first_name`*, `last_name`*, `dob`*, `gender`*, `email`*, `phone`*, `emergency_contact`*, `qualification`*, `religion`*, `category`* |
+| Address & parent | `address`, `city`, `pincode`, `state`, `country`, `parent_name`, `parent_phone`, `parent_email`, `parent_occupation` |
+| Academic | `board_10`, `mark_type_10`, `mark_10`, `board_12`, `stream_12` (group code), `mark_type_12`, `mark_12` (12th subject marks stay on the student page / step 2.7) |
+
+\* required for a new row.
+
+**Validation (one shared rule set)**
+- Reuses `App\Support\StudentRules::basic / address / academic` per row. File rows are mapped to the same field names, so the rules are identical to the onboarding forms.
+- Plus, per row:
+  - email / phone / ER number unique in CAMP **and within the file** (duplicates in the file are both errors);
+  - the course is offered by the institute; the batch belongs to that course and is not full;
+  - the semester ≤ the course's number of periods, and a calendar exists for the batch / intake;
+  - the category belongs to the religion, the state belongs to the country;
+  - status changes allowed: `draft → er_issued / active` only via the existing-student path (needs an ER number); no move back to `draft`; `alumni` Super Admin only.
+- Rows for another institute (Institute Admin) or an unknown `student_id` → error.
+- **Course change** on a student with confirmed / pending payments → error (same rule as the portal). On a student with dues and no payments → allowed; unpaid course dues are re-synced (`FeeService::syncCourseDues`).
+- **Email change** → the portal login email changes too (must be unique in `users`).
+- Eligibility (2.7): checked for new / changed academic rows. A *Not eligible* result is a **warning**, not an error, for existing students (they are already admitted). It is recorded on the student with the reason *bulk import — existing student*.
+- New row **with** ER number → created and admitted by the existing-student path (2.8). New row **without** ER → created as a *draft* onboarding student (normal gates later).
+- **Portal logins** are not created in bulk (email is not active yet; see SMTP2GO). They are created from the student page.
+
+**Inline grid (small changes):** on the students list, *Edit in grid* turns the current page (max 50 rows) into an editable table for `batch`, `current semester`, `status`, `ER number`, `phone`, `email`, `emergency contact`. *Save changes* validates every edited row with the same service, shows errors in the cell, and saves the valid rows with one audit entry per student.
+
+**Processing (`App\Services\StudentBulkService`)**
+- `template()`, `parse(file)`, `validateRows()` (returns the preview), `apply(importId)`.
+- Apply runs **row by row in its own DB transaction**: one bad row never rolls back the others, and a re-run skips rows already applied.
+- Up to 1,000 rows run in the request. A queued job is used later if files grow (`QUEUE_CONNECTION` is still `sync`).
+- Each student gets an audit entry `bulk_update` / `bulk_create` with old → new values and the import id. The import itself is audited.
+
+**Database (additive migration)**
+- New table **`student_imports`**:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| institute_id | bigint FK nullable | null = several institutes (Super Admin) |
+| user_id | bigint FK | who uploaded |
+| file_name, file_path | string | private disk |
+| status | enum(previewed, applied, cancelled) |  |
+| rows_total, rows_new, rows_updated, rows_unchanged, rows_failed | int |  |
+| preview | json | validated rows + errors (kept to apply exactly what was previewed; the file must not change in between) |
+| applied_at | timestamp nullable |  |
+| timestamps |  |  |
+
+- Previews older than 24 h cannot be applied: upload again. A data change between preview and apply is detected per row (`updated_at` check) and that row is skipped.
+
+**Permissions (new):**
+- `students.manage_er`: assign / generate / change ER numbers (Institute Admin by default; Super Admin passes). Clear ER is Super Admin only.
+- `students.bulk_update`: bulk upload, inline grid, import history (Institute Admin by default).
+
+**Components:**
+- Extended: `Admin\Students\StudentEnrollmentComponent` (ER panel + history), `StudentsComponent` (Assign ER action, Edit in grid).
+- New: `Admin\Students\BulkUpdateComponent` (template / upload / preview / apply / history).
+
+**Services:**
+- New: `ErNumberService`, `StudentBulkService`.
+- Extended: `SerialNumberService::reserve()`, `OnboardingService::admitExisting()`.
+
+**Tests (planned):** `Module2ExistingStudentsTest`:
+- ER numbers: assign a legacy number; generate the next one; duplicates refused, including old numbers and soft-deleted students; the counter moves past a manual `ER-YYYY-#####`; change needs a reason and flags the ID card for reprint; clear is Super Admin only.
+- Existing-student admission: gates, status, semester; no fees.
+- Bulk: template columns; per-row and in-file duplicates; masters matched by code or name; Institute Admin limited to own institute; create + update in one file; blank keeps the value; error report; apply skips error rows and changed rows; inline grid; permissions (Accounts / TM refused).
+- Working-database safety as for every module: tests only on `*_testing`.
 
 `student_documents`
 
@@ -1227,6 +1381,7 @@ Export feature: a queued job zips the `document_final_records` of all `documents
 | **Sprint 1a — Master Data (Module 1A)** | ✅ Done (per-institute gateway settings → Sprint 1) | Super Admin CRUD for qualifications, courses (+ institute_courses), countries, states, religions, categories, matriculation & higher secondary boards, payment gateways (+ per-institute gateway settings) |
 | **Sprint 1 — Student Onboarding** | ✅ done (2.1–2.6, admin side + admissions portal) | Student registration (+ user account, academic information), document upload wizard, student dues & payments (online gateways, GPay/UPI, offline + Accounts verification, receipts), dual-gate approval (Admin + Accounts), ER generation, ID card issuance |
 | **Sprint 1b — Academic Years, Academic Periods & Period-wise Fees (Module 2B)** ✅ | 1–2 weeks | Academic years master + seeder, course period structure (semester / term / module / year, length, number of periods), course periods per institute / course / academic year (generate & edit), batches → intake year, period-wise fee structure (academic year + period on fee lines, due on the period start date, period 1 fees at ER issue), dues grouped per period |
+| **Sprint 1e — Existing Students: ER numbers & bulk update (Module 2.8–2.9)** ✅ | done | ER number panel (assign legacy / generate / change with reason / history, series counter reserve), existing-student admission (gates recorded, current semester, ID card / ER form state), bulk update page (CSV template, upload, preview with per-cell changes and errors, apply valid rows, import history, error report), inline grid on the students list, permissions `students.manage_er` / `students.bulk_update` |
 | **Sprint 1c — Scholarship Management (Module 2C)** 🟡 | 1–1.5 weeks | Scholarships (institute + course + optional batch / academic year, percentage or fixed, one or more semesters), Assign Scholarship page (one / selected / all eligible, semester-wise preview of fee, discounts and final payable), automatic discounts on student dues (incl. semesters charged later), revoke, permissions + institute isolation |
 | **Sprint 1d — Course Eligibility Criteria (Module 2.7)** ✅ | done | 12th Subjects & Subject Groups masters (seed PCM / PCB / Commerce / Arts), board CGPA factor, Course Eligibility screen, per-subject marks on portal Step 2 and the admin Academic tab, criteria card on course choice, live check, submit block + override, eligibility shown at Gate 1 |
 | **Sprint 2 — Exam Application & Approval** | 2 weeks | Subjects per course/syllabus mapping, exam appearance requests, Accounts dues gate + BiC bypass, TM attendance gate, admit card generation |
@@ -1257,6 +1412,7 @@ app/
       Notifications/       NotificationLogComponent ✅
       Masters/             QualificationsManager, CoursesManager, ReligionsManager, CategoriesManager, MatriculationBoardsManager, HigherSecondaryBoardsManager, CountriesManager, StatesManager; 🟡 QualifyingSubjectsManager, QualifyingSubjectGroupsManager, CourseEligibilityManager (Module 2.7)
       Onboarding/          StudentRegistrationForm, StudentAcademicForm, DocumentUploadWizard, AdminDocumentVerification, AccountsFeeVerification, ERRequestGenerator, IDCardIssuance
+      Students/            StudentsComponent ✅, StudentOnboardingComponent ✅, StudentFeesComponent ✅, StudentEnrollmentComponent ✅; BulkUpdateComponent ✅ (Module 2.9)
       Scholarships/        ScholarshipsComponent, AssignScholarshipComponent (Module 2C)
       Exams/               ExamAppearanceApplication, AccountsDuesApproval, BiCOverridePanel, TMAttendanceApproval, AdmitCardGenerator, ExamScheduleManager, SyllabusMappingManager
       QuestionBank/        QuestionBankManager, QuestionUploadBulk, ExamPaperBuilder
@@ -1268,7 +1424,7 @@ app/
     User.php ✅
     Admin/                 BaseModel ✅, Institute ✅, AuditTrail ✅, Country ✅, State ✅, (one model per new table, extending BaseModel)
   Traits/                  RecordsAuditTrail ✅, BelongsToInstitute
-  Services/                SerialNumberService ✅, NotificationService ✅, MenuService ✅, ScholarshipService (Module 2C), EligibilityService (Module 2.7), PaymentService, PdfGenerationService, ComplianceAggregationService
+  Services/                SerialNumberService ✅, NotificationService ✅, MenuService ✅, ScholarshipService (Module 2C), EligibilityService (Module 2.7), ErNumberService + StudentBulkService (Module 2.8–2.9), PaymentService, PdfGenerationService, ComplianceAggregationService
     Payments/              PaymentGatewayInterface, RazorpayGateway, GPayUpiGateway, OfflineGateway ... (one driver per payment_gateways.code)
   Http/Controllers/        PaymentWebhookController (signature-verified, idempotent gateway callbacks)
   Policies/                StudentPolicy, ExamApprovalPolicy, DocumentPolicy, MoUPolicy ...
