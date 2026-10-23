@@ -305,7 +305,7 @@ class Module1CoreTest extends TestCase
         $this->assertSame(['Users'], array_column($instGroups['Administration']['items'][0]['children'], 'label'));
 
         // Accounts: only what its permissions allow (Module 2 fees & payments); modules not built yet stay hidden.
-        $this->assertSame(['Dashboard', 'Fee Structure', 'Payment Settings', 'All Students', 'Payment Verification'], $labels($this->makeUser('accounts', $this->instA)));
+        $this->assertSame(['Dashboard', 'Fee Structure', 'Payment Settings', 'Scholarships', 'All Students', 'Payment Verification'], $labels($this->makeUser('accounts', $this->instA)));
         $this->assertSame(['Dashboard'], $labels($this->makeUser('faculty', $this->instA)));
     }
 

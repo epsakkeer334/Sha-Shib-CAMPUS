@@ -13,12 +13,13 @@ class StudentDue extends BaseModel
     use BelongsToInstitute;
 
     protected $fillable = [
-        'institute_id', 'student_id', 'course_fee_id', 'academic_year_id', 'period_no', 'advance', 'fee_head', 'amount_due', 'amount_paid', 'due_date', 'status', 'remarks',
+        'institute_id', 'student_id', 'course_fee_id', 'academic_year_id', 'period_no', 'advance', 'fee_head', 'amount_due', 'discount', 'amount_paid', 'due_date', 'status', 'remarks',
         'created_by', 'updated_by',
     ];
 
     protected $casts = [
         'amount_due' => 'decimal:2',
+        'discount' => 'decimal:2', // scholarships (Module 2C): sum of student_due_discounts
         'amount_paid' => 'decimal:2',
         'due_date' => 'date',
         'period_no' => 'integer',
@@ -51,9 +52,21 @@ class StudentDue extends BaseModel
         return $this->hasMany(StudentPayment::class);
     }
 
+    /** Scholarship discounts on this due (Module 2C). */
+    public function discounts()
+    {
+        return $this->hasMany(StudentDueDiscount::class);
+    }
+
+    /** What the student has to pay for this fee: amount − scholarship discount. */
+    public function getNetAmountAttribute(): float
+    {
+        return max(0, round((float) $this->amount_due - (float) $this->discount, 2));
+    }
+
     public function getBalanceAttribute(): float
     {
-        return $this->status === 'waived' ? 0.0 : max(0, round((float) $this->amount_due - (float) $this->amount_paid, 2));
+        return $this->status === 'waived' ? 0.0 : max(0, round($this->net_amount - (float) $this->amount_paid, 2));
     }
 
     /**

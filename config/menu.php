@@ -88,6 +88,14 @@ return [
                     ['label' => 'Payment Settings', 'icon' => 'ti ti-qrcode', 'route' => 'admin.institute-payment-settings', 'permission' => 'fees.manage'],
                 ],
             ],
+            [
+                'label' => 'Scholarships',
+                'icon' => 'ti ti-award',
+                'children' => [
+                    ['label' => 'Scholarships', 'icon' => 'ti ti-discount-2', 'route' => 'admin.scholarships', 'permission' => 'scholarships.view'],
+                    ['label' => 'Assign Scholarship', 'icon' => 'ti ti-user-check', 'route' => 'admin.scholarships.assign', 'permission' => 'scholarships.assign'],
+                ],
+            ],
         ],
     ],
 

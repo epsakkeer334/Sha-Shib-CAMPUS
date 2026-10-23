@@ -111,6 +111,10 @@
         .notice.info { background: var(--info-bg); border: 1px solid #C3D3E8; color: #163E6B; }
         .notice.ok { background: var(--brand-soft); border: 1px solid #BFDCCF; color: var(--brand-ink); }
 
+        /* scholarships (Module 2C) */
+        .fee-schol { display: inline-flex; gap: 4px; align-items: center; width: fit-content; margin-top: 4px; padding: 2px 10px; border-radius: 999px; background: #F3EEFF; color: #5B21B6; font-size: 13px; font-weight: 500; }
+        .fee-schol-mini { color: #6D28D9; }
+
         /* course eligibility (12th) */
         .elig-card { border-radius: 12px; background: var(--bg); padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
         .elig-list { display: flex; flex-direction: column; gap: 10px; }

@@ -157,6 +157,21 @@ return [
             'title' => 'Fee waived',
             'message' => ':fee was waived: :reason.',
         ],
+        // ── Scholarships (Module 2C) ──────────────────────────────────────────────
+        'scholarship_awarded' => [
+            'stage' => 'payment', 'tone' => 'green', 'icon' => 'ti ti-award',
+            'staff' => ['payments.verify'], 'student' => true,
+            'title' => 'Scholarship awarded',
+            'message' => ':student received the :scholarship scholarship (:amount off the current fees).',
+            'student_message' => 'You received the :scholarship scholarship: :amount is taken off your fees.',
+        ],
+        'scholarship_revoked' => [
+            'stage' => 'payment', 'tone' => 'amber', 'icon' => 'ti ti-award-off',
+            'staff' => ['payments.verify'], 'student' => true,
+            'title' => 'Scholarship withdrawn',
+            'message' => 'The :scholarship scholarship of :student was withdrawn: :reason.',
+            'student_message' => 'Your :scholarship scholarship was withdrawn: :reason.',
+        ],
         'gate2_approved' => [
             'stage' => 'gate2', 'tone' => 'green', 'icon' => 'ti ti-shield-check',
             'staff' => [], 'student' => true,

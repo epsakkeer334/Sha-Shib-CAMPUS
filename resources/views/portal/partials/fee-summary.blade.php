@@ -25,7 +25,7 @@
                 @endphp
                 <div style="display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; font-size: 14px;">
                     <span style="font-weight: 500;">{{ $due->fee_head }}</span>
-                    <span class="mono">{{ money_inr($due->isSettled() ? $due->amount_due : $due->balance, false) }}</span>
+                    <span class="mono">{{ money_inr($due->isSettled() ? $due->net_amount : $due->balance, false) }}@if((float) $due->discount > 0)<span class="fee-schol-mini" title="Scholarship"> ★</span>@endif</span>
                     <span class="badge {{ $chip[0] }}" style="height: 24px; font-size: 12px;">{{ $chip[1] }}</span>
                 </div>
             @endforeach

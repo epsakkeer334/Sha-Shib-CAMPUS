@@ -30,6 +30,9 @@ class StudentFeesComponent extends Component
     // Waive due
     public $waiveDueId = null, $waiveReason = '';
 
+    // Revoke a scholarship (Module 2C)
+    public $revokeAssignmentId = null, $revokeReason = '';
+
     // Record payment
     public $pay_due_id, $pay_amount, $pay_gateway_id, $pay_date, $pay_reference, $pay_upi, $pay_proof, $pay_remarks;
 
@@ -266,6 +269,34 @@ class StudentFeesComponent extends Component
         }
     }
 
+    // ------------------------------------------------------------------ scholarships (Module 2C)
+
+    public function openScholarshipRevoke($id)
+    {
+        abort_unless(Auth::user()->can('scholarships.assign'), 403);
+        $this->revokeAssignmentId = \App\Models\Admin\StudentScholarship::where('student_id', $this->studentId)->findOrFail($id)->id;
+        $this->revokeReason = '';
+        $this->resetValidation();
+        $this->dispatchBrowserEvent('open-fee-modal', ['id' => 'scholarshipRevokeModal']);
+    }
+
+    public function revokeScholarship()
+    {
+        abort_unless(Auth::user()->can('scholarships.assign'), 403);
+        $this->validate(['revokeReason' => 'required|string|min:5|max:300'], [], ['revokeReason' => 'reason']);
+        $assignment = \App\Models\Admin\StudentScholarship::where('student_id', $this->studentId)->findOrFail($this->revokeAssignmentId);
+        try {
+            app(\App\Services\ScholarshipService::class)->revoke($assignment, trim($this->revokeReason));
+        } catch (RuntimeException $e) {
+            $this->addError('revokeReason', $e->getMessage());
+
+            return;
+        }
+        $this->reset(['revokeAssignmentId', 'revokeReason']);
+        $this->dispatchBrowserEvent('close-fee-modal', ['id' => 'scholarshipRevokeModal']);
+        $this->toast('success', 'Scholarship revoked — its discount was removed from unpaid fees.');
+    }
+
     protected function toast($type, $message)
     {
         $this->dispatchBrowserEvent('show-toast', ['type' => $type, 'message' => $message]);
@@ -274,7 +305,7 @@ class StudentFeesComponent extends Component
     public function render()
     {
         $student = $this->student();
-        $dues = StudentDue::where('student_id', $student->id)->with('payments')
+        $dues = StudentDue::where('student_id', $student->id)->with(['payments', 'discounts.assignment.scholarship'])
             ->orderByRaw('period_no IS NOT NULL, period_no')->orderBy('due_date')->get();
         $gateway = $this->pay_gateway_id ? PaymentGateway::find($this->pay_gateway_id) : null;
         $fees = app(FeeService::class);
@@ -295,6 +326,11 @@ class StudentFeesComponent extends Component
             'gateways' => PaymentGateway::active()->whereIn('type', ['upi', 'offline'])->orderBy('sort_order')->get(),
             'selectedGateway' => $gateway,
             'payableDues' => $dues->whereNotIn('status', ['cleared', 'waived'])->filter(fn ($d) => $d->payableBalance() > 0),
+            'scholarships' => Auth::user()->can('scholarships.view') || Auth::user()->can('fees.manage')
+                ? \App\Models\Admin\StudentScholarship::with(['scholarship.course', 'assigner'])->withSum('discounts as discount_total', 'amount')
+                    ->where('student_id', $student->id)->orderByRaw("status = 'active' desc")->latest('assigned_at')->get()
+                : collect(),
+            'canAssignScholarship' => Auth::user()->can('scholarships.assign'),
         ])->layout('layouts.admin.master');
     }
 }

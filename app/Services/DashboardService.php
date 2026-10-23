@@ -474,8 +474,8 @@ class DashboardService
         $open = fn () => $dues()->whereIn('status', ['pending', 'partial']);
 
         return [
-            'outstanding' => (float) $open()->sum(DB::raw('amount_due - amount_paid')),
-            'overdue' => (float) $open()->whereDate('due_date', '<', today())->sum(DB::raw('amount_due - amount_paid')),
+            'outstanding' => (float) $open()->sum(DB::raw('amount_due - discount - amount_paid')),
+            'overdue' => (float) $open()->whereDate('due_date', '<', today())->sum(DB::raw('amount_due - discount - amount_paid')),
             'overdue_count' => $open()->whereDate('due_date', '<', today())->count(),
             'collected_today' => (float) $payments()->where('status', 'success')->where('verified_at', '>=', today())->sum('amount'),
             'collected_month' => (float) $payments()->where('status', 'success')->where('verified_at', '>=', now()->startOfMonth())->sum('amount'),

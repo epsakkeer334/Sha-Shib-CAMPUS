@@ -62,6 +62,10 @@ Route::prefix('admin')->middleware(['auth', 'staff', 'active.user'])->group(func
     // In-app notifications of the logged-in user (bell → "View all")
     Route::get('/my-notifications', \App\Http\Livewire\Admin\Notifications\MyNotificationsComponent::class)->name('admin.my-notifications');
 
+    // Module 2C — Scholarships (schemes + assignment to students)
+    Route::get('/scholarships', \App\Http\Livewire\Admin\Scholarships\ScholarshipsComponent::class)->name('admin.scholarships')->middleware('permission:scholarships.view');
+    Route::get('/scholarships/assign', \App\Http\Livewire\Admin\Scholarships\AssignScholarshipComponent::class)->name('admin.scholarships.assign')->middleware('permission:scholarships.assign');
+
     // Institute Management — payment methods per institute (UPI ID / QR shown on the portal)
     Route::middleware('permission:fees.manage')->group(function () {
         Route::get('/payment-settings', Admin\Institutes\PaymentSettingsComponent::class)->name('admin.institute-payment-settings');

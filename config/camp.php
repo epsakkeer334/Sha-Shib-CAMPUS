@@ -69,6 +69,11 @@ return [
             'payments.collect' => 'Record student payments',
             'payments.verify' => 'Verify payments, issue receipts & approve Gate 2 (Accounts)',
         ],
+        'Scholarships' => [
+            'scholarships.view' => 'View scholarships and student discounts',
+            'scholarships.manage' => 'Create / edit / deactivate scholarships',
+            'scholarships.assign' => 'Assign scholarships to students and revoke them',
+        ],
         'Users' => [
             'users.view' => 'View users',
             'users.create' => 'Create users',
@@ -94,8 +99,8 @@ return [
 
     // Default permissions per role (super-admin gets everything through Gate::before).
     'default_role_permissions' => [
-        'institute-admin' => ['users.view', 'users.create', 'users.update', 'users.delete', 'audit.view', 'notifications.view', 'institute_courses.view', 'institute_courses.manage', 'batches.manage', 'periods.manage', 'students.view', 'students.create', 'students.update', 'students.delete', 'students.manage_er', 'students.bulk_update', 'onboarding.verify_documents', 'eligibility.override', 'enrollment.manage', 'fees.manage', 'payments.collect'],
-        'accounts' => ['students.view', 'fees.manage', 'payments.collect', 'payments.verify'],
+        'institute-admin' => ['users.view', 'users.create', 'users.update', 'users.delete', 'audit.view', 'notifications.view', 'institute_courses.view', 'institute_courses.manage', 'batches.manage', 'periods.manage', 'students.view', 'students.create', 'students.update', 'students.delete', 'students.manage_er', 'students.bulk_update', 'onboarding.verify_documents', 'eligibility.override', 'enrollment.manage', 'fees.manage', 'payments.collect', 'scholarships.view', 'scholarships.manage', 'scholarships.assign'],
+        'accounts' => ['students.view', 'fees.manage', 'payments.collect', 'payments.verify', 'scholarships.view'],
         'training-manager' => ['students.view', 'enrollment.manage'],
         'bic' => [],
         'examination-manager' => [],

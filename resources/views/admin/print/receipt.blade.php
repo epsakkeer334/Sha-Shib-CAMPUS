@@ -25,6 +25,7 @@
         <tr><th>Paid on</th><td>{{ optional($payment->paid_at)->format('d M Y') }}</td></tr>
         <tr><th>Payment method</th><td>{{ optional($payment->gateway)->name }}</td></tr>
         @if($payment->transaction_reference)<tr><th>Reference</th><td class="mono">{{ $payment->transaction_reference }}</td></tr>@endif
+        @if($payment->due && (float) $payment->due->discount > 0)<tr><th>Scholarship on this fee</th><td class="mono">− {{ money_inr($payment->due->discount) }} (fee {{ money_inr($payment->due->amount_due) }})</td></tr>@endif
         @if($payment->due)<tr><th>Balance on this fee</th><td class="mono">{{ money_inr($payment->due->balance) }}</td></tr>@endif
     </table>
 

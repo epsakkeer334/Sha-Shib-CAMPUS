@@ -1,7 +1,8 @@
 @php
     $user = auth()->user();
     $canAdvance = $user->can('payments.collect') || $user->can('fees.manage');
-    $charged = $dues->where('status', '!=', 'waived')->sum(fn ($d) => (float) $d->amount_due);
+    $charged = $dues->where('status', '!=', 'waived')->sum(fn ($d) => $d->net_amount); // after scholarships
+    $discountTotal = $dues->where('status', '!=', 'waived')->sum(fn ($d) => (float) $d->discount);
     $grandTotal = $charged + $upcomingTotal;
     $paidPct = $grandTotal > 0 ? min(100, round($paidTotal / $grandTotal * 100)) : 0;
     $duePct = $grandTotal > 0 ? min(100 - $paidPct, round($outstanding / $grandTotal * 100)) : 0;
@@ -159,6 +160,9 @@
                                             @if($isNext)<span class="sf-tag sf-tone-amber"><i class="ti ti-arrow-right"></i> Next to pay</span>@endif
                                             @if($due->advance)<span class="sf-tag sf-tone-green">{{ $due->status === 'cleared' ? 'Paid in advance' : 'Advance' }}</span>@endif
                                             @if(!$due->course_fee_id)<span class="sf-tag sf-tone-slate">Added by hand</span>@endif
+                                            @foreach($due->discounts as $disc)
+                                                <span class="sf-tag sf-tone-violet" title="Scholarship {{ optional(optional($disc->assignment)->scholarship)->name }}"><i class="ti ti-award"></i> {{ optional(optional($disc->assignment)->scholarship)->code }} − {{ money_inr($disc->amount, false) }}</span>
+                                            @endforeach
                                         </div>
                                         @if($due->status === 'waived' && $due->remarks)<div class="sf-sub mt-1">Waived: {{ $due->remarks }}</div>@endif
                                         @if($pending > 0)<div class="sf-sub mt-1 text-info"><i class="ti ti-clock"></i> {{ money_inr($pending, false) }} being confirmed</div>@endif
@@ -167,7 +171,15 @@
                                         <div class="{{ $chipLabel === 'Overdue' ? 'text-danger fw-semibold' : '' }}">{{ $due->due_date->format('d M Y') }}</div>
                                         @if($chipLabel === 'Overdue')<div class="sf-sub text-danger">{{ $due->due_date->diffForHumans(null, true) }} late</div>@endif
                                     </td>
-                                    <td class="text-end sf-amount">{{ money_inr($due->amount_due, false) }}</td>
+                                    <td class="text-end sf-amount">
+                                        @if((float) $due->discount > 0)
+                                            <div class="text-muted text-decoration-line-through small">{{ money_inr($due->amount_due, false) }}</div>
+                                            <div>{{ money_inr($due->net_amount, false) }}</div>
+                                            <div class="sf-sub sf-disc">− {{ money_inr($due->discount, false) }} scholarship</div>
+                                        @else
+                                            {{ money_inr($due->amount_due, false) }}
+                                        @endif
+                                    </td>
                                     <td class="text-end sf-amount text-success">{{ $due->amount_paid > 0 ? money_inr($due->amount_paid, false) : '—' }}</td>
                                     <td class="text-end sf-amount fw-bold">{{ $due->balance > 0 ? money_inr($due->balance, false) : '—' }}</td>
                                     <td><span class="sf-status sf-tone-{{ $chipTone }}">{{ $chipLabel }}</span></td>
@@ -278,6 +290,39 @@
 
         {{-- Record a payment --}}
         <div class="col-xl-4">
+            @if($scholarships->isNotEmpty())
+                {{-- Scholarships (Module 2C) --}}
+                <div class="sf-panel mb-3 sf-schol">
+                    <div class="sf-panel-head">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="sf-panel-icon sf-panel-icon-violet"><i class="ti ti-award"></i></span>
+                            <div><h5 class="mb-0">Scholarships</h5><small class="text-muted">{{ money_inr($discountTotal, false) }} off the charged fees</small></div>
+                        </div>
+                    </div>
+                    <div class="sf-panel-body py-2">
+                        @foreach($scholarships as $a)
+                            <div class="sf-schol-row {{ $a->status === 'active' ? '' : 'is-off' }}">
+                                <div class="min-w-0">
+                                    <div class="fw-semibold text-truncate">{{ optional($a->scholarship)->name }} <span class="sf-schol-code">{{ optional($a->scholarship)->code }}</span></div>
+                                    <div class="sf-sub">{{ optional($a->scholarship)->value_label }} · {{ optional($a->scholarship)->periods_label }}</div>
+                                    <div class="sf-sub">{{ $a->status === 'active' ? 'Given' : 'Revoked' }} {{ optional($a->status === 'active' ? $a->assigned_at : $a->revoked_at)->format('d M Y') }}{{ $a->status === 'active' && $a->assigner ? ' by ' . $a->assigner->name : '' }}</div>
+                                </div>
+                                <div class="text-end">
+                                    <div class="fw-bold font-monospace sf-disc">− {{ money_inr($a->discount_total ?? 0, false) }}</div>
+                                    @if($a->status === 'active' && $canAssignScholarship)
+                                        <button type="button" class="btn btn-sm btn-link text-danger p-0 small" wire:click="openScholarshipRevoke({{ $a->id }})">Revoke</button>
+                                    @elseif($a->status !== 'active')
+                                        <span class="sf-tag sf-tone-slate">Revoked</span>
+                                    @endif
+                                </div>
+                            </div>
+                        @endforeach
+                        @if($canAssignScholarship)
+                            <a href="{{ route('admin.scholarships.assign') }}" class="btn btn-sm btn-light border w-100 mt-2"><i class="ti ti-award me-1"></i> Assign a scholarship</a>
+                        @endif
+                    </div>
+                </div>
+            @endif
             <div class="sf-panel sf-pay-form">
                 <div class="sf-panel-head">
                     <div class="d-flex align-items-center gap-2">
@@ -426,8 +471,35 @@
         </div>
     </div>
 
+    {{-- Revoke scholarship --}}
+    <div class="modal fade" id="scholarshipRevokeModal" tabindex="-1" aria-hidden="true" wire:ignore.self>
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content sf-modal">
+                <div class="modal-header">
+                    <div class="d-flex align-items-center gap-2"><span class="sf-panel-icon sf-panel-icon-violet"><i class="ti ti-award-off"></i></span><h5 class="modal-title mb-0">Revoke scholarship</h5></div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted">The discount is removed from fees without any payment. Fees already paid (or with a payment waiting) keep their discount — no refund, no extra charge.</p>
+                    @include('livewire.admin.students.partials.input', ['name' => 'revokeReason', 'label' => 'Reason', 'type' => 'textarea', 'required' => true, 'col' => 12])
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light me-2" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" wire:click="revokeScholarship">Revoke</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     @include('livewire.admin.onboarding.partials.styles')
     <style>
+        .sf-ui .sf-tone-violet { background: #EDE9FE; color: #5B21B6; }
+        .sf-ui .sf-disc { color: #6D28D9; }
+        .sf-ui .sf-panel-icon-violet { background: #EDE9FE; color: #6D28D9; }
+        .sf-ui .sf-schol-row { display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px dashed #EEE; }
+        .sf-ui .sf-schol-row:last-of-type { border-bottom: 0; }
+        .sf-ui .sf-schol-row.is-off { opacity: .55; }
+        .sf-ui .sf-schol-code { padding: 0 6px; border-radius: 5px; background: #F5F3FF; color: #6D28D9; font-size: 11px; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
         .sf-ui { --sf-border: #E5E7EB; --sf-soft: #F1F2F4; --sf-ink: #111827; --sf-muted: #6B7280; --sf-accent: #F26522; }
         .sf-ui .min-w-0 { min-width: 0; }
 

@@ -55,7 +55,7 @@ CAMP serves 10+ institutes of the Sha Shib Group from **one application and one 
 | 2 | Student Onboarding & ER Number: admin onboarding, admissions portal, document gate, fee gate, ER number, ER form, ID card, batches, payment settings · **course eligibility check (12th)** (step 2.7) | ✅ Built |
 | 2A | In-app workflow notifications (bell, notification page, portal notifications) | ✅ Built |
 | 2B | Academic years, academic periods (semesters / terms), student period history, semester-wise fee structure | ✅ Built |
-| 2C | Scholarship Management: scholarships per institute / course / batch, assignment to students, automatic fee discounts | 🟡 Planned |
+| 2C | Scholarship Management: scholarships per institute / course / batch, assignment to students, automatic fee discounts | ✅ Built |
 | 3 | Examination Lifecycle: subjects, syllabus mapping, exam schedule, exam application, dues gate + BiC bypass, attendance gate, admit card | 🟡 Planned |
 | 4 | Question Bank & Exam Paper | 🟡 Planned |
 | 5 | Grading & Result Publication + **Promotion** to the next semester | 🟡 Planned |
@@ -224,9 +224,9 @@ Super Admin passes every permission check. Defaults for the other roles are belo
 | `notifications.view` | Notification log | Institute Admin |
 | `serials.manage` | Serial number series | Super Admin |
 | `eligibility.override` | Allow a student who doesn't meet the course eligibility criteria (reason required) | Institute Admin |
-| 🟡 `scholarships.view` | See scholarships and student discounts | Institute Admin, Accounts |
-| 🟡 `scholarships.manage` | Create, edit, deactivate scholarships | Institute Admin |
-| 🟡 `scholarships.assign` | Assign scholarships to students, revoke | Institute Admin |
+| `scholarships.view` | See scholarships and student discounts | Institute Admin, Accounts |
+| `scholarships.manage` | Create, edit, deactivate scholarships | Institute Admin |
+| `scholarships.assign` | Assign scholarships to students, revoke | Institute Admin |
 | 🟡 `promotions.confirm_exam` | Confirm promotion list (results side) | EM |
 | 🟡 `promotions.confirm_institute` | Confirm promotion list (institute side) | Institute Admin |
 
@@ -524,7 +524,7 @@ The ER & ID Cards list has filters and keeps the Students menu highlighted when 
 
 > **Existing data note:** fee lines created before Module 2B are one-time lines for every year. Students who received their ER number before Module 2B have no semester record; they are treated as Semester 1 for fees.
 
-### 9.5 Scholarships 🟡 (Module 2C; Super Admin all institutes, Institute Admin own institute)
+### 9.5 Scholarships ✅ (Module 2C; Super Admin all institutes, Institute Admin own institute)
 
 **Workflow**
 
@@ -887,7 +887,7 @@ Columns: **ID** · **Scenario** · **Expected result**. ✅ = verifiable now; �
 | DB-05 | Click a highlighted item | Opens the matching queue already filtered (e.g. ER & ID Cards → Printed — to sign) |
 | F-24 | Try "Cancel advance" on a normal (non-advance) fee | Refused |
 
-### 19.6a Scholarships 🟡 (Module 2C)
+### 19.6a Scholarships ✅ (Module 2C)
 
 | ID | Scenario | Expected |
 | --- | --- | --- |

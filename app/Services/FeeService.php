@@ -209,9 +209,10 @@ class FeeService
         ]);
 
         $this->audit('create', 'student_dues', $due, ['new' => $due->only(['fee_head', 'amount_due', 'due_date']), 'description' => "Due added for {$student->full_name}: {$feeHead}"]);
+        app(ScholarshipService::class)->applyTo($due); // active scholarships discount fees charged later (Module 2C)
         $this->feesChanged($student);
 
-        return $due;
+        return $due->fresh();
     }
 
     public function waiveDue(StudentDue $due, string $reason): void
@@ -508,9 +509,10 @@ class FeeService
     {
         $paid = round((float) $due->payments()->where('status', 'success')->sum('amount'), 2);
 
+        $net = max(0, round((float) $due->amount_due - (float) $due->discount, 2)); // scholarships (Module 2C)
         $status = $due->status === 'waived'
             ? 'waived'
-            : ($paid >= (float) $due->amount_due ? 'cleared' : ($paid > 0 ? 'partial' : 'pending'));
+            : ($paid >= $net ? 'cleared' : ($paid > 0 ? 'partial' : 'pending'));
 
         $due->update(['amount_paid' => $paid, 'status' => $status]);
     }

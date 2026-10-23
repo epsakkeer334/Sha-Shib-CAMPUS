@@ -22,7 +22,7 @@
     }
     $groups = $groups->sortKeys();
     $openIds = $openInOrder->pluck('id');
-    $grandTotal = $dues->where('status', '!=', 'waived')->sum(fn ($d) => (float) $d->amount_due) + $upcomingTotal;
+    $grandTotal = $dues->where('status', '!=', 'waived')->sum(fn ($d) => $d->net_amount) + $upcomingTotal; // after scholarships
 @endphp
 <main class="main">
     <div style="display: flex; flex-direction: column; gap: 8px;">
@@ -71,8 +71,11 @@
                                     Due {{ $due->due_date->format('d M Y') }}@if($due->amount_paid > 0 && !$due->isSettled()) · {{ money_inr($due->amount_paid, false) }} paid @endif
                                     @if($waiting) · opens after the fee before it is paid @endif
                                 </span>
+                                @if((float) $due->discount > 0)
+                                    <span class="fee-schol"><span aria-hidden="true">★</span> Scholarship − {{ money_inr($due->discount, false) }} <span class="muted">(fee {{ money_inr($due->amount_due, false) }})</span></span>
+                                @endif
                             </span>
-                            <span class="mono">{{ $due->isSettled() ? money_inr($due->amount_due, false) : money_inr($due->balance, false) . ($due->amount_paid > 0 ? ' left' : '') }}</span>
+                            <span class="mono">{{ $due->isSettled() ? money_inr($due->net_amount, false) : money_inr($due->balance, false) . ($due->amount_paid > 0 ? ' left' : '') }}</span>
                             @if($revocable->contains($due->id))
                                 <span style="display: inline-flex; gap: 8px; align-items: center;">
                                     @if($isNext)<a href="#make-payment" class="badge b-warn" style="text-decoration: none;">Pay now →</a>@endif
