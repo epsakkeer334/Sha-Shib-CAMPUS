@@ -5,6 +5,7 @@ namespace App\Http\Livewire\Admin\Settings;
 use App\Models\Admin\SystemSetting;
 use App\Models\User;
 use App\Support\ArtisanRunner;
+use App\Support\PhpCliFinder;
 use App\Support\Settings;
 use App\Traits\RecordsAuditTrail;
 use Illuminate\Support\Facades\DB;
@@ -350,6 +351,22 @@ class SystemSettingsComponent extends Component
         ];
     }
 
+    /** Server health row: which PHP CLI the Optimise button will use. */
+    protected function phpCliRow(): array
+    {
+        if (!PhpCliFinder::processesAllowed()) {
+            return ['PHP CLI (Optimise)', 'proc_open disabled', 'bad', 'Remove proc_open from disable_functions, or optimise over SSH'];
+        }
+        $php = app(PhpCliFinder::class)->find();
+        if (!$php['binary']) {
+            return ['PHP CLI (Optimise)', 'Not found', 'bad', 'Set PHP_CLI_BINARY=/opt/plesk/php/' . PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION . '/bin/php in .env'];
+        }
+        $same = str_starts_with($php['version'], PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION . '.');
+
+        return ['PHP CLI (Optimise)', "PHP {$php['version']} · {$php['binary']}", $same ? 'ok' : 'warn',
+            $same ? null : 'Different version from the website (' . PHP_VERSION . '); set PHP_CLI_BINARY to match'];
+    }
+
     /** "Last change 2 hours ago by …" in the page header. */
     protected function lastChange(): ?array
     {
@@ -383,7 +400,8 @@ class SystemSettingsComponent extends Component
                 ['Timezone', config('app.timezone'), 'info', null],
             ],
             'server' => [
-                ['PHP', PHP_VERSION, version_compare(PHP_VERSION, '8.0.2', '>=') ? 'ok' : 'bad', null],
+                ['PHP', PHP_VERSION . ' · ' . PHP_SAPI, version_compare(PHP_VERSION, '8.0.2', '>=') ? 'ok' : 'bad', null],
+                $this->phpCliRow(),
                 ['Laravel', app()->version(), 'info', null],
                 ['Database', DB::connection()->getDriverName() . ' ' . $dbVersion, 'info', null],
                 ['Web server', Str::limit((string) ($_SERVER['SERVER_SOFTWARE'] ?? php_sapi_name()), 40), 'info', null],
