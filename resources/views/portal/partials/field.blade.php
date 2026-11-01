@@ -7,20 +7,21 @@
     $id = 'f_' . $name;
 @endphp
 <label class="field" for="{{ $id }}">
-    <span class="label">{{ $label }}@if(!empty($required)) *@endif</span>
+    <span class="label">{{ $label }}@if(!empty($required)) <span class="req" aria-hidden="true">*</span>@endif</span>
     @if($type === 'select')
-        <select id="{{ $id }}" class="input @error($name) invalid @enderror" {{ $model }}="{{ $name }}" @if(!empty($disabled)) disabled @endif>
+        <select id="{{ $id }}" class="input @error($name) invalid @enderror" {{ $model }}="{{ $name }}" @if(!empty($disabled)) disabled @endif @if(!empty($required)) aria-required="true" @endif>
             <option value="">{{ $placeholder ?? 'Select' }}</option>
             @foreach($options as $value => $optionLabel)
                 <option value="{{ $value }}">{{ $optionLabel }}</option>
             @endforeach
         </select>
     @elseif($type === 'textarea')
-        <textarea id="{{ $id }}" rows="2" class="input @error($name) invalid @enderror" {{ $model }}="{{ $name }}" placeholder="{{ $placeholder ?? '' }}"></textarea>
+        <textarea id="{{ $id }}" rows="2" class="input @error($name) invalid @enderror" {{ $model }}="{{ $name }}" placeholder="{{ $placeholder ?? '' }}" @if(!empty($required)) aria-required="true" @endif></textarea>
     @else
         <input id="{{ $id }}" type="{{ $type }}" class="input @error($name) invalid @enderror {{ $class ?? '' }}" {{ $model }}="{{ $name }}"
                placeholder="{{ $placeholder ?? '' }}" @if(isset($inputmode)) inputmode="{{ $inputmode }}" @endif
-               @if(isset($autocomplete)) autocomplete="{{ $autocomplete }}" @endif @if(isset($step)) step="{{ $step }}" @endif>
+               @if(isset($autocomplete)) autocomplete="{{ $autocomplete }}" @endif @if(isset($step)) step="{{ $step }}" @endif
+               @if(!empty($required)) aria-required="true" @endif @error($name) aria-invalid="true" @enderror>
     @endif
     @error($name)<span class="error">{{ $message }}</span>@elseif(!empty($hint))<span class="hint">{{ $hint }}</span>@enderror
 </label>

@@ -24,14 +24,16 @@
     $openIds = $openInOrder->pluck('id');
     $grandTotal = $dues->where('status', '!=', 'waived')->sum(fn ($d) => $d->net_amount) + $upcomingTotal; // after scholarships
 @endphp
-<main class="main">
-    <div style="display: flex; flex-direction: column; gap: 8px;">
-        <span class="eyebrow">Admission application {{ now()->year }}</span>
+<main class="main wide">
+    <header class="page-head rise">
+        <span class="eyebrow">Step 4 of 4 · Admission {{ now()->year }}</span>
         <h1 class="title">Pay your fees</h1>
-        <p class="lead">Pay each fee in full or in parts. You’ll get a receipt for every confirmed payment.</p>
-    </div>
+        <p class="lead">In full or in parts — a receipt for every confirmed payment.</p>
+    </header>
 
-    @include('portal.partials.steps', ['current' => 'payment', 'student' => $student])
+    <div class="flow">
+    @include('portal.partials.steps', ['current' => 'payment', 'student' => $student, 'fees' => false])
+    <div class="flow-main">
 
     @if($student->status === 'draft')
         <div class="notice info" role="status">
@@ -41,10 +43,7 @@
     @endif
         {{-- Every fee assigned to the student: paid, to pay and upcoming --}}
         <section class="card flush">
-            <div class="row-between" style="padding: 22px 28px; border-bottom: 1px solid var(--line-2); flex-wrap: wrap; gap: 12px;">
-                <h2>Your fees</h2>
-                <span class="muted" style="font-size: 14px;">Fees are paid in order. The next one opens once the one before it is paid.</span>
-            </div>
+            <div style="padding: 20px 24px; border-bottom: 1px solid var(--line-2);"><div class="card-head"><span class="ico" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5 H15 V17.5 L12.5 16 L10 17.5 L7.5 16 L5 17.5 Z"></path><path d="M7.5 7 H12.5 M7.5 10 H12.5"></path></svg></span><span style="display: flex; flex-direction: column; min-width: 0;"><h2>Your fees</h2><span class="sub">Paid in order — the next opens once the one before is paid</span></span></div></div>
             <div class="fee-totals">
                 <div><span>Paid</span><b class="mono">{{ money_inr($paidTotal, false) }}</b></div>
                 <div class="is-due"><span>To pay now</span><b class="mono">{{ money_inr($outstanding, false) }}</b></div>
@@ -105,13 +104,13 @@
                     @endif
                 @endforeach
             @empty
-                <p class="muted" style="padding: 22px 28px; margin: 0;">No fees have been added to your application yet. The Accounts office will add them.</p>
+                <p class="muted" style="padding: 20px 24px; margin: 0;">No fees have been added to your application yet. The Accounts office will add them.</p>
             @endforelse
         </section>
 
         @if($payOptions->isNotEmpty())
             <section class="card" id="make-payment">
-                <h2>{{ $payingAdvance ? 'Pay in advance' : 'Make a payment' }}</h2>
+                <div class="card-head"><span class="ico" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="15" height="11" rx="2"></rect><path d="M2.5 8 H17.5"></path><path d="M12 12 H14.5"></path></svg></span><span style="display: flex; flex-direction: column; min-width: 0;"><h2>{{ $payingAdvance ? 'Pay in advance' : 'Make a payment' }}</h2><span class="sub">Transfer by UPI, then share the reference</span></span></div>
                 @if($payingAdvance)
                     <div class="notice info" role="status" style="margin: 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
                         <span><b>{{ $selectedLabel }}</b> is not due yet. Paying it now adds it to your fees and marks it as paid in advance. Nothing is charged until you submit the payment.</span>
@@ -126,7 +125,7 @@
                     </div>
 
                     <fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 8px;">
-                        <legend style="font-size: 14px; font-weight: 500; padding: 0; margin-bottom: 8px;">How would you like to pay?</legend>
+                        <legend style="font-size: 13.5px; font-weight: 700; color: #1B2745; padding: 0; margin-bottom: 8px;">How would you like to pay?</legend>
                         <div class="choices wide">
                             @foreach($upiSettings as $option)
                                 <button type="button" class="choice" aria-pressed="{{ $setting && $setting->id === $option->id ? 'true' : 'false' }}" wire:click="choose({{ $option->id }})" style="padding: 16px;">
@@ -148,7 +147,7 @@
                     </fieldset>
 
                     @if($officeSettings->contains(fn ($s) => filled($s->instructions)))
-                        <div style="padding: 16px 20px; border-radius: 12px; background: var(--bg); font-size: 14px;">
+                        <div style="padding: 14px 16px; border-radius: 14px; background: rgba(242, 245, 252, .8); border: 1px solid var(--line); font-size: 14px;">
                             @foreach($officeSettings->filter(fn ($s) => filled($s->instructions)) as $office)
                                 <div><b>{{ $office->gateway->name }}:</b> {{ $office->instructions }}</div>
                             @endforeach
@@ -156,11 +155,11 @@
                     @endif
 
                     @if($setting)
-                        <div style="display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 20px; align-items: center; padding: 20px; border-radius: 12px; background: var(--bg);">
+                        <div class="pay-upi">
                             @if($setting->qr_code_path)
-                                <img src="{{ route('portal.payment-qr', $setting->id) }}" alt="UPI QR code" style="width: 140px; height: 140px; object-fit: contain; border-radius: 8px; background: #fff; border: 1px solid var(--line);">
+                                <img src="{{ route('portal.payment-qr', $setting->id) }}" alt="UPI QR code" style="width: 148px; height: 148px; object-fit: contain; border-radius: 14px; background: #fff; padding: 6px; border: 1px solid var(--line); box-shadow: 0 8px 20px rgba(11, 23, 51, .12);">
                             @else
-                                <div style="width: 120px; height: 120px; border-radius: 8px; background: #fff; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; font-size: 12px; text-align: center;" class="muted">Use the UPI ID</div>
+                                <div style="width: 120px; height: 120px; border-radius: 14px; background: #fff; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; font-size: 12px; text-align: center;" class="muted">Use the UPI ID</div>
                             @endif
                             <div style="display: flex; flex-direction: column; gap: 8px;">
                                 <span class="muted" style="font-size: 14px;">Pay to UPI ID @if($setting->payee_name)· {{ $setting->payee_name }}@endif</span>
@@ -180,18 +179,21 @@
                         </div>
 
                         <label class="dropzone" style="flex-direction: row; justify-content: flex-start; text-align: left; gap: 14px;">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E6B55" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16 V4 M7 9 L12 4 L17 9"></path><path d="M4 16 V20 H20 V16"></path></svg>
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16 V4 M7 9 L12 4 L17 9"></path><path d="M4 16 V20 H20 V16"></path></svg>
                             <span style="display: flex; flex-direction: column;">
                                 <span style="font-weight: 600;">{{ $proof ? 'Screenshot selected: ' . $proof->getClientOriginalName() : 'Upload payment screenshot *' }}</span>
                                 <span class="muted" style="font-size: 13px;">Shows the amount, date and reference number</span>
                             </span>
                             <input type="file" class="visually-hidden" wire:model="proof" accept=".jpg,.jpeg,.png,.pdf">
                         </label>
-                        <div wire:loading wire:target="proof" class="muted">Uploading screenshot…</div>
+                        <div wire:loading wire:target="proof" class="muted"><span class="spin" style="border-color: rgba(59, 79, 224, .25); border-top-color: var(--brand); vertical-align: -3px;"></span> Uploading screenshot…</div>
                         @error('proof')<span class="error">{{ $message }}</span>@enderror
 
                         <p style="margin: 0; font-size: 14px; color: var(--ink-2);">Our Accounts team will confirm the transfer, usually within one working day. Your receipt appears below once it’s confirmed.</p>
-                        <button type="submit" class="btn btn-primary" style="align-self: flex-start;" wire:loading.attr="disabled" wire:target="pay,proof">Submit payment</button>
+                        <button type="submit" class="btn btn-primary" style="align-self: flex-start;" wire:loading.attr="disabled" wire:target="pay,proof">
+                            <span wire:loading.remove wire:target="pay">Submit payment <svg class="arrow" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align: -4px;"><path d="M4 10 H16 M11 5 L16 10 L11 15"></path></svg></span>
+                            <span wire:loading wire:target="pay"><span class="spin"></span> Submitting…</span>
+                        </button>
                     @endif
                 </form>
             </section>
@@ -199,7 +201,7 @@
 
         @if($payments->isNotEmpty())
             <section class="card flush">
-                <h2 style="padding: 22px 28px; border-bottom: 1px solid var(--line-2);">Payments &amp; receipts</h2>
+                <div style="padding: 20px 24px; border-bottom: 1px solid var(--line-2);"><div class="card-head"><span class="ico" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5 H15 V17.5 L12.5 16 L10 17.5 L7.5 16 L5 17.5 Z"></path><path d="M7.5 7 H12.5 M7.5 10 H12.5"></path></svg></span><span style="display: flex; flex-direction: column; min-width: 0;"><h2>Payments &amp; receipts</h2><span class="sub">Download a receipt once a payment is confirmed</span></span></div></div>
                 @foreach($payments as $payment)
                     <div class="feerow">
                         <span style="display: flex; flex-direction: column;">
@@ -211,7 +213,7 @@
                         </span>
                         <span class="mono">{{ money_inr($payment->amount, false) }}</span>
                         @if($payment->status === 'success')
-                            <a href="{{ route('portal.receipt', $payment->id) }}" target="_blank" style="font-weight: 600;">Download</a>
+                            <a href="{{ route('portal.receipt', $payment->id) }}" target="_blank" class="btn btn-secondary btn-sm">Download</a>
                         @elseif($payment->status === 'pending_verification')
                             <span class="badge b-info">Being confirmed</span>
                         @else
@@ -244,9 +246,9 @@
     @endif
 
     <style>
-        .p-modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(23, 32, 27, .55); animation: pFade .15s ease-out; }
-        .p-modal { width: 100%; max-width: 440px; background: var(--surface); border-radius: 16px; padding: 28px 28px 24px; text-align: center; box-shadow: 0 24px 60px rgba(0, 0, 0, .25); animation: pPop .18s ease-out; }
-        .p-modal h3 { margin: 14px 0 8px; font-size: 20px; font-weight: 600; color: var(--ink); }
+        .p-modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(6, 13, 34, .6); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); animation: pFade .15s ease-out; }
+        .p-modal { width: 100%; max-width: 440px; background: rgba(255, 255, 255, .94); -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px); border: 1px solid var(--glass-line); border-radius: 24px; padding: 30px 28px 24px; text-align: center; box-shadow: 0 30px 70px rgba(0, 0, 0, .35); animation: pPop .22s var(--ease); }
+        .p-modal h3 { margin: 14px 0 8px; font-size: 20px; font-weight: 800; color: var(--ink); }
         .p-modal p { margin: 0 0 22px; color: var(--ink-2); font-size: 15px; line-height: 1.5; }
         .p-modal-icon { width: 56px; height: 56px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
         .p-modal-brand { background: var(--brand-soft); color: var(--brand); }
@@ -255,22 +257,24 @@
         .p-modal-actions .btn { min-width: 120px; }
         @keyframes pFade { from { opacity: 0; } to { opacity: 1; } }
         @keyframes pPop { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
-        .fee-totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid var(--line-2); }
-        .fee-totals > div { display: flex; flex-direction: column; gap: 2px; padding: 14px 28px; border-right: 1px solid var(--line-2); }
-        .fee-totals > div:last-child { border-right: 0; }
-        .fee-totals span { font-size: 13px; color: var(--muted); }
-        .fee-totals b { font-size: 18px; color: var(--ink); }
+        .fee-totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 16px 24px; border-bottom: 1px solid var(--line-2); }
+        .fee-totals > div { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 14px; background: rgba(242, 245, 252, .8); border: 1px solid var(--line-2); }
+        .fee-totals span { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+        .fee-totals b { font-size: 18px; color: var(--ink); font-weight: 500; }
+        .fee-totals .is-due { background: var(--warn-bg); border-color: #F5D9A8; }
         .fee-totals .is-due b { color: var(--warn); }
-        .fee-group { padding: 10px 28px; background: var(--line-2); font-weight: 600; font-size: 14px; color: var(--ink-2); }
-        .fee-next { background: var(--brand-tint); box-shadow: inset 4px 0 0 var(--brand); }
-        .fee-upcoming { background: #FBFBF9; }
+        .fee-group { padding: 9px 24px; background: rgba(232, 236, 245, .75); font-weight: 800; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+        .fee-next { background: rgba(238, 241, 255, .9); box-shadow: inset 4px 0 0 var(--brand); }
+        .fee-upcoming { background: rgba(250, 251, 254, .6); }
+        .pay-upi { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 20px; align-items: center; padding: 18px; border-radius: 18px; background: linear-gradient(135deg, rgba(238, 241, 255, .9), rgba(255, 255, 255, .7)); border: 1px solid #D6DCF7; }
+        @media (max-width: 560px) { .pay-upi { grid-template-columns: minmax(0, 1fr); justify-items: start; } }
         .fee-upcoming .mono { color: var(--muted); }
         .fee-tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: var(--brand-soft); color: var(--brand-ink); font-size: 12px; font-weight: 600; vertical-align: middle; }
         .fee-tag-adv { background: var(--info-bg); color: var(--info); }
         @media (max-width: 760px) {
             .fee-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-            .fee-totals > div { padding: 12px 18px; border-bottom: 1px solid var(--line-2); }
-            .fee-group { padding: 10px 18px; }
+            .fee-totals { padding: 14px 18px; }
+            .fee-group { padding: 9px 18px; }
         }
     </style>
     <script>
@@ -280,8 +284,10 @@
         }, 150));
     </script>
 
-    <div class="row-between">
-        <a href="{{ route('portal.documents') }}" class="btn btn-secondary">Back</a>
-        <a href="{{ route('portal.status') }}" class="btn btn-primary">Application status</a>
+    <div class="actionbar">
+        <a href="{{ route('portal.documents') }}" class="btn btn-secondary btn-sm">Back</a>
+        <div class="group"><a href="{{ route('portal.status') }}" class="btn btn-primary">Application status <svg class="arrow" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align: -4px;"><path d="M4 10 H16 M11 5 L16 10 L11 15"></path></svg></a></div>
+    </div>
+    </div>
     </div>
 </main>

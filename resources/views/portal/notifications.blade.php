@@ -1,17 +1,16 @@
 @php
     $tones = [
-        'indigo' => ['#E3ECF7', '#1B4F87'], 'amber' => ['#FBEFD9', '#7A4006'], 'green' => ['#E3F0EA', '#0B5544'],
-        'red' => ['#F8E4E1', '#8E2620'], 'sky' => ['#E3ECF7', '#1B4F87'],
+        'indigo' => ['#E6ECFF', '#2338A8'], 'amber' => ['#FFF2DB', '#8A4B00'], 'green' => ['#E3F6EC', '#0B6B43'],
+        'red' => ['#FDE7E5', '#A01F14'], 'sky' => ['#E0F2FE', '#075985'],
     ];
 @endphp
 <main class="main">
-    <div style="display: flex; flex-direction: column; gap: 8px;">
+    <header class="page-head rise">
         <span class="eyebrow">Notifications</span>
         <h1 class="title">Updates on your application</h1>
-        <p class="lead">Documents, payments, approvals, your ER number and ID card — every step is listed here.</p>
-    </div>
+    </header>
 
-    <section class="card flush">
+    <section class="card flush rise" style="animation-delay: .08s;">
         <div class="pn-head">
             <div class="pn-filter" role="group" aria-label="Filter">
                 <button type="button" class="pn-pill {{ !$unreadOnly ? 'is-active' : '' }}" wire:click="$set('unreadOnly', false)">All</button>
@@ -53,25 +52,25 @@
         @endif
     </section>
 
-    <div><a href="{{ route('portal.status') }}">← Back to my application</a></div>
+    <div class="on-dark"><a href="{{ route('portal.status') }}">← Back to my application</a></div>
 
     <style>
-        .pn-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 16px 24px; border-bottom: 1px solid var(--line-2); }
-        .pn-filter { display: inline-flex; gap: 4px; padding: 4px; background: var(--line-2); border-radius: 10px; }
-        .pn-pill { border: 0; background: transparent; padding: 6px 14px; border-radius: 8px; font-weight: 500; font-size: 14px; color: var(--ink-2); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-        .pn-pill.is-active { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
-        .pn-count { min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--brand); color: #fff; font-size: 12px; font-weight: 600; text-align: center; }
-        .pn-item { display: flex; gap: 14px; padding: 16px 24px; border-bottom: 1px solid var(--line-2); text-decoration: none; color: var(--ink); }
-        .pn-item:hover { background: var(--brand-tint); color: var(--ink); }
-        .pn-item.is-unread { background: #FFFDF6; }
-        .pn-mark { width: 38px; height: 38px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .pn-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 20px; border-bottom: 1px solid var(--line-2); }
+        .pn-filter { display: inline-flex; gap: 4px; padding: 4px; background: rgba(232, 236, 245, .8); border-radius: 12px; }
+        .pn-pill { border: 0; background: transparent; padding: 7px 14px; border-radius: 9px; font-weight: 600; font-size: 14px; color: var(--ink-2); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: background-color .15s ease; }
+        .pn-pill.is-active { background: #fff; color: var(--ink); font-weight: 800; box-shadow: 0 2px 6px rgba(11, 23, 51, .1); }
+        .pn-count { min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--grad); color: #fff; font-size: 12px; font-weight: 700; text-align: center; }
+        .pn-item { display: flex; gap: 14px; padding: 16px 20px; border-bottom: 1px solid var(--line-2); text-decoration: none; color: var(--ink); transition: background-color .15s ease; }
+        .pn-item:hover { background: rgba(238, 241, 255, .8); color: var(--ink); }
+        .pn-item.is-unread { background: rgba(255, 248, 230, .75); }
+        .pn-mark { width: 40px; height: 40px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .pn-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
         .pn-title { font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
         .pn-item:not(.is-unread) .pn-title { font-weight: 500; }
         .pn-msg { color: var(--ink-2); font-size: 14px; line-height: 20px; }
         .pn-meta { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--muted); margin-top: 4px; }
         .pn-stage { padding: 1px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
-        .pn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); display: inline-block; }
+        .pn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); display: inline-block; box-shadow: 0 0 0 3px rgba(242, 181, 68, .25); }
         .pn-empty { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 48px 24px; text-align: center; }
     </style>
 </main>
