@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Login | {{ config('app.name') }}</title>
 
 
-    <link rel="stylesheet" href="{{ asset('admin/assets/img/favicon.png') }}">
-    <link rel="stylesheet" href="{{ asset('admin/assets/img/apple-touch-icon.png') }}">
+    <link rel="icon" href="{{ asset('admin/assets/img/favicon.png') }}">
+    <link rel="apple-touch-icon" href="{{ asset('admin/assets/img/apple-touch-icon.png') }}">
     <link rel="stylesheet" href="{{ asset('admin/assets/css/bootstrap.min.css') }}">
 
     <link rel="stylesheet" href="{{ asset('admin/assets/plugins/icons/feather/feather.css') }}">
