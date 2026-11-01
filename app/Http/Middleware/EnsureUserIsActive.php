@@ -17,9 +17,7 @@ class EnsureUserIsActive
         $user = Auth::user();
 
         if ($user && ($reason = static::blockReason($user))) {
-            Auth::logout();
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
+            UseStudentGuard::signOut($request);
 
             return redirect()->route('admin.login')->with('error', $reason);
         }

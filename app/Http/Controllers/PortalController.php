@@ -16,9 +16,8 @@ class PortalController extends Controller
 {
     public function logout(Request $request)
     {
-        Auth::logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        // Portal sign-out only — a staff login to the admin panel in this browser is kept.
+        \App\Http\Middleware\UseStudentGuard::signOut($request);
 
         return redirect()->route('portal.home');
     }

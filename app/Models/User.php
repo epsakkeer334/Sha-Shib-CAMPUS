@@ -18,6 +18,12 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable, HasRoles, SoftDeletes;
 
     /**
+     * Roles and permissions are defined for the `web` guard only. Pinned here so they keep working on the
+     * admissions portal, which signs users in with the separate `student` guard (UseStudentGuard).
+     */
+    protected $guard_name = 'web';
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var array<int, string>

@@ -13,7 +13,12 @@ class RedirectStudentsToPortal
 {
     public function handle(Request $request, Closure $next)
     {
+        // A student who signed in on the admin login page: move the login to the portal's own guard.
         if (Auth::check() && Auth::user()->hasRole('student')) {
+            $user = Auth::user();
+            Auth::guard(UseStudentGuard::GUARD)->login($user);
+            Auth::guard('web')->logout();
+
             return redirect()->route('portal.status');
         }
 

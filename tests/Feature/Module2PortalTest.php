@@ -74,6 +74,8 @@ class Module2PortalTest extends TestCase
 
     protected function register(array $override = [])
     {
+        // Registration signs the applicant in on the portal's own guard (portal routes use UseStudentGuard).
+        Auth::shouldUse('student');
         $component = Livewire::test(DetailsPage::class);
         foreach ($this->registrationValues($override) as $field => $value) {
             $component->set($field, $value);
@@ -403,8 +405,17 @@ class Module2PortalTest extends TestCase
         $this->register()->assertHasNoErrors();
         $student = Auth::user()->student;
 
+        // A student (signed in on the portal) who opens an admin page is sent back to their application.
         $this->get(route('admin.dashboard'))->assertRedirect(route('portal.status'));
         $this->get(route('admin.students'))->assertRedirect(route('portal.status'));
+        $this->assertNull(Auth::guard('web')->user());
+        $this->get(route('portal.status'))->assertOk();
+
+        // A student who signs in on the *admin* login page is moved over to the portal login.
+        $this->actingAs($student->user, 'web');
+        $this->get(route('admin.dashboard'))->assertRedirect(route('portal.status'));
+        $this->assertNull(Auth::guard('web')->user());
+        $this->assertSame($student->user_id, Auth::guard('student')->id());
 
         // Another student's files are not reachable
         $otherUser = User::create(['name' => 'Other', 'email' => uniqid() . '@mail.test', 'password' => bcrypt('x'), 'institute_id' => $this->inst->id, 'status' => true]);
@@ -415,11 +426,45 @@ class Module2PortalTest extends TestCase
         $doc = $other->documents()->create(['institute_id' => $this->inst->id, 'document_type' => 'kyc_photo', 'file_path' => $path, 'original_name' => 'x.jpg', 'mime_type' => 'image/jpeg', 'size' => 10, 'uploaded_at' => now()]);
         $this->get(route('portal.document', $doc->id))->assertNotFound();
 
-        // Staff are sent to the admin panel
+        // A staff account can never hold the portal login: it is signed out of the portal (only).
         $admin = User::create(['name' => 'Admin', 'email' => uniqid() . '@staff.test', 'password' => bcrypt('x'), 'institute_id' => $this->inst->id, 'status' => true]);
         $admin->assignRole('institute-admin');
-        $this->actingAs($admin);
-        $this->get(route('portal.status'))->assertRedirect(route('admin.dashboard'));
+        $this->actingAs($admin, 'student');
+        $this->get(route('portal.status'))->assertRedirect(route('portal.login'));
+        $this->assertNull(Auth::guard('student')->user());
+    }
+
+    public function test_staff_signed_in_to_admin_can_start_an_application_in_the_same_browser()
+    {
+        $admin = $this->staffUser('institute-admin', $this->inst);
+        $this->actingAs($admin, 'web');
+        $this->get(route('admin.dashboard'))->assertOk();
+
+        // The portal treats the staff member as a visitor: home, "Start your application" and login all open.
+        $this->get(route('portal.home'))->assertOk()->assertSee('Start your application');
+        $this->get(route('portal.register'))->assertOk()->assertSee('Create your login');
+        $this->get(route('portal.login'))->assertOk();
+        $this->get(route('portal.status'))->assertRedirect(route('portal.login'));
+
+        // Submitting signs the applicant in on the portal only — the admin stays signed in.
+        Auth::shouldUse('student');
+        $this->register()->assertHasNoErrors();
+        $applicant = Auth::guard('student')->user();
+        $this->assertTrue($applicant->hasRole('student'));
+        $this->assertSame($admin->id, Auth::guard('web')->id());
+        $this->get(route('portal.status'))->assertOk();
+        $this->get(route('admin.dashboard'))->assertOk();
+
+        // Signing out of the portal keeps the admin login …
+        $this->get(route('portal.logout'))->assertRedirect(route('portal.home'));
+        $this->assertNull(Auth::guard('student')->user());
+        $this->get(route('admin.dashboard'))->assertOk();
+
+        // … and signing out of the admin panel keeps the portal login.
+        $this->actingAs($applicant, 'student');
+        $this->get(route('admin.logout'))->assertRedirect(route('admin.login'));
+        $this->assertNull(Auth::guard('web')->user());
+        $this->get(route('portal.status'))->assertOk();
     }
 
     public function test_portal_login_rules()
@@ -811,8 +856,9 @@ class Module2PortalTest extends TestCase
         $this->assertNotNull($n->fresh()->read_at);
         Livewire::test(\App\Http\Livewire\Portal\NotificationsPage::class)->set('unreadOnly', true)->assertSee('No unread updates');
 
-        // Staff pages stay closed to students
-        $this->get(route('admin.my-notifications'))->assertRedirect();
+        // Staff pages stay closed to students (the admin used above signs out of the admin side first)
+        Auth::guard('web')->logout();
+        $this->get(route('admin.my-notifications'))->assertRedirect(route('portal.status'));
     }
 
     public function test_payment_settings_overview_cards_and_quick_toggle()

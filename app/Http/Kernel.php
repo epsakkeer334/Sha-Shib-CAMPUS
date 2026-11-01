@@ -72,6 +72,7 @@ class Kernel extends HttpKernel
         'track.login.activity' => \App\Http\Middleware\TrackUserLoginActivity::class,
         'active.user' => \App\Http\Middleware\EnsureUserIsActive::class,
         'student' => \App\Http\Middleware\EnsureStudent::class,
+        'portal.guard' => \App\Http\Middleware\UseStudentGuard::class,
         'staff' => \App\Http\Middleware\RedirectStudentsToPortal::class,
     ];
 }

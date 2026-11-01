@@ -61,10 +61,12 @@ class DetailsPage extends Component
 
     public function mount()
     {
+        // Portal (student) login only — a staff member signed in to the admin panel is a visitor here.
         $user = Auth::user();
 
         if ($user && !$user->hasRole('student')) {
-            return redirect()->route('admin.dashboard');
+            Auth::logout();
+            $user = null;
         }
 
         if ($user) {

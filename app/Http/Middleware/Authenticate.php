@@ -15,6 +15,11 @@ class Authenticate extends Middleware
     protected function redirectTo($request)
     {
         if (! $request->expectsJson()) {
+            // Signed in on the admissions portal only (a student): back to their application, not the staff login.
+            if (\Illuminate\Support\Facades\Auth::guard(UseStudentGuard::GUARD)->check()) {
+                return route('portal.status');
+            }
+
             return route('admin.login');
         }
     }

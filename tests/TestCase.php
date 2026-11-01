@@ -2,6 +2,7 @@
 
 namespace Tests;
 
+use Illuminate\Contracts\Auth\Authenticatable as UserContract;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use RuntimeException;
 
@@ -26,5 +27,27 @@ abstract class TestCase extends BaseTestCase
         }
 
         return $app;
+    }
+
+    /**
+     * Sign in on the side the user belongs to, like a real browser: students on the admissions portal
+     * (`student` guard), staff on the admin panel (`web`). Pass a guard to choose explicitly.
+     */
+    public function be(UserContract $user, $guard = null)
+    {
+        $guard ??= method_exists($user, 'hasRole') && $user->hasRole('student') ? 'student' : 'web';
+
+        return parent::be($user, $guard);
+    }
+
+    /**
+     * Like a real request, every test request starts on the default `web` guard; portal routes switch to
+     * `student` themselves (UseStudentGuard). Without this a portal request would leak into the next one.
+     */
+    public function call($method, $uri, $parameters = [], $cookies = [], $files = [], $server = [], $content = null)
+    {
+        $this->app['auth']->shouldUse('web');
+
+        return parent::call($method, $uri, $parameters, $cookies, $files, $server, $content);
     }
 }

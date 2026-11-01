@@ -27,6 +27,7 @@ class AppServiceProvider extends ServiceProvider
         // Re-apply these route middlewares on Livewire action requests, so role/permission
         // checks on a page also protect its buttons (save, delete ...).
         Livewire::addPersistentMiddleware([
+            \App\Http\Middleware\UseStudentGuard::class, // first: portal clicks must read the student login
             \App\Http\Middleware\EnsureUserIsActive::class,
             \App\Http\Middleware\EnsureStudent::class,
             \App\Http\Middleware\RedirectStudentsToPortal::class,

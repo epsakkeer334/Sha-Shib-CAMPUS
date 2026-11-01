@@ -21,12 +21,13 @@ class LoginPage extends Component
 
     public function mount()
     {
+        // Portal (student) login only — a staff member signed in to the admin panel just sees the sign-in form.
         if (Auth::check()) {
             $user = Auth::user();
-
-            return $user->hasRole('student') && $user->student
-                ? redirect()->route(PortalProgress::resumeRoute($user->student))
-                : redirect()->route('admin.dashboard');
+            if ($user->hasRole('student') && $user->student) {
+                return redirect()->route(PortalProgress::resumeRoute($user->student));
+            }
+            Auth::logout();
         }
 
         $this->errorMessage = session('error', '');

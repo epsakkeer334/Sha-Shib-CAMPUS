@@ -20,14 +20,15 @@ class EnsureStudent
             return redirect()->guest(route('portal.login'));
         }
 
+        // Only students can hold the portal login; anything else is signed out of the portal (not of the admin panel).
         if (!$user->hasRole('student')) {
-            return redirect()->route('admin.dashboard');
+            UseStudentGuard::signOut($request);
+
+            return redirect()->guest(route('portal.login'));
         }
 
         if (($reason = EnsureUserIsActive::blockReason($user)) || !$user->student) {
-            Auth::logout();
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
+            UseStudentGuard::signOut($request);
 
             return redirect()->route('portal.login')->with('error', $reason ?? 'No application is linked to this account.');
         }

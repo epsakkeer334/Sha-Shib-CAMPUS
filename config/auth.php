@@ -40,6 +40,13 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        // Admissions portal (/admissions/*). Its own login, so a staff member signed in to the admin
+        // panel and an applicant can both be signed in in the same browser. See UseStudentGuard.
+        'student' => [
+            'driver' => 'session',
+            'provider' => 'users',
+        ],
     ],
 
     /*

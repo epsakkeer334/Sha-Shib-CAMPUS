@@ -30,15 +30,15 @@ Route::get('/admin/login', Login::class)->name('admin.login')->middleware('guest
 Route::get('/admin', fn () => redirect()->route('admin.login'));
 
 Route::get('/logout', function () {
-    Auth::logout();
-    request()->session()->invalidate();
-    request()->session()->regenerateToken();
+    // Admin sign-out only — a student signed in to the admissions portal in this browser stays signed in.
+    \App\Http\Middleware\UseStudentGuard::signOut(request());
 
     return redirect()->route('admin.login');
 })->name('admin.logout');
 
 // Admissions portal (Module 2.6) — student website: register, academic, documents, payment, status
-Route::prefix('admissions')->name('portal.')->group(function () {
+// Uses its own `student` login (portal.guard), independent of a staff login to the admin panel in the same browser.
+Route::prefix('admissions')->name('portal.')->middleware('portal.guard')->group(function () {
     Route::get('/', Portal\HomePage::class)->name('home');
     Route::get('/login', Portal\LoginPage::class)->name('login');
     Route::get('/apply', Portal\DetailsPage::class)->name('register');
