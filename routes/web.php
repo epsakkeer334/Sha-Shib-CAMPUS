@@ -25,7 +25,7 @@ use App\Http\Livewire\Admin;
 use App\Http\Livewire\Portal;
 use App\Http\Controllers\PortalController;
 
-Route::get('/', fn () => redirect()->route('admin.login'));
+Route::get('/', fn () => redirect()->route('portal.home'));
 Route::get('/admin/login', Login::class)->name('admin.login')->middleware('guest');
 Route::get('/admin', fn () => redirect()->route('admin.login'));
 
