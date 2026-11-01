@@ -2,9 +2,11 @@
 
 namespace App\Http\Livewire\Admin\Settings;
 
+use App\Models\Admin\SystemSetting;
+use App\Models\User;
+use App\Support\ArtisanRunner;
 use App\Support\Settings;
 use App\Traits\RecordsAuditTrail;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Mail;
@@ -54,7 +56,16 @@ class SystemSettingsComponent extends Component
     public string $testEmail = '';
     public ?array $testResult = null;
 
+    /** Output of the last cache command run from the System tab. */
+    public ?array $artisanResult = null;
+
     protected $queryString = ['tab' => ['except' => 'general']];
+
+    /** Every button click (Livewire request) is checked again, not only the first page load. */
+    public function hydrate(): void
+    {
+        abort_unless(auth()->user()?->hasRole('super-admin'), 403);
+    }
 
     public function mount(): void
     {
@@ -279,15 +290,76 @@ class SystemSettingsComponent extends Component
 
     public function clearCache(): void
     {
-        try {
-            Artisan::call('cache:clear');
-            Artisan::call('view:clear');
-            Settings::flush();
-            $this->audit('update', 'System Settings', null, ['description' => 'Cleared the application and view cache']);
-            $this->dispatchBrowserEvent('show-toast', ['type' => 'success', 'message' => 'Application and view cache cleared.']);
-        } catch (\Throwable $e) {
-            $this->dispatchBrowserEvent('show-toast', ['type' => 'danger', 'message' => 'Could not clear the cache: ' . Str::limit($e->getMessage(), 120)]);
+        $this->runArtisan(['cache:clear', 'view:clear'], 'Cleared the application and view cache', 'Application and view cache cleared.');
+    }
+
+    /** Same as `php artisan optimize:clear`: config, route, view, event, compiled and application cache. */
+    public function optimizeClear(): void
+    {
+        $this->runArtisan(['optimize:clear'], 'Cleared all caches (optimize:clear)', 'All caches cleared.');
+    }
+
+    /**
+     * Same as `php artisan optimize:clear && php artisan optimize` (config + route cache).
+     * Not view:cache — the unused Breeze views in resources/views/auth reference components that don't exist; views compile on first use.
+     */
+    public function optimizeApp(): void
+    {
+        $this->runArtisan(['optimize:clear', 'optimize'],'Cleared and rebuilt caches (optimize)', 'Caches cleared and rebuilt — the site is optimised.');
+    }
+
+    /** Runs the commands in order, stops at the first failure and shows their output in the Cache card. */
+    protected function runArtisan(array $commands, string $auditText, string $successText): void
+    {
+        $lines = [];
+        $ok = true;
+        foreach ($commands as $command) {
+            $lines[] = '$ php artisan ' . $command;
+            try {
+                [$code, $out] = app(ArtisanRunner::class)->run($command);
+                $lines[] = $out !== '' ? $out : ($code === 0 ? 'Done.' : '');
+                if ($code !== 0) {
+                    $ok = false;
+                    $lines[] = "Stopped: the command ended with code {$code}.";
+                    break;
+                }
+            } catch (\Throwable $e) {
+                $ok = false;
+                $lines[] = 'Error: ' . Str::limit($e->getMessage(), 300);
+                break;
+            }
         }
+        Settings::flush();
+
+        $this->artisanResult = ['ok' => $ok, 'output' => implode("\n", $lines)];
+        $this->audit('update', 'System Settings', null, ['description' => $auditText . ($ok ? '' : ' (failed)')]);
+        $this->dispatchBrowserEvent('show-toast', $ok
+            ? ['type' => 'success', 'message' => $successText]
+            : ['type' => 'danger', 'message' => 'The command failed — see the output in the Cache card.']);
+    }
+
+    protected function cacheStatus(): array
+    {
+        $views = glob(rtrim((string) config('view.compiled'), '/\\') . DIRECTORY_SEPARATOR . '*.php') ?: [];
+
+        return [
+            ['Config', app()->configurationIsCached()],
+            ['Routes', app()->routesAreCached()],
+            ['Events', app()->eventsAreCached()],
+            ['Views', count($views) > 0, count($views) . ' compiled'],
+        ];
+    }
+
+    /** "Last change 2 hours ago by …" in the page header. */
+    protected function lastChange(): ?array
+    {
+        try {
+            $row = SystemSetting::query()->latest('updated_at')->first();
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        return $row ? ['at' => $row->updated_at, 'by' => optional(User::find($row->updated_by))->name] : null;
     }
 
     protected function systemInfo(): array
@@ -326,7 +398,8 @@ class SystemSettingsComponent extends Component
                 ['bootstrap/cache', $cacheWritable ? 'Writable' : 'Not writable', $cacheWritable ? 'ok' : 'bad', null],
                 ['Public storage link', File::exists(public_path('storage')) ? 'Linked' : 'Missing', File::exists(public_path('storage')) ? 'ok' : 'warn', File::exists(public_path('storage')) ? null : 'Run: php artisan storage:link'],
             ],
-            'disk' => $total ? ['free' => $free, 'total' => $total, 'used_pct' => round(100 - $free / $total * 100)] : null,
+            'cache' => $this->cacheStatus(),
+            'disk' => $total ?['free' => $free, 'total' => $total, 'used_pct' => round(100 - $free / $total * 100)] : null,
         ];
     }
 
@@ -341,6 +414,7 @@ class SystemSettingsComponent extends Component
             'stages' => config('workflow_notifications.stages', []),
             'emailLive' => Settings::emailEnabled(),
             'info' => $this->tab === 'system' ? $this->systemInfo() : null,
+            'lastChange' => $this->lastChange(),
         ])->layout('layouts.admin.master');
     }
 }

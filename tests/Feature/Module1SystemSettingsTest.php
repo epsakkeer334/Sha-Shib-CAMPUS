@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Services\AppNotifier;
 use App\Services\MenuService;
 use App\Services\NotificationService;
+use App\Support\ArtisanRunner;
 use App\Support\Settings;
 use Database\Seeders\admin\MasterDataSeeder;
 use Database\Seeders\admin\RoleSeeder;
@@ -219,5 +220,39 @@ class Module1SystemSettingsTest extends TestCase
 
         Settings::applyRuntimeConfig();
         $this->assertSame(45, config('session.lifetime'));
+    }
+
+    public function test_optimize_buttons_run_artisan_and_show_output(): void
+    {
+        // Mocked: a real optimize would write bootstrap/cache/config.php during the test run.
+        $runner = $this->mock(ArtisanRunner::class);
+        $runner->shouldReceive('run')->once()->with('optimize:clear')->andReturn([0, 'config … DONE'])->ordered();
+        $runner->shouldReceive('run')->once()->with('optimize')->andReturn([1, 'Route [x] already in use.'])->ordered();
+
+        $page = Livewire::actingAs($this->super)->test(SystemSettingsComponent::class)->set('tab', 'system')
+            ->assertSee('Clear all caches')->assertSee('Clear &amp; optimise', false)->assertSee('waiting for a command')
+            ->assertSee('Deploy checklist')->assertSee('to review below')->assertSee('Set APP_ENV=production on the live server')
+            ->call('optimizeApp')
+            ->assertSet('artisanResult.ok', false)->assertDontSee('waiting for a command')
+            ->assertSee('php artisan optimize:clear')->assertSee('<span class="t-ok">DONE</span>', false)
+            ->assertSee('Route [x] already in use.')->assertSee('ended with code 1')
+            ->assertDispatchedBrowserEvent('show-toast', fn ($e, $d) => $d['type'] === 'danger');
+
+        $audit = AuditTrail::where('module', 'System Settings')->latest('id')->first();
+        $this->assertSame('Cleared and rebuilt caches (optimize) (failed)', $audit->meta['description']);
+        $this->assertSame($this->super->id, $audit->user_id);
+
+        $runner->shouldReceive('run')->once()->with('optimize:clear')->andReturn([0, ''])->ordered();
+        $page->call('optimizeClear')->assertSet('artisanResult.ok', true)->assertSee('Done.');
+
+        // A user who loses Super Admin can't keep using an open page.
+        $this->super->removeRole('super-admin');
+        $page->call('optimizeClear')->assertForbidden();
+    }
+
+    public function test_build_commands_run_as_a_separate_process(): void
+    {
+        $this->assertSame(['optimize', 'config:cache', 'route:cache', 'event:cache'], ArtisanRunner::SEPARATE_PROCESS);
+        $this->assertNotContains('optimize:clear', ArtisanRunner::SEPARATE_PROCESS);
     }
 }

@@ -71,6 +71,9 @@ return [
 
     'timezone' => 'Asia/Kolkata',
 
+    // CLI php for System Settings ▸ Optimise (found automatically when empty).
+    'php_cli_binary' => env('PHP_CLI_BINARY'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration

@@ -35,6 +35,12 @@ class AppServiceProvider extends ServiceProvider
         ]);
 
         // System Settings → SMTP mailer, session lifetime (falls back to .env / config when not set).
-        \App\Support\Settings::applyRuntimeConfig();
+        // Skipped while `config:cache` / `optimize` builds the cache, so the decrypted SMTP password
+        // is never written into bootstrap/cache/config.php (it is applied on every request instead).
+        $buildingConfigCache = $this->app->runningInConsole()
+            && in_array($_SERVER['argv'][1] ?? null, ['config:cache', 'optimize'], true);
+        if (!$buildingConfigCache) {
+            \App\Support\Settings::applyRuntimeConfig();
+        }
     }
 }
