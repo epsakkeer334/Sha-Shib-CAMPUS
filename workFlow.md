@@ -138,6 +138,7 @@ The side menu is built from a role × permission matrix (`config/menu.php`). An 
 | Admissions | Onboarding ▸ **ER & ID Cards** | ✓ | ✓ | – | ✓ | – |
 | Administration | Users & Permissions ▸ **Users** | ✓ (all) | ✓ (own institute) | – | – | – |
 | Administration | Users & Permissions ▸ **Roles & Permissions** | ✓ only | – | – | – | – |
+| Administration | System ▸ **System Settings** (theme, email on/off + SMTP, notifications, admissions open/closed, server health) | ✓ only | – | – | – | – |
 | Administration | System ▸ **Serial Numbers** | ✓ only | – | – | – | – |
 | Administration | Monitoring ▸ **Audit Trail**, **Notification Log** | ✓ | ✓ (own) | – | – | – |
 | Header | Notification bell + **My Notifications** page | ✓ | ✓ | ✓ | ✓ | ✓ |

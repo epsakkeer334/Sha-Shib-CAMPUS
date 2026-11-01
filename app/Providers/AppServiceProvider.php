@@ -33,5 +33,8 @@ class AppServiceProvider extends ServiceProvider
             \Spatie\Permission\Middleware\RoleMiddleware::class,
             \Spatie\Permission\Middleware\PermissionMiddleware::class,
         ]);
+
+        // System Settings → SMTP mailer, session lifetime (falls back to .env / config when not set).
+        \App\Support\Settings::applyRuntimeConfig();
     }
 }

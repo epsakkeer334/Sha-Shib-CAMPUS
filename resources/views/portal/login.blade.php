@@ -16,7 +16,9 @@
         </label>
         <button type="submit" class="btn btn-primary" wire:loading.attr="disabled">Sign in</button>
         <p class="muted" style="margin: 0; font-size: 14px;">
-            New here? <a href="{{ route('portal.register') }}" style="font-weight: 600;">Start your application</a>.
+            @if(\App\Support\Settings::bool('portal.registration_open'))
+                New here? <a href="{{ route('portal.register') }}" style="font-weight: 600;">Start your application</a>.
+            @endif
             Forgot your password? Contact the admissions office.
         </p>
     </form>

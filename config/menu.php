@@ -199,6 +199,7 @@ return [
                 'label' => 'System',
                 'icon' => 'ti ti-settings',
                 'children' => [
+                    ['label' => 'System Settings', 'icon' => 'ti ti-adjustments-horizontal', 'route' => 'admin.settings', 'roles' => ['super-admin']],
                     ['label' => 'Serial Numbers', 'icon' => 'ti ti-123', 'route' => 'admin.serials', 'permission' => 'serials.manage', 'roles' => ['super-admin']],
                 ],
             ],

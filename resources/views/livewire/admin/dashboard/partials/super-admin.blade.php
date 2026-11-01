@@ -213,7 +213,9 @@
                         <div><span>Pending</span><b class="text-warning">{{ $N['pending'] }}</b></div>
                         <div><span>Failed</span><b class="text-danger">{{ $N['failed'] }}</b></div>
                     </div>
-                    <div class="db-row-sub mt-2"><i class="ti ti-info-circle"></i> Email sending is switched off until SMTP2GO is set up.</div>
+                    @unless(\App\Support\Settings::emailEnabled())
+                        <div class="db-row-sub mt-2"><i class="ti ti-info-circle"></i> Email sending is switched off — turn it on under <a href="{{ route('admin.settings', ['tab' => 'email']) }}">System Settings → Email</a>.</div>
+                    @endunless
                 </div>
             </div>
         </div>

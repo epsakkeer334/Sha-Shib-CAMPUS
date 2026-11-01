@@ -3,14 +3,24 @@
     <section style="background: #fff; border-bottom: 1px solid var(--line);">
         <div style="max-width: 1120px; margin: 0 auto; padding: 72px 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 48px; align-items: center;">
             <div style="display: flex; flex-direction: column; gap: 20px;">
-                <span class="badge b-ok" style="align-self: flex-start; height: 28px; font-weight: 600;">Admissions open · {{ now()->year }} batch</span>
+                @php $admissionsOpen = \App\Support\Settings::bool('portal.registration_open'); @endphp
+                @if($admissionsOpen)
+                    <span class="badge b-ok" style="align-self: flex-start; height: 28px; font-weight: 600;">Admissions open · {{ now()->year }} batch</span>
+                @else
+                    <span class="badge" style="align-self: flex-start; height: 28px; font-weight: 600; background: var(--warn-bg); color: var(--warn);">Admissions closed</span>
+                @endif
                 <h1 class="serif" style="font-size: 48px; line-height: 56px; font-weight: 600; text-wrap: balance;">Apply for admission online</h1>
                 <p style="margin: 0; font-size: 18px; line-height: 28px; color: var(--ink-2); max-width: 560px;">
                     Fill in your details, upload your documents and pay your fees from home. Our admissions team verifies everything and issues your ER number.
                 </p>
+                @unless($admissionsOpen)
+                    <p style="margin: 0; padding: 12px 16px; border-radius: 10px; background: var(--warn-bg); color: var(--warn); font-size: 15px;">{{ setting('portal.closed_message') }}</p>
+                @endunless
                 <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                    <a href="{{ route('portal.register') }}" class="btn btn-primary">Start your application</a>
-                    <a href="{{ route('portal.login') }}" class="btn btn-secondary">Continue an application</a>
+                    @if($admissionsOpen)
+                        <a href="{{ route('portal.register') }}" class="btn btn-primary">Start your application</a>
+                    @endif
+                    <a href="{{ route('portal.login') }}" class="btn {{ $admissionsOpen ? 'btn-secondary' : 'btn-primary' }}">Continue an application</a>
                 </div>
             </div>
             <aside style="background: var(--bg); border: 1px solid var(--line); border-radius: 16px; padding: 28px; display: flex; flex-direction: column; gap: 16px;">

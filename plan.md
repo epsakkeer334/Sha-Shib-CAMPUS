@@ -175,6 +175,18 @@ Roles via spatie tables (`2025_11_26_064444_create_permission_tables`).
 | error | text nullable |  |
 | sent_at | timestamp nullable |  |
 
+#### System Settings (Super Admin) ✅ built
+Administration ▸ System ▸ **System Settings** (`admin.settings`, role `super-admin` only). One table `system_settings` (key unique, value JSON, updated_by); read through `App\Support\Settings` (cached, defaults in `Settings::DEFAULTS`, so a missing row or table behaves as before) and the `setting('key')` helper. Every save is written to the audit trail (SMTP password masked).
+
+| Tab | Settings | Effect |
+|---|---|---|
+| General | system name, organisation, support email / phone, address, footer text | browser title, admin footer, email sender name |
+| Appearance | primary colour (7 presets + custom), sidebar, top bar, light / dark, page loader, "let users change their own theme" | admin layout writes the theme into the template's localStorage keys before `theme-script.js`; customiser gear hidden unless allowed |
+| Email | **send emails on / off** (default off), SMTP host / port / encryption / username / password (encrypted) / from; quick-fill SMTP2GO, GoDaddy, Gmail, Microsoft 365; **send test email** | `NotificationService` sends only when on and complete, otherwise logs `pending` |
+| Notifications | in-app master switch, staff / students, each workflow event on / off | `AppNotifier` skips what is switched off |
+| Admissions | accept new applications, closed message | portal hides "Start your application"; `/admissions/apply` redirects home; existing applicants unaffected |
+| System | session timeout; server health (env, debug, PHP, DB, storage, disk); clear cache | `session.lifetime` set at boot |
+
 ---
 
 ### Module 1A — Master Data (Super Admin only)

@@ -11,15 +11,50 @@
         @php
             $role = auth()->check() ? auth()->user()->getRoleNames()->first() : 'Guest';
         @endphp
-        {{ ucfirst($role) }} / {{ config('app.name') }}
+        {{ ucfirst($role) }} / {{ setting('general.site_name') ?: config('app.name') }}
     </title>
 
 	<!-- Favicon -->
 	<link rel="shortcut icon" type="image/x-icon" href="{{ asset('admin/assets/img/favicon.png') }}">
 	<!-- Apple Touch Icon -->
 	<link rel="apple-touch-icon" sizes="180x180" href="{{ asset('admin/assets/img/apple-touch-icon.png') }}">
+	{{-- System Settings → Appearance. theme-script.js reads the theme from localStorage, so the
+	     system theme is written there first: always when users may not customise, otherwise once
+	     per saved theme (version) so a new system theme still reaches everyone. --}}
+	@php $sysTheme = \App\Support\Settings::theme(); @endphp
+	<script>
+	(function (t) {
+		try {
+			var ls = window.localStorage;
+			if (!t.allowUser || ls.getItem('campThemeVersion') !== t.version) {
+				ls.setItem('theme', t.mode);
+				t.mode === 'dark' ? ls.setItem('darkMode', 'enabled') : ls.removeItem('darkMode');
+				ls.setItem('sidebarTheme', t.sidebar);
+				ls.setItem('topbar', t.topbar);
+				ls.setItem('loader', t.loader);
+				ls.setItem('layout', 'default');
+				['sidebarRGB', 'topbarRGB', 'topbarcolorRGB', 'sidebarBg', 'topbarbg', 'topbarcolor'].forEach(function (k) { ls.removeItem(k); });
+				if (t.color) { ls.setItem('color', t.color); ls.removeItem('primaryRGB'); }
+				else { ls.removeItem('color'); ls.setItem('primaryRGB', t.rgb); }
+				ls.setItem('campThemeVersion', t.version);
+			}
+		} catch (e) {
+			// Storage blocked: fall back to the attributes below.
+			var h = document.documentElement;
+			h.setAttribute('data-theme', t.mode); h.setAttribute('data-sidebar', t.sidebar); h.setAttribute('data-topbar', t.topbar);
+			if (t.color) { h.setAttribute('data-color', t.color); } else { h.setAttribute('data-color', 'all'); h.style.setProperty('--primary-rgb', t.rgb); }
+		}
+	})(@json($sysTheme));
+	</script>
+	@unless($sysTheme['allowUser'])
+		<style>.sidebar-contact, #theme-setting { display: none !important; }</style>
+	@endunless
 	<!-- Theme Script js -->
 	<script src="{{ asset('admin/assets/js/theme-script.js') }}"></script>
+	<script>
+	// A custom (picker) colour: apply it before first paint, so the page never flashes the default orange.
+	(function (h) { try { var c = localStorage.getItem('primaryRGB'); if (c && !localStorage.getItem('color')) { h.setAttribute('data-color', 'all'); h.style.setProperty('--primary-rgb', c); } } catch (e) {} })(document.documentElement);
+	</script>
 	<!-- Bootstrap CSS -->
 	<link rel="stylesheet" href="{{ asset('admin/assets/css/bootstrap.min.css') }}">
 	<!-- Feather CSS -->

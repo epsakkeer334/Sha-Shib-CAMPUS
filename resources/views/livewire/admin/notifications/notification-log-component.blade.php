@@ -30,7 +30,7 @@
 
     @if(($statusCounts['pending'] ?? 0) > 0 && $filterStatus !== 'pending')
         <div class="nl-note mb-3"><i class="ti ti-info-circle"></i>
-            <span>{{ number_format($statusCounts['pending']) }} {{ \Illuminate\Support\Str::plural('message', $statusCounts['pending']) }} not sent yet — email sending is switched off until the mail service (SMTP2GO) is set up, and SMS until a gateway is chosen.</span>
+            <span>{{ number_format($statusCounts['pending']) }} {{ \Illuminate\Support\Str::plural('message', $statusCounts['pending']) }} not sent yet — {{ \App\Support\Settings::emailEnabled() ? 'they were queued before email sending was switched on' : 'email sending is switched off in System Settings → Email' }}, and SMS waits until a gateway is chosen.</span>
         </div>
     @endif
 

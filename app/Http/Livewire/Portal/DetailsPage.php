@@ -89,6 +89,11 @@ class DetailsPage extends Component
             }
             PortalProgress::remember($student, 'details');
         } else {
+            // System Settings → Admissions: new registrations closed (existing applicants still log in)
+            if (!\App\Support\Settings::bool('portal.registration_open')) {
+                return redirect()->route('portal.home');
+            }
+
             $this->joining_date = now()->toDateString();
         }
 
@@ -133,6 +138,7 @@ class DetailsPage extends Component
     protected function register(bool $payNow)
     {
         abort_if(Auth::check(), 403);
+        abort_unless(\App\Support\Settings::bool('portal.registration_open'), 403, 'Admissions are closed.');
 
         $rules = array_merge(StudentRules::basic($this->values()), StudentRules::address($this->values()), [
             'email' => ['required', 'email', 'max:255', Rule::unique('students', 'email'), Rule::unique('users', 'email')],

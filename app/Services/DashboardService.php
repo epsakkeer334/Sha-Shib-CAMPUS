@@ -418,7 +418,7 @@ class DashboardService
             [$offeringsWithoutFees === 0, $offeringsWithoutFees === 0 ? 'Every course has a fee structure' : $offeringsWithoutFees . ' course offerings without fees', 'Set them up under Fee Structure', 'admin.onboarding.fee-structure'],
             [$withoutPayments->isEmpty(), $withoutPayments->isEmpty() ? 'Payment methods set for every institute' : $withoutPayments->count() . ' without payment methods', $withoutPayments->pluck('name')->take(3)->implode(', '), 'admin.institute-payment-settings'],
             [(bool) $currentYear, $currentYear ? 'Academic year ' . $currentYear->name . ' is set up' : 'No academic year covers today', 'Master Data → Academic Years', 'admin.masters.academic-years'],
-            [false, 'Email sending is switched off', 'Pending the SMTP2GO mail service', 'admin.notifications'],
+            [\App\Support\Settings::emailEnabled(), \App\Support\Settings::emailEnabled() ? 'Email sending is on' : 'Email sending is switched off', 'System Settings → Email', 'admin.settings'],
         ];
     }
 

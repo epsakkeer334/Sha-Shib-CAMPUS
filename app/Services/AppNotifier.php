@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Admin\Student;
 use App\Models\User;
 use App\Notifications\WorkflowNotification;
+use App\Support\Settings;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
@@ -38,7 +39,7 @@ class AppNotifier
                 'actor' => optional($actor)->name,
             ];
 
-            if (!empty($config['staff']) && $only !== 'student') {
+            if (!empty($config['staff']) && $only !== 'student' && Settings::notificationAllowed($event, 'staff')) {
                 $staff = $this->staffRecipients($student, $config['staff'])->reject(fn ($u) => $actor && $u->id === $actor->id);
                 if ($staff->isNotEmpty()) {
                     $data = $this->payload($event, $config, $student, $vars, 'staff');
@@ -46,7 +47,7 @@ class AppNotifier
                 }
             }
 
-            if (!empty($config['student']) && $only !== 'staff' && $student->user_id && (!$actor || $actor->id !== $student->user_id)) {
+            if (!empty($config['student']) && $only !== 'staff' && Settings::notificationAllowed($event, 'student') && $student->user_id && (!$actor || $actor->id !== $student->user_id)) {
                 $user = User::where('status', true)->find($student->user_id);
                 if ($user) {
                     $this->deliver($user, $this->payload($event, $config, $student, $vars, 'student'));

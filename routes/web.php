@@ -79,6 +79,7 @@ Route::prefix('admin')->middleware(['auth', 'staff', 'active.user'])->group(func
     Route::get('/institutes/{institute}/users', UsersComponent::class)->name('admin.institute-users.institute')->middleware('permission:users.view');
     Route::get('/users', UsersComponent::class)->name('admin.users')->middleware('permission:users.view');
     Route::get('/roles', RolesComponent::class)->name('admin.roles')->middleware('role:super-admin');
+    Route::get('/settings', Admin\Settings\SystemSettingsComponent::class)->name('admin.settings')->middleware('role:super-admin');
     Route::get('/audit-trail', AuditTrailComponent::class)->name('admin.audit-trail')->middleware('permission:audit.view');
     Route::get('/notifications', NotificationLogComponent::class)->name('admin.notifications')->middleware('permission:notifications.view');
 

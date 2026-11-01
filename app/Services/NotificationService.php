@@ -3,13 +3,15 @@
 namespace App\Services;
 
 use App\Models\Admin\NotificationLog;
+use App\Support\Settings;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Mail;
 
 /**
  * Sends CAMP notifications and records every attempt in notifications_log.
- * Email: sending is commented out until the SMTP2GO mail service is set up (search "SMTP2GO");
- * emails are logged as pending. SMS is logged as pending until a gateway is chosen (plan.md open question 3).
+ * Email: sent only when System Settings → Email is switched on and the SMTP details are filled in
+ * (App\Support\Settings::emailEnabled); otherwise it is logged as pending so it can be re-sent later.
+ * SMS is logged as pending until a gateway is chosen (plan.md open question 3).
  */
 class NotificationService
 {
@@ -47,16 +49,19 @@ class NotificationService
             return;
         }
 
-        // SMTP2GO: email sending is switched off until the SMTP2GO mail service is purchased and set up.
-        // The email stays in notifications_log as "pending" so it is visible (and can be re-sent later).
-        // To go live: set the SMTP2GO MAIL_* values in .env, then uncomment the block below and remove the line after it.
-        //
-        // try {
-        //     Mail::raw($message, fn ($mail) => $mail->to($log->recipient)->subject($subject));
-        //     $log->update(['status' => 'sent', 'sent_at' => now()]);
-        // } catch (\Throwable $e) {
-        //     $log->update(['status' => 'failed', 'error' => $e->getMessage()]);
-        // }
-        $log->update(['error' => 'Email not sent: mail service (SMTP2GO) not set up yet.']);
+        // Switched off (default) or SMTP not filled in: keep it in notifications_log as "pending".
+        if (!Settings::emailEnabled()) {
+            $log->update(['error' => 'Email not sent: email sending is switched off in System Settings.']);
+            return;
+        }
+
+        try {
+            Settings::applyRuntimeConfig();
+            Settings::refreshMailer();
+            Mail::raw($message, fn ($mail) => $mail->to($log->recipient)->subject($subject));
+            $log->update(['status' => 'sent', 'sent_at' => now(), 'error' => null]);
+        } catch (\Throwable $e) {
+            $log->update(['status' => 'failed', 'error' => mb_substr($e->getMessage(), 0, 500)]);
+        }
     }
 }

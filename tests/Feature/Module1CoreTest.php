@@ -296,7 +296,8 @@ class Module1CoreTest extends TestCase
         $this->assertSame(['Students', 'Onboarding'], array_column($groups['Admissions']['items'], 'label'));
         $this->assertSame(['Document Verification', 'Payment Verification', 'ER & ID Cards'], array_column($groups['Admissions']['items'][1]['children'], 'label'));
         $this->assertSame(['Dashboard', 'Master Data'], array_column($groups['Main']['items'], 'label')); // Master Data at the top
-        $this->assertSame(['Users & Permissions', 'Monitoring'], array_column($groups['Administration']['items'], 'label')); // System: no page built yet
+        $this->assertSame(['Users & Permissions', 'System', 'Monitoring'], array_column($groups['Administration']['items'], 'label'));
+        $this->assertSame(['System Settings'], array_column($groups['Administration']['items'][1]['children'], 'label'));
         $group = $groups['Administration']['items'][0];
         $this->assertSame(['Users', 'Roles & Permissions'], array_column($group['children'], 'label'));
 

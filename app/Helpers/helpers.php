@@ -32,3 +32,13 @@ if (!function_exists('money_inr')) {
         return ($negative ? '-' : '') . '₹' . $grouped . ($decimals ? '.' . $fraction : '');
     }
 }
+
+if (!function_exists('setting')) {
+    /**
+     * A System Settings value (Super Admin → System Settings), e.g. setting('general.site_name').
+     */
+    function setting(string $key, $default = null)
+    {
+        return \App\Support\Settings::get($key, $default);
+    }
+}
