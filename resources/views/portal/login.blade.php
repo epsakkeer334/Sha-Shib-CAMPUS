@@ -52,7 +52,7 @@
             <label style="display: flex; align-items: center; gap: 10px; min-height: 40px; cursor: pointer; font-size: 14.5px; color: var(--ink-2);">
                 <input type="checkbox" wire:model.defer="remember"> <span>Keep me signed in on this device</span>
             </label>
-            <button type="submit" class="btn btn-primary" style="width: 100%; min-height: 54px; font-size: 16px;" wire:loading.attr="disabled" wire:target="login">
+            <button type="submit" class="btn btn-primary" style="width: 100%; min-height: 54px; font-size: 16px;" wire:loading.attr="disabled" wire:target="login" data-one-request>
                 <span wire:loading.remove wire:target="login">Sign in</span>
                 <span wire:loading wire:target="login"><span class="spin"></span> Signing in…</span>
             </button>

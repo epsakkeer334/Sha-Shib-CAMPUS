@@ -136,9 +136,9 @@
                     <a href="{{ route('portal.academic') }}" class="btn btn-primary">Next</a>
                 @else
                     @if($student && $student->dues()->exists() && \App\Support\PortalProgress::paymentUnlocked($student))
-                        <button type="button" class="btn btn-secondary" wire:click="saveAndPay" wire:loading.attr="disabled">Save and pay now</button>
+                        <button type="button" class="btn btn-secondary" wire:click="saveAndPay" wire:loading.attr="disabled" wire:target="save,saveAndPay">Save and pay now</button>
                     @endif
-                    <button type="submit" class="btn btn-primary" wire:loading.attr="disabled">
+                    <button type="submit" class="btn btn-primary" wire:loading.attr="disabled" wire:target="save,saveAndPay">
                         <span wire:loading.remove wire:target="save">Save and continue <svg class="arrow" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align: -4px;"><path d="M4 10 H16 M11 5 L16 10 L11 15"></path></svg></span>
                         <span wire:loading wire:target="save"><span class="spin"></span> Saving…</span>
                     </button>

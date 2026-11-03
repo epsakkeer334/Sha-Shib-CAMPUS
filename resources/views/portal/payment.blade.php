@@ -190,7 +190,7 @@
                         @error('proof')<span class="error">{{ $message }}</span>@enderror
 
                         <p style="margin: 0; font-size: 14px; color: var(--ink-2);">Our Accounts team will confirm the transfer, usually within one working day. Your receipt appears below once it’s confirmed.</p>
-                        <button type="submit" class="btn btn-primary" style="align-self: flex-start;" wire:loading.attr="disabled" wire:target="pay,proof">
+                        <button type="submit" class="btn btn-primary" style="align-self: flex-start;" wire:loading.attr="disabled" wire:target="pay,proof" data-one-request>
                             <span wire:loading.remove wire:target="pay">Submit payment <svg class="arrow" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align: -4px;"><path d="M4 10 H16 M11 5 L16 10 L11 15"></path></svg></span>
                             <span wire:loading wire:target="pay"><span class="spin"></span> Submitting…</span>
                         </button>
@@ -239,7 +239,7 @@
                 <p>{{ $confirmInfo['text'] }}</p>
                 <div class="p-modal-actions">
                     <button type="button" class="btn btn-secondary" wire:click="closeConfirm">Cancel</button>
-                    <button type="button" class="btn {{ $confirmInfo['tone'] === 'danger' ? 'btn-danger' : 'btn-primary' }}" wire:click="confirmed" wire:loading.attr="disabled">{{ $confirmInfo['button'] }}</button>
+                    <button type="button" class="btn {{ $confirmInfo['tone'] === 'danger' ? 'btn-danger' : 'btn-primary' }}" wire:click="confirmed" wire:loading.attr="disabled" wire:target="confirmed">{{ $confirmInfo['button'] }}</button>
                 </div>
             </div>
         </div>

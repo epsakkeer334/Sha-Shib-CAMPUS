@@ -288,6 +288,12 @@
         @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
         @keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
+        /* top progress bar (saving / next page loading) */
+        #p-progress { position: fixed; top: 0; left: 0; z-index: 70; height: 3px; width: 0; opacity: 0; pointer-events: none;
+            background: linear-gradient(90deg, #F2B544, #6A3FD9, #3B4FE0); box-shadow: 0 0 10px rgba(106, 63, 217, .7); }
+        #p-progress.on { opacity: 1; width: 82%; transition: width 6s cubic-bezier(.1, .7, .2, 1), opacity .15s ease; }
+        #p-progress.done { opacity: 0; width: 100%; transition: width .2s ease, opacity .3s ease .15s; }
+
         /* toast */
         #portal-toasts { position: fixed; top: 84px; right: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; max-width: min(380px, calc(100vw - 32px)); }
         .p-toast { background: rgba(11, 23, 51, .92); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); color: #fff; padding: 13px 16px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, .14); box-shadow: 0 14px 36px rgba(0, 0, 0, .3); font-size: 14px; font-weight: 600; animation: toastIn .35s var(--ease); }
@@ -375,6 +381,7 @@
 </div>
 <style>@media (max-width: 760px) { [data-signout-sm] { display: inline-flex !important; } }</style>
 
+<div id="p-progress" aria-hidden="true"></div>
 <div id="portal-toasts" aria-live="polite"></div>
 @livewireScripts
 <script>
@@ -410,6 +417,86 @@
         document.activeElement.blur();
         setTimeout(function () { window.location = link.href; }, 700);
     });
+    // Action buttons (Save, Submit …): keep focus in the field being edited until the click itself, so the
+    // field's value and the action reach the server in ONE request (Livewire batches them). Without this the
+    // field is sent on mouse-down and the action only after that round trip — slower, and easy to "lose".
+    document.addEventListener('mousedown', function (e) {
+        var btn = e.target.closest('.actionbar button, [data-one-request]');
+        var field = document.activeElement;
+        if (btn && field && field.matches('input:not([type=file]), select, textarea')) e.preventDefault();
+    });
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.actionbar button, [data-one-request]');
+        var field = document.activeElement;
+        if (btn && field && field.matches('input:not([type=file]), select, textarea')) field.blur();
+    }, true);
+
+    // Slim progress bar at the top while saving and while the next page loads.
+    (function () {
+        var bar = document.getElementById('p-progress'), timer = null, busy = 0;
+        function start(delay) {
+            clearTimeout(timer);
+            timer = setTimeout(function () { bar.className = 'on'; }, delay);
+        }
+        function done() {
+            clearTimeout(timer);
+            if (bar.className === 'on') { bar.className = 'done'; setTimeout(function () { if (!busy) bar.className = ''; }, 350); }
+        }
+        document.addEventListener('livewire:load', function () {
+            // Only for the action buttons (Save and continue, Submit, Pay, Sign in) — not for typing or
+            // choosing from a dropdown, which update quietly in the background.
+            var isAction = function (message) {
+                return (message.updateQueue || []).some(function (u) {
+                    return u.type === 'callMethod' && /^(save|saveAndPay|submit|pay|login|confirmed)$/.test(u.method || (u.payload && u.payload.method) || '');
+                });
+            };
+            Livewire.hook('message.sent', function (message) { if (isAction(message)) { message._bar = true; busy++; start(150); } });
+            Livewire.hook('message.failed', function (message) { if (!message._bar) return; busy = Math.max(0, busy - 1); if (!busy) done(); });
+            Livewire.hook('message.received', function (message) {
+                if (!message._bar) return;
+                busy = Math.max(0, busy - 1);
+                // a redirect follows: keep the bar running until the next page appears
+                var r = message.response && message.response.effects && message.response.effects.redirect;
+                if (r) { start(0); return; }
+                if (!busy) done();
+            });
+        });
+        // safety: never leave the bar running (e.g. a redirect to a page that opens elsewhere)
+        setInterval(function () { if (bar.className === 'on' && !busy && !document.hidden) { setTimeout(function () { if (!busy) done(); }, 8000); } }, 8000);
+
+        window.addEventListener('pageshow', function () { busy = 0; done(); bar.className = ''; });
+    })();
+
+    // Missing / wrong fields after Save, Submit or Pay: move the page to the first one and put the
+    // cursor in it (the message shows under the field itself).
+    (function () {
+        function firstError(root) {
+            var err = root.querySelector('.error');
+            if (!err) return null;
+            var box = err.closest('.field') || err.closest('.elig-mark') || err.parentElement;
+            return { box: box, input: box.querySelector('.input, select, textarea, input:not([type=hidden])') };
+        }
+        function jump(item) {
+            var top = item.box.getBoundingClientRect().top + window.pageYOffset - 100;
+            window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+            if (item.input) setTimeout(function () { item.input.focus({ preventScroll: true }); }, 400);
+        }
+        document.addEventListener('livewire:load', function () {
+            var acted = false;
+            Livewire.hook('message.sent', function (message) {
+                acted = (message.updateQueue || []).some(function (u) { return u.type === 'callMethod' && /^(save|saveAndPay|submit|pay|login)$/.test(u.method || (u.payload && u.payload.method) || ''); });
+            });
+            Livewire.hook('message.processed', function (message, component) {
+                if (!acted) return;
+                acted = false;
+                var item = firstError(component.el);
+                if (item) { jump(item); return; }
+                var alert = component.el.querySelector('.notice.danger[role="alert"]');
+                if (alert) alert.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+        });
+    })();
+
     // Copy buttons: <button data-copy="text">
     document.addEventListener('click', function (e) {
         var btn = e.target.closest('[data-copy]');
