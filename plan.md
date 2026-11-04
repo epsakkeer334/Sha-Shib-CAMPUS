@@ -77,7 +77,7 @@ Only Super Admin adds/edits institutes. Students are created by Module 2 (onboar
 
 **Side menu** ✅ — role × menu matrix in `config/menu.php`, rendered by `App\Services\MenuService`. An item shows when its route exists and the user has the listed role/permission, so menu items for Modules 2–8 appear automatically as each module is built. Non-Super-Admin dashboards show the same items as quick links.
 
-**Permissions** ✅ — defined in `config/camp.php` → `permissions` (Module 1: `institutes.manage`, `users.view/create/update/delete`, `roles.manage`, `audit.view`, `notifications.view`, `serials.manage`; Module 1A: `masters.manage` ✅ — Super Admin only, hidden from the matrix; `institute_courses.view` / `institute_courses.manage` ✅ — default for Institute Admin, own institute only (Super Admin: all institutes); planned: `payments.collect`, `payments.verify`, `payments.refund` — Accounts, for Module 2; Module 2C ✅: `scholarships.view` (Institute Admin, Accounts), `scholarships.manage` and `scholarships.assign` (Institute Admin); Module 2.7 ✅: `eligibility.override` (Institute Admin); Module 2.8–2.9 ✅: `students.manage_er`, `students.bulk_update` (Institute Admin)); editable per role on the Roles & Permissions screen. Super Admin passes every check (`Gate::before`).
+**Permissions** ✅ — defined in `config/camp.php` → `permissions` (Module 1: `institutes.manage`, `users.view/create/update/delete`, `roles.manage`, `audit.view`, `notifications.view`, `serials.manage`; Module 1A: `masters.manage` ✅ — Super Admin only, hidden from the matrix; `institute_courses.view` / `institute_courses.manage` ✅ — default for Institute Admin, own institute only (Super Admin: all institutes); planned: `payments.collect`, `payments.verify`, `payments.refund` — Accounts, for Module 2; Module 2C ✅: `scholarships.view` (Institute Admin, Accounts), `scholarships.manage` and `scholarships.assign` (Institute Admin); Module 2.7 ✅: `eligibility.override` (Institute Admin); Module 2.8–2.9 ✅: `students.manage_er`, `students.bulk_update` (Institute Admin); Module 2.10 ✅: `addon_programs.manage` (Institute Admin)); editable per role on the Roles & Permissions screen. Super Admin passes every check (`Gate::before`).
 
 ---
 
@@ -325,6 +325,7 @@ Fixed lists kept in `config/camp.php` (not tables): `higher_secondary_subjects` 
 | 2.7 Course eligibility criteria (12th) | Super Admin sets per course the accepted 12th subject groups (PCM, PCB, Commerce …) with a minimum % per subject + optional aggregate (any board or per board); criteria shown when the student picks a course; marks entered per subject (% or CGPA, converted by the board factor); live check; submission blocked when not eligible (override with reason) — see *Course Eligibility Criteria* below | ✅ |
 | 2.8 ER number management (existing students) | Super Admin / Institute Admin (`students.manage_er`) assign an existing (legacy) ER number or generate the next one, change it with a reason (history kept, series counter protected), and admit an already-studying student directly (gates recorded as *existing student*, current semester set, no automatic fees) — see *Existing Students* below | ✅ |
 | 2.9 Bulk student update | `students.bulk_update`: CSV template (pre-filled with filtered students or blank) → upload → validation preview (new / update / error per row, old → new per cell) → apply valid rows; creates and updates; inline grid on the students list for small changes; import history + error report — see *Existing Students* below | ✅ |
+| 2.10 Add-on programs | Optional add-on programs per institute course (name, description, optional fee, seats, status), managed by Super Admin / Institute Admin; shown on portal Step 1 once a course is chosen; applicant picks any number (optional max per course); choices saved with the application, paid add-ons add a due; editable until a payment is confirmed; admin can change with audit — see *Add-on Programs* below | ✅ |
 
 Admin: Institute Management ▸ **Payment Settings** (`admin.institute-payment-settings`, `fees.manage`) — per institute: which methods are accepted, UPI ID, payee name, QR image, office instructions (shown on the portal payment step).
 
@@ -631,6 +632,69 @@ Example: *AME B1.1 · Any board · PCM — Physics ≥ 50 %, Chemistry ≥ 45 %,
 - Bulk: template columns; per-row and in-file duplicates; masters matched by code or name; Institute Admin limited to own institute; create + update in one file; blank keeps the value; error report; apply skips error rows and changed rows; inline grid; permissions (Accounts / TM refused).
 - Working-database safety as for every module: tests only on `*_testing`.
 
+#### Add-on Programs — optional extras per course ✅ built (step 2.10)
+
+**Status (built):** migration `2026_11_04_000001_create_addon_programs` (applied to the test database; grants `addon_programs.manage` to the Institute Admin); models `AddonProgram`, `StudentAddonProgram`; `App\Services\AddonProgramService`; screen Institute Management ▸ **Add-on Programs** (`AddonProgramsComponent` — one card per institute course with choice limit, add / edit / hide / delete); portal Step 1 "Add-on programs (optional)" choice cards with live limit and seats; admin onboarding Basic tab checklist; chosen add-ons on the status page, Review tab and Gate 1; tests `Module2AddonProgramsTest` (11). Note: in the admin, add-ons are changed from the Basic tab, so they follow the same edit rule as the other onboarding details.
+
+**Purpose:** each institute course can offer optional **add-on programs** (e.g. a language course, soft-skills module or type-rating add-on). Applicants see them on the admissions portal when they choose a course and may select the ones they want; the choices are saved with the application.
+
+**Decisions (agreed)**
+- (a) Add-on programs are set **per institute + course** (like course fees, batches and scholarships).
+- (b) Each add-on has an **optional fee**; choosing a paid add-on adds a due to the student through the existing `FeeService` flow; a free one adds nothing.
+- (c) Selection is **optional, any number**; a course may set a **maximum** number of choices.
+- (d) The applicant can change choices like the other details — **until a fee payment is confirmed**. Admins can change them at any time (audited).
+
+**Who:** Super Admin (all institutes) and Institute Admin (own institute), with the new permission **`addon_programs.manage`** (default Institute Admin). Accounts / TM only see the chosen add-ons.
+
+**Database (additive migration)**
+
+`addon_programs` (`BelongsToInstitute`, `BaseModel` columns)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| institute_id, course_id | bigint FK | the course must be one the institute offers (`institute_courses`) |
+| name | string | unique per institute + course |
+| code | string nullable |  |
+| description | text nullable | short text shown to the applicant |
+| fee_amount | decimal(10,2) nullable | null / 0 = free |
+| fee_due_days | int default 0 | due = joining date + days |
+| capacity | int nullable | seats; a full add-on is shown as "Full" |
+| sort_order | int |  |
+| status | boolean | inactive = no longer offered; kept on existing students |
+
+`institute_courses` gets **`max_addon_programs`** int nullable (null = no limit).
+
+`student_addon_programs`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | bigint PK |  |
+| student_id | bigint FK |  |
+| addon_program_id | bigint FK |  |
+| student_due_id | bigint FK nullable | the due created for a paid add-on |
+| selected_at | timestamp |  |
+| selected_by | bigint FK (users) | the student or an admin |
+| unique | (student_id, addon_program_id) |  |
+
+**Screens**
+- Institute Management ▸ **Add-on Programs** (`admin.addon-programs`, `addon_programs.manage`): filter by institute (Super Admin) and course; add / edit / deactivate; set the maximum choices per course; count of students per add-on.
+- Admin student onboarding (Basic tab): add-on checklist under the course.
+- Portal **Step 1** (Your details): after course and batch, an **"Add-on programs (optional)"** card — choice cards with name, short description, fee (or "Free") and seats left; "Selected 2 of max 3" hint, remaining cards disabled at the maximum; the fee summary includes add-on fees.
+- Application status, the admin Review tab and Gate 1 (Document Verification) list the chosen add-ons.
+
+**Rules (`App\Services\AddonProgramService`)**
+- Only active add-ons of the student's institute + course can be chosen, up to the course maximum; a full add-on cannot be chosen (students who already have it keep their place).
+- Choosing a paid add-on creates a `student_dues` row (fee_head "Add-on: <name>", `course_fee_id` null, linked via `student_addon_programs.student_due_id`); removing the add-on deletes that due only if it is unpaid.
+- Changing the course clears the add-on choices and removes their unpaid dues (the applicant is told).
+- Portal changes are refused once a payment is confirmed (same lock as the other details, via `OnboardingService`); admin changes are allowed any time, with an audit entry.
+- An add-on chosen by students is deactivated, never deleted; editing its fee affects only students who choose it afterwards.
+- A course with no add-ons shows nothing — today's behaviour is unchanged.
+
+**Components:** new `Admin\Institutes\AddonProgramsComponent`; extended `Portal\DetailsPage`, `Admin\Students\StudentOnboardingComponent`, `Portal\StatusPage`, Gate 1 Document Verification.
+
+**Tests (planned):** `Module2AddonProgramsTest` — CRUD + institute isolation (Accounts refused); portal lists only active add-ons of the chosen course; maximum and capacity enforced; paid add-on creates a due, removing it deletes the unpaid due; course change clears choices; locked after a confirmed payment while admin can still change (audited); course without add-ons unchanged; tests only on `*_testing`.
+
 `student_documents`
 
 | Field | Type | Notes |
@@ -690,7 +754,7 @@ Rules in place ✅: a new or re-activated fee line is charged straight away to e
 | fee_head | string | e.g. admission, semester fee |
 | amount_due, amount_paid | decimal |  |
 | due_date | date |  |
-| course_fee_id | bigint FK nullable | null = added by hand |
+| course_fee_id | bigint FK nullable | null = added by hand or an add-on program due (🟡 Module 2.10, linked via `student_addon_programs.student_due_id`) |
 | period_no, academic_year_id | nullable ✅ (Module 2B) | copied from the fee line; dues grouped per period |
 | status | enum(pending,partial,cleared,waived) | "no dues" = all rows cleared or waived; recalculated from successful `student_payments` |
 | remarks | text nullable | waiver reason |
@@ -1402,6 +1466,7 @@ Export feature: a queued job zips the `document_final_records` of all `documents
 | **Sprint 1e — Existing Students: ER numbers & bulk update (Module 2.8–2.9)** ✅ | done | ER number panel (assign legacy / generate / change with reason / history, series counter reserve), existing-student admission (gates recorded, current semester, ID card / ER form state), bulk update page (CSV template, upload, preview with per-cell changes and errors, apply valid rows, import history, error report), inline grid on the students list, permissions `students.manage_er` / `students.bulk_update` |
 | **Sprint 1c — Scholarship Management (Module 2C)** ✅ | done | Scholarships (institute + course + optional batch / academic year, percentage or fixed, one or more semesters), Assign Scholarship page (one / selected / all eligible, semester-wise preview of fee, discounts and final payable), automatic discounts on student dues (incl. semesters charged later), revoke, permissions + institute isolation |
 | **Sprint 1d — Course Eligibility Criteria (Module 2.7)** ✅ | done | 12th Subjects & Subject Groups masters (seed PCM / PCB / Commerce / Arts), board CGPA factor, Course Eligibility screen, per-subject marks on portal Step 2 and the admin Academic tab, criteria card on course choice, live check, submit block + override, eligibility shown at Gate 1 |
+| **Sprint 1f — Add-on Programs (Module 2.10)** ✅ | done | Add-on Programs screen per institute course + max choices, portal Step 1 selection, admin onboarding checklist, add-on dues via FeeService, shown on status / Review / Gate 1, tests |
 | **Sprint 2 — Exam Application & Approval** | 2 weeks | Subjects per course/syllabus mapping, exam appearance requests, Accounts dues gate + BiC bypass, TM attendance gate, admit card generation |
 | **Sprint 3 — Question Bank & Paper Setup** | 1–2 weeks | Question bank CRUD (Super Admin + Institute), exam paper builder |
 | **Sprint 4 — Grading & Results** | 2 weeks | Marks entry (all three modes), result computation (configurable pass %), Super Admin correction workflow, marksheet + consolidated marksheet generation with unique serials, **promotion to the next period** (75 % per subject eligibility list, Examination Manager + Institute Admin approval, detain / Super Admin override, next-period fees) |
@@ -1432,6 +1497,7 @@ app/
       Onboarding/          StudentRegistrationForm, StudentAcademicForm, DocumentUploadWizard, AdminDocumentVerification, AccountsFeeVerification, ERRequestGenerator, IDCardIssuance
       Students/            StudentsComponent ✅, StudentOnboardingComponent ✅, StudentFeesComponent ✅, StudentEnrollmentComponent ✅; BulkUpdateComponent ✅ (Module 2.9)
       Scholarships/        ScholarshipsComponent ✅, AssignScholarshipComponent ✅ (Module 2C)
+      Institutes/          AddonProgramsComponent ✅ (Module 2.10)
       Exams/               ExamAppearanceApplication, AccountsDuesApproval, BiCOverridePanel, TMAttendanceApproval, AdmitCardGenerator, ExamScheduleManager, SyllabusMappingManager
       QuestionBank/        QuestionBankManager, QuestionUploadBulk, ExamPaperBuilder
       Grading/             MarksEntryGrid, ResultPublisher, MarkCorrectionPanel, MarksheetGenerator, ConsolidatedMarksheetGenerator
@@ -1442,7 +1508,7 @@ app/
     User.php ✅
     Admin/                 BaseModel ✅, Institute ✅, AuditTrail ✅, Country ✅, State ✅, (one model per new table, extending BaseModel)
   Traits/                  RecordsAuditTrail ✅, BelongsToInstitute
-  Services/                SerialNumberService ✅, NotificationService ✅, MenuService ✅, ScholarshipService ✅ (Module 2C), EligibilityService (Module 2.7), ErNumberService + StudentBulkService (Module 2.8–2.9), PaymentService, PdfGenerationService, ComplianceAggregationService
+  Services/                SerialNumberService ✅, NotificationService ✅, MenuService ✅, ScholarshipService ✅ (Module 2C), EligibilityService (Module 2.7), ErNumberService + StudentBulkService (Module 2.8–2.9), AddonProgramService ✅ (Module 2.10), PaymentService, PdfGenerationService, ComplianceAggregationService
     Payments/              PaymentGatewayInterface, RazorpayGateway, GPayUpiGateway, OfflineGateway ... (one driver per payment_gateways.code)
   Http/Controllers/        PaymentWebhookController (signature-verified, idempotent gateway callbacks)
   Policies/                StudentPolicy, ExamApprovalPolicy, DocumentPolicy, MoUPolicy ...

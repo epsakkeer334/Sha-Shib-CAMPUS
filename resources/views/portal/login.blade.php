@@ -1,5 +1,8 @@
+<div class="campus-band login-band" style="flex-grow: 1; display: flex;">
 <main class="main wide">
     <style>
+        .login-band { --band-img: url('{{ asset('portal/graduation.jpg') }}'); }
+        .login-band::before { background-position: center 45% !important; }
         .split { display: grid; grid-template-columns: minmax(0, 1fr) 460px; gap: 64px; align-items: center; flex-grow: 1; padding: 32px 0; }
         .perk { border-radius: 14px; padding: 13px 16px; display: flex; gap: 14px; align-items: center; max-width: 440px; }
         .perk .ico { width: 34px; height: 34px; border-radius: 10px; background: rgba(143, 227, 184, .16); color: #8FE3B8; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -65,3 +68,4 @@
         </form>
     </div>
 </main>
+</div>

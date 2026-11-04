@@ -13,6 +13,7 @@ class InstituteCourse extends BaseModel
         'institute_id',
         'course_id',
         'status',
+        'max_addon_programs',
         'created_by',
         'updated_by',
     ];

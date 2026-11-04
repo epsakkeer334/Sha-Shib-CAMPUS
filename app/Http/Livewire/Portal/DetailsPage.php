@@ -12,6 +12,7 @@ use App\Models\Admin\Religion;
 use App\Models\Admin\State;
 use App\Models\Admin\Student;
 use App\Models\User;
+use App\Services\AddonProgramService;
 use App\Services\FeeService;
 use App\Services\OnboardingService;
 use App\Support\PortalProgress;
@@ -49,6 +50,9 @@ class DetailsPage extends Component
     public $address, $country_id, $state_id, $city, $pincode;
     public $parent_name, $parent_phone, $parent_email, $parent_occupation;
 
+    // add-on programs chosen (step 2.10)
+    public $addon_ids = [];
+
     public $draftRestored = false;
 
     // Unsaved entries kept as a draft (see StudentPortalPage::updated)
@@ -56,7 +60,7 @@ class DetailsPage extends Component
     protected $draftFields = [
         'email', 'phone', 'course_id', 'batch_id', 'joining_date', 'first_name', 'last_name', 'dob', 'gender', 'qualification_id',
         'emergency_contact', 'religion_id', 'category_id', 'address', 'country_id', 'state_id', 'city', 'pincode',
-        'parent_name', 'parent_phone', 'parent_email', 'parent_occupation',
+        'parent_name', 'parent_phone', 'parent_email', 'parent_occupation', 'addon_ids',
     ];
 
     public function mount()
@@ -85,6 +89,7 @@ class DetailsPage extends Component
             ]));
             $this->dob = optional($student->dob)->toDateString();
             $this->joining_date = optional($student->joining_date)->toDateString();
+            $this->addon_ids = app(AddonProgramService::class)->chosenIds($student);
 
             if ($this->canEditDetails($student)) {
                 $this->draftRestored = $this->restoreDraft($student);
@@ -106,13 +111,68 @@ class DetailsPage extends Component
     protected function afterUpdated($property, $value)
     {
         $resets = ['institute_id' => ['course_id', 'batch_id'], 'course_id' => ['batch_id'], 'religion_id' => ['category_id'], 'country_id' => ['state_id']][$property] ?? [];
+        if (in_array($property, ['institute_id', 'course_id'], true)) {
+            $resets[] = 'addon_ids'; // add-ons belong to the course
+        }
         foreach ($resets as $reset) {
-            $this->{$reset} = null;
+            $this->{$reset} = $reset === 'addon_ids' ? [] : null;
 
             if (Auth::check() && $this->canEditDetails($student = $this->student())) {
-                PortalProgress::saveDraftField($student, $this->step, $reset, null);
+                PortalProgress::saveDraftField($student, $this->step, $reset, $this->{$reset});
             }
         }
+    }
+
+    /**
+     * Choose / unchoose an add-on program (step 2.10). The course maximum and seats are checked here;
+     * the choice is saved with "Save and continue".
+     */
+    public function toggleAddon($id)
+    {
+        $id = (int) $id;
+        $student = Auth::check() ? $this->student() : null;
+        if ($student && !$this->canEditDetails($student)) {
+            return;
+        }
+        $ids = array_values(array_map('intval', (array) $this->addon_ids));
+
+        if (in_array($id, $ids, true)) {
+            $ids = array_values(array_diff($ids, [$id]));
+        } else {
+            $service = app(AddonProgramService::class);
+            $option = $service->options($this->institute_id, $this->course_id, $student)->firstWhere('id', $id);
+            $max = $service->maxFor($this->institute_id, $this->course_id);
+            if (!$option || (!$option->status && !$option->is_chosen) || $option->is_full) {
+                $this->toast('warning', 'This add-on program is not available.');
+
+                return;
+            }
+            if ($max !== null && count($ids) >= $max) {
+                $this->toast('warning', 'You can choose up to ' . $max . ' add-on ' . ($max === 1 ? 'program' : 'programs') . '. Remove one to choose another.');
+
+                return;
+            }
+            $ids[] = $id;
+        }
+
+        $this->addon_ids = $ids;
+        $this->resetErrorBag('addon_ids');
+        if ($student) {
+            PortalProgress::saveDraftField($student, $this->step, 'addon_ids', $ids);
+        }
+    }
+
+    /** Course maximum / seats / offered — added to the validation errors of the save. */
+    protected function validateAddons(?Student $student = null): bool
+    {
+        $errors = app(AddonProgramService::class)->validate((array) $this->addon_ids, $this->institute_id, $this->course_id, $student);
+        if ($errors) {
+            $this->addError('addon_ids', $errors[0]);
+
+            return false;
+        }
+
+        return true;
     }
 
     protected function values(): array
@@ -148,6 +208,9 @@ class DetailsPage extends Component
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
         $data = $this->validate($rules, $this->messages());
+        if (!$this->validateAddons()) {
+            return null;
+        }
 
         // Only institutes open for admission
         $institute = Institute::active()->findOrFail($data['institute_id']);
@@ -174,6 +237,7 @@ class DetailsPage extends Component
 
             // Fees of the course are known now, so the student can pay right away.
             app(FeeService::class)->syncCourseDues($student);
+            app(AddonProgramService::class)->sync($student->fresh(), (array) $this->addon_ids); // paid add-ons add a due
 
             app(\App\Services\AppNotifier::class)->notify('registration_started', $student);
 
@@ -212,6 +276,9 @@ class DetailsPage extends Component
             'phone' => ['required', StudentRules::PHONE, 'max:15', Rule::unique('users', 'phone')->ignore(Auth::id())],
         ]);
         $data = $this->validate($rules, $this->messages());
+        if (!$this->validateAddons($student)) {
+            return null;
+        }
         $data['onboarding_deadline'] = Carbon::parse($data['joining_date'])->addDays(config('camp.onboarding_days'))->toDateString();
 
         DB::transaction(function () use ($student, $data) {
@@ -222,6 +289,7 @@ class DetailsPage extends Component
                 $data, "Student updated their details on the portal: {$student->full_name}");
 
             app(FeeService::class)->syncCourseDues($student->fresh());
+            app(AddonProgramService::class)->sync($student->fresh(), (array) $this->addon_ids); // course change clears the old ones
             app(\App\Services\EligibilityService::class)->evaluate($student->fresh()); // the course may have changed
             if ($student->submitted_at) {
                 app(OnboardingService::class)->detailsChanged($student->fresh(), 'personal details');
@@ -275,6 +343,8 @@ class DetailsPage extends Component
                 ? CourseFee::active()->where('institute_id', $this->institute_id)->where('course_id', $this->course_id)->orderByDesc('admission_fee')->orderBy('sort_order')->get()
                 : collect(),
             'batches' => $this->batchOptions($this->institute_id, $this->course_id, optional($student)->batch_id),
+            'addons' => app(AddonProgramService::class)->options($this->institute_id, $this->course_id, $student),
+            'addonMax' => app(AddonProgramService::class)->maxFor($this->institute_id, $this->course_id),
             'eligibility' => app(\App\Services\EligibilityService::class)->criteriaFor($this->course_id ? (int) $this->course_id : null),
             'qualifications' => Qualification::active()->orderBy('name')->pluck('name', 'id'),
             'religions' => Religion::active()->orderBy('name')->pluck('name', 'id'),

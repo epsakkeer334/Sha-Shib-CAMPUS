@@ -147,6 +147,41 @@
                         @include('livewire.admin.students.partials.eligibility-criteria', ['criteria' => $eligibilityCriteria])
                     </div>
 
+                    @if($addons->isNotEmpty())
+                        <div class="so-section">
+                            <div class="so-section-title d-flex align-items-center flex-wrap gap-2">
+                                <span><i class="ti ti-puzzle"></i> Add-on programs <span class="text-muted fw-normal small">(optional)</span></span>
+                                <span class="ms-auto badge rounded-pill {{ count((array) $addon_ids) ? 'bg-primary' : 'bg-light text-muted border' }}">{{ count((array) $addon_ids) }}{{ $addonMax ? ' of ' . $addonMax : '' }} selected</span>
+                            </div>
+                            <div class="so-addons">
+                                @foreach($addons as $addon)
+                                    @php $on = in_array($addon->id, array_map('intval', (array) $addon_ids), true); @endphp
+                                    <label class="so-addon {{ $on ? 'is-on' : '' }} {{ (!$on && ($addon->is_full || !$addon->status)) ? 'is-off' : '' }}" wire:key="so-addon-{{ $addon->id }}">
+                                        <input type="checkbox" class="form-check-input" value="{{ $addon->id }}" wire:model="addon_ids" @disabled(!$on && ($addon->is_full || !$addon->status))>
+                                        <span class="min-w-0">
+                                            <span class="d-block fw-semibold">{{ $addon->name }} @unless($addon->status)<span class="badge bg-light text-muted border">hidden</span>@endunless</span>
+                                            @if($addon->description)<span class="d-block small text-muted text-truncate">{{ $addon->description }}</span>@endif
+                                        </span>
+                                        <span class="text-end text-nowrap">
+                                            <span class="d-block fw-semibold {{ $addon->isFree() ? 'text-success' : '' }}">{{ $addon->feeLabel() }}</span>
+                                            @if($addon->is_full && !$on)<span class="small text-danger fw-semibold">Full</span>@elseif($addon->seats_left !== null)<span class="small text-muted">{{ $addon->seats_left }} left</span>@endif
+                                        </span>
+                                    </label>
+                                @endforeach
+                            </div>
+                            @error('addon_ids')<div class="text-danger small mt-2">{{ $message }}</div>@enderror
+                            <div class="small text-muted mt-2">Saved with the basic details. A paid add-on adds a fee to the student; removing it deletes that fee if it is unpaid.</div>
+                        </div>
+                        <style>
+                            .so-addons { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+                            .so-addon { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; margin: 0; padding: 11px 13px; border: 1px solid #E5E7EB; border-radius: 12px; background: #fff; cursor: pointer; transition: border-color .15s, background-color .15s, box-shadow .15s; }
+                            .so-addon:hover { border-color: #C7CBD4; }
+                            .so-addon.is-on { border-color: var(--bs-primary, #F26522); background: #FFF8F3; box-shadow: 0 0 0 3px rgba(242, 101, 34, .10); }
+                            .so-addon.is-off { opacity: .55; cursor: not-allowed; }
+                            .so-addon .form-check-input { margin: 0; width: 1.15em; height: 1.15em; }
+                        </style>
+                    @endif
+
                     <div class="so-section">
                         <div class="so-section-title"><i class="ti ti-id"></i> Personal details</div>
                         <div class="row g-3">
@@ -439,6 +474,7 @@
                                 'Email' => $student->email,
                                 'Phone / Emergency' => $student->phone . ' / ' . $student->emergency_contact,
                                 'Joining / Deadline' => $student->formatted_joining_date . ' / ' . $student->formatted_onboarding_deadline,
+                                'Add-on programs' => $student->addonChoices()->with('program')->get()->map(fn ($c) => optional($c->program)->name)->filter()->implode(', ') ?: '—',
                             ]],
                             ['address', 'Address & parent', 'ti ti-map-pin', [
                                 'Address' => $student->address ?: '—',

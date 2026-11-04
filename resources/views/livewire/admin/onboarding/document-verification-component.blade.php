@@ -174,6 +174,16 @@
                                     @endif
                                 </div>
                             @endif
+                            @php $dvAddons = $student->addonChoices()->with('program')->get()->filter(fn ($c) => $c->program); @endphp
+                            @if($dvAddons->isNotEmpty())
+                                {{-- add-on programs chosen at registration (step 2.10) --}}
+                                <div class="dv-elig mt-2">
+                                    <span class="text-muted"><i class="ti ti-puzzle"></i> Add-ons</span>
+                                    @foreach($dvAddons as $c)
+                                        <span class="dv-mark">{{ $c->program->name }} <b>{{ $c->program->feeLabel() }}</b></span>
+                                    @endforeach
+                                </div>
+                            @endif
                         </div>
                         <div class="dv-ring" style="--p: {{ $percentReq }};" title="{{ $verifiedReq }} of {{ $requiredTypes->count() }} verified">
                             <span>{{ $verifiedReq }}/{{ $requiredTypes->count() }}</span>

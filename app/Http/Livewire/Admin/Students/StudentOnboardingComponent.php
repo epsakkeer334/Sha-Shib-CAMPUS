@@ -15,6 +15,7 @@ use App\Models\Admin\Student;
 use App\Models\Admin\QualifyingSubjectGroup;
 use App\Models\Admin\StudentAcademicDetail;
 use App\Services\EligibilityService;
+use App\Services\AddonProgramService;
 use App\Services\FeeService;
 use App\Services\OnboardingService;
 use App\Support\StudentRules;
@@ -64,6 +65,9 @@ class StudentOnboardingComponent extends Component
     public $subject_marks = [];
     public $eligibility_reason = '';
 
+    /** @var array<int> add-on programs chosen (step 2.10) */
+    public $addon_ids = [];
+
     // KYC uploads (one property per document type)
     public $upload_kyc_photo, $upload_medical_certificate, $upload_marksheet_10, $upload_marksheet_12, $upload_other;
 
@@ -110,6 +114,7 @@ class StudentOnboardingComponent extends Component
                 'higher_secondary_board_id', 'higher_secondary_subject', 'higher_secondary_mark_type', 'higher_secondary_mark',
             ]));
         }
+        $this->addon_ids = app(AddonProgramService::class)->chosenIds($student);
         $this->subject_marks = $student->qualifyingMarks()->get()
             ->mapWithKeys(fn ($m) => [$m->qualifying_subject_id => rtrim(rtrim((string) $m->mark, '0'), '.')])->all();
     }
@@ -149,11 +154,13 @@ class StudentOnboardingComponent extends Component
     {
         $this->course_id = null;
         $this->batch_id = null;
+        $this->addon_ids = [];
     }
 
     public function updatedCourseId()
     {
         $this->batch_id = null; // batches belong to a course
+        $this->addon_ids = [];  // so do add-on programs
     }
 
     /**
@@ -275,6 +282,12 @@ class StudentOnboardingComponent extends Component
         $rules = array_merge_recursive($this->basicRules(), $this->loginRules($student));
         $data = $this->validate($rules, $this->messages(), ['login_password' => 'password']);
         unset($data['login_password'], $data['login_password_confirmation']);
+        $addonErrors = app(AddonProgramService::class)->validate((array) $this->addon_ids, $this->institute_id, $this->course_id, $student);
+        if ($addonErrors) {
+            $this->addError('addon_ids', $addonErrors[0]);
+
+            return null;
+        }
         $data['onboarding_deadline'] = \Carbon\Carbon::parse($data['joining_date'])->addDays(config('camp.onboarding_days'))->toDateString();
 
         if ($student) {
@@ -287,6 +300,7 @@ class StudentOnboardingComponent extends Component
                 $this->syncLogin($student->fresh());
             });
             app(FeeService::class)->syncCourseDues($student->fresh()); // course / joining date may have changed
+            app(AddonProgramService::class)->sync($student->fresh(), (array) $this->addon_ids, 'admin');
             app(EligibilityService::class)->evaluate($student->fresh()); // the course may have changed
             $this->toast('success', 'Basic details saved.' . ($passwordReset ? ' Portal password updated.' : (!$hadLogin && $student->fresh()->user_id ? ' Portal login created.' : '')));
             $this->activeTab = 'address';
@@ -303,6 +317,7 @@ class StudentOnboardingComponent extends Component
             return $student;
         });
         app(FeeService::class)->syncCourseDues($student); // course fees from the fee structure
+        app(AddonProgramService::class)->sync($student->fresh(), (array) $this->addon_ids, 'admin');
         session()->flash('toast', ['type' => 'success', 'message' => 'Student created as draft' . ($student->fresh()->user_id ? ' with a portal login' : '') . '. Continue with address details.']);
 
         return redirect()->route('admin.students.edit', ['student' => $student->id, 'tab' => 'address']);
@@ -530,6 +545,8 @@ class StudentOnboardingComponent extends Component
             'states' => $this->country_id ? State::active()->where('country_id', $this->country_id)->orderBy('name')->pluck('name', 'id') : collect(),
             'matriculationBoards' => $this->withCurrent(MatriculationBoard::active()->orderBy('name')->pluck('name', 'id'), MatriculationBoard::class, $this->matriculation_board_id),
             'higherSecondaryBoards' => $this->withCurrent(HigherSecondaryBoard::active()->orderBy('name')->pluck('name', 'id'), HigherSecondaryBoard::class, $this->higher_secondary_board_id),
+            'addons' => app(AddonProgramService::class)->options($this->institute_id, $this->course_id, $student),
+            'addonMax' => app(AddonProgramService::class)->maxFor($this->institute_id, $this->course_id),
             'eligibilityCriteria' => $eligibility->criteriaFor($this->course_id ? (int) $this->course_id : null),
             'groups' => $eligibility->groupsFor($this->course_id ? (int) $this->course_id : null, optional(optional($student)->academicDetail)->higher_secondary_subject),
             'entry' => $entry,

@@ -50,6 +50,7 @@ return [
             'institute_courses.manage' => 'Assign / activate / remove institute courses',
             'batches.manage' => 'Manage batches of institute courses (code, dates, capacity)',
             'periods.manage' => 'Manage academic periods (semesters / terms) of institute courses',
+            'addon_programs.manage' => 'Manage add-on programs of institute courses (optional extras applicants can choose)',
         ],
         'Students' => [
             'students.view' => 'View students',
@@ -99,7 +100,7 @@ return [
 
     // Default permissions per role (super-admin gets everything through Gate::before).
     'default_role_permissions' => [
-        'institute-admin' => ['users.view', 'users.create', 'users.update', 'users.delete', 'audit.view', 'notifications.view', 'institute_courses.view', 'institute_courses.manage', 'batches.manage', 'periods.manage', 'students.view', 'students.create', 'students.update', 'students.delete', 'students.manage_er', 'students.bulk_update', 'onboarding.verify_documents', 'eligibility.override', 'enrollment.manage', 'fees.manage', 'payments.collect', 'scholarships.view', 'scholarships.manage', 'scholarships.assign'],
+        'institute-admin' => ['users.view', 'users.create', 'users.update', 'users.delete', 'audit.view', 'notifications.view', 'institute_courses.view', 'institute_courses.manage', 'batches.manage', 'periods.manage', 'addon_programs.manage', 'students.view', 'students.create', 'students.update', 'students.delete', 'students.manage_er', 'students.bulk_update', 'onboarding.verify_documents', 'eligibility.override', 'enrollment.manage', 'fees.manage', 'payments.collect', 'scholarships.view', 'scholarships.manage', 'scholarships.assign'],
         'accounts' => ['students.view', 'fees.manage', 'payments.collect', 'payments.verify', 'scholarships.view'],
         'training-manager' => ['students.view', 'enrollment.manage'],
         'bic' => [],

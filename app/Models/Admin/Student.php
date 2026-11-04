@@ -119,6 +119,12 @@ class Student extends BaseModel
         return $this->hasMany(StudentQualifyingMark::class);
     }
 
+    /** Add-on programs chosen at registration (Module 2 step 2.10). */
+    public function addonChoices()
+    {
+        return $this->hasMany(StudentAddonProgram::class);
+    }
+
     public function documents()
     {
         return $this->hasMany(StudentDocument::class);

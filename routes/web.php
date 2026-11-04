@@ -70,6 +70,7 @@ Route::prefix('admin')->middleware(['auth', 'staff', 'active.user'])->group(func
     Route::middleware('permission:fees.manage')->group(function () {
         Route::get('/payment-settings', Admin\Institutes\PaymentSettingsComponent::class)->name('admin.institute-payment-settings');
         Route::get('/batches', Admin\Institutes\BatchesComponent::class)->name('admin.batches')->middleware('permission:batches.manage');
+        Route::get('/addon-programs', Admin\Institutes\AddonProgramsComponent::class)->name('admin.addon-programs')->middleware('permission:addon_programs.manage');
         Route::get('/academic-periods', Admin\Institutes\AcademicPeriodsComponent::class)->name('admin.academic-periods')->middleware('permission:periods.manage');
         Route::get('/payment-settings/{setting}/qr', [PortalController::class, 'paymentQr'])->name('admin.institute-payment-settings.qr');
     });
