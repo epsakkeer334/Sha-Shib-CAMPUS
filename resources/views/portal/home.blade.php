@@ -47,7 +47,7 @@
         .cta h2 { font-size: clamp(26px, 3.2vw, 38px); line-height: 1.15; font-weight: 800; letter-spacing: -.02em; }
         .cta p { margin: 8px 0 0; color: rgba(255, 255, 255, .84); font-size: 16px; max-width: 520px; }
         .how ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 18px; }
-        .how .num { width: 44px; height: 44px; border-radius: 14px; background: var(--grad); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; box-shadow: 0 8px 18px rgba(59, 79, 224, .35); }
+        .how .num { width: 44px; height: 44px; border-radius: 14px; background: var(--grad); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; box-shadow: 0 8px 18px rgba(var(--brand-rgb), .35); }
         @media (max-width: 960px) { .hero { grid-template-columns: minmax(0, 1fr); padding-top: 56px; gap: 36px; } .after { grid-template-columns: minmax(0, 1fr); gap: 32px; } }
         @media (max-width: 600px) {
             .hero { padding: 40px 16px 48px; } .how { padding: 48px 16px 16px; } .after { padding: 40px 16px; } .cta-wrap { padding: 16px 16px 56px; } .cta { padding: 36px 24px; border-radius: 22px; }

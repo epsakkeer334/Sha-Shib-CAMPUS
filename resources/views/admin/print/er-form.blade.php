@@ -13,9 +13,12 @@
 @section('content')
 <div class="sheet">
     <div class="head">
-        <div>
+        <div class="inst">
+            <img class="inst-logo" src="{{ optional($student->institute)->logo ? $student->institute->logo_url : asset('brand/seal-navy.png') }}" alt="">
+            <div>
             <h1>{{ optional($student->institute)->name }}</h1>
             <div class="muted">Institute code {{ optional($student->institute)->code }}</div>
+            </div>
         </div>
         <div style="text-align: right;">
             <div style="font-size: 18px; font-weight: 600;">ER request form</div>
@@ -60,6 +63,10 @@
         <span>Student</span>
         <span>Training Manager</span>
         <span>Institute seal</span>
+    </div>
+    <div class="brand-foot">
+        <img src="{{ asset('brand/logo-navy.png') }}" alt="Sha-Shib Campus">
+        <span>Centralised Academic Management &amp; Performance Unified System</span>
     </div>
 </div>
 @endsection

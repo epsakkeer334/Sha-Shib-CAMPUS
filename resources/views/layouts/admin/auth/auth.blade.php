@@ -6,7 +6,9 @@
     <title>Login | {{ config('app.name') }}</title>
 
 
-    <link rel="icon" href="{{ asset('admin/assets/img/favicon.png') }}">
+    <link rel="icon" type="image/png" href="{{ asset('brand/favicon.png') }}">
+    <link rel="apple-touch-icon" href="{{ asset('brand/apple-touch-icon.png') }}">
+    <meta name="theme-color" content="#1D1C4C">
     <link rel="apple-touch-icon" href="{{ asset('admin/assets/img/apple-touch-icon.png') }}">
     <link rel="stylesheet" href="{{ asset('admin/assets/css/bootstrap.min.css') }}">
 

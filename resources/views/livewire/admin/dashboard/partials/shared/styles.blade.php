@@ -105,7 +105,7 @@
 
     /* ---------- dashboard banner (dark, dashboards only) ---------- */
     .db-ui .db-banner { position: relative; overflow: hidden; border-radius: 18px; padding: 24px 26px; color: #fff;
-        background: linear-gradient(120deg, #0B1220 0%, #172033 48%, #2A1A12 100%); box-shadow: 0 14px 34px rgba(15, 23, 42, .22); }
+        background: linear-gradient(120deg, #17163F 0%, #1D1C4C 48%, #3A2440 100%); box-shadow: 0 14px 34px rgba(29, 28, 76, .25); }
     .db-ui .db-banner::before { content: ''; position: absolute; inset: 0; opacity: .35; pointer-events: none;
         background-image: linear-gradient(rgba(255, 255, 255, .05) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, .05) 1px, transparent 1px);
         background-size: 28px 28px; mask-image: linear-gradient(90deg, transparent, #000 35%, #000 70%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 35%, #000 70%, transparent); }

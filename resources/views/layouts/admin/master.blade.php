@@ -3,9 +3,9 @@
 <head>
     <meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=0">
-	<meta name="description" content="Smarthr - Bootstrap Admin Template">
+	<meta name="description" content="Sha-Shib Campus — Centralised Academic Management &amp; Performance Unified System">
 	<meta name="keywords" content="admin, estimates, bootstrap, business, html5, responsive, Projects">
-	<meta name="author" content="Dreams technologies - Bootstrap Admin Template">
+	<meta name="author" content="Sha-Shib Group">
 	<meta name="robots" content="noindex, nofollow">
 	<title>
         @php
@@ -15,9 +15,9 @@
     </title>
 
 	<!-- Favicon -->
-	<link rel="shortcut icon" type="image/x-icon" href="{{ asset('admin/assets/img/favicon.png') }}">
+	<link rel="icon" type="image/png" href="{{ asset('brand/favicon.png') }}">
 	<!-- Apple Touch Icon -->
-	<link rel="apple-touch-icon" sizes="180x180" href="{{ asset('admin/assets/img/apple-touch-icon.png') }}">
+	<link rel="apple-touch-icon" sizes="180x180" href="{{ asset('brand/apple-touch-icon.png') }}">
 	{{-- System Settings → Appearance. theme-script.js reads the theme from localStorage, so the
 	     system theme is written there first: always when users may not customise, otherwise once
 	     per saved theme (version) so a new system theme still reaches everyone. --}}

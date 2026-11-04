@@ -136,3 +136,55 @@
     padding: 0;
     margin: 0 9px;
 }
+
+
+/* ───────── Sha-Shib Campus brand (logo navy #1D1C4C + orange #F26522) ───────── */
+.bg-nightblue { background-color: #1D1C4C !important; }
+[data-sidebar=nightblue] .sidebar { background: #1D1C4C; border-color: #1D1C4C; }
+[data-sidebar=nightblue] .sidebar .sidebar-logo { background: #1D1C4C; border-color: rgba(255, 255, 255, .08); }
+[data-sidebar=nightblue] .sidebar .sidebar-menu > ul > li > ul > li > a:hover,
+[data-sidebar=nightblue] .sidebar .sidebar-menu > ul > li .submenu > a.subdrop,
+[data-sidebar=nightblue] .sidebar .sidebar-menu > ul > li .submenu > a:hover,
+[data-sidebar=nightblue] .sidebar .sidebar-menu > ul > li .submenu > a.active { background: #2B2A6B; }
+[data-sidebar=nightblue] .sidebar .sidebar-menu > ul > li.menu-title span,
+[data-sidebar=nightblue] .sidebar .sidebar-menu .menu-title { color: rgba(255, 255, 255, .55); }
+
+/* logos: full logo in the sidebar / mobile header, seal when the sidebar is collapsed */
+.sidebar .sidebar-logo .brand-logo { width: auto; max-width: 190px; max-height: 38px; }
+.header .header-left .brand-logo { width: auto; max-width: 170px; max-height: 32px; }
+.sidebar .logo-small .brand-seal { width: 34px; height: 34px; object-fit: contain; }
+.sidebar .logo-small .brand-seal-white { display: none; }
+[data-sidebar=dark] .sidebar .logo-small .brand-seal-navy, [data-sidebar=nightblue] .sidebar .logo-small .brand-seal-navy,
+[data-sidebar=royalblue] .sidebar .logo-small .brand-seal-navy, [data-sidebar=indigo] .sidebar .logo-small .brand-seal-navy,
+[data-sidebar=darkgray] .sidebar .logo-small .brand-seal-navy, [data-sidebar=darkgreen] .sidebar .logo-small .brand-seal-navy,
+[data-theme=dark] .sidebar .logo-small .brand-seal-navy { display: none; }
+[data-sidebar=dark] .sidebar .logo-small .brand-seal-white, [data-sidebar=nightblue] .sidebar .logo-small .brand-seal-white,
+[data-sidebar=royalblue] .sidebar .logo-small .brand-seal-white, [data-sidebar=indigo] .sidebar .logo-small .brand-seal-white,
+[data-sidebar=darkgray] .sidebar .logo-small .brand-seal-white, [data-sidebar=darkgreen] .sidebar .logo-small .brand-seal-white,
+[data-theme=dark] .sidebar .logo-small .brand-seal-white { display: inline-block; }
+
+/* plain active link on a dark sidebar (the light-sidebar rule above would be white on grey) */
+[data-sidebar=dark] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active,
+[data-sidebar=nightblue] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active,
+[data-sidebar=royalblue] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active,
+[data-sidebar=indigo] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active,
+[data-sidebar=darkgray] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active,
+[data-sidebar=darkgreen] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active { background: rgba(255, 255, 255, .12); }
+[data-sidebar=nightblue] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active { background: #2B2A6B; box-shadow: inset 3px 0 0 #F26522; }
+[data-sidebar=dark] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active span,
+[data-sidebar=nightblue] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active span,
+[data-sidebar=royalblue] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active span,
+[data-sidebar=indigo] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active span,
+[data-sidebar=darkgray] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active span,
+[data-sidebar=darkgreen] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active span { color: #fff; }
+[data-sidebar=dark] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active i,
+[data-sidebar=nightblue] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active i,
+[data-sidebar=royalblue] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active i,
+[data-sidebar=indigo] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active i,
+[data-sidebar=darkgray] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active i,
+[data-sidebar=darkgreen] .sidebar .sidebar-menu > ul > li > ul > li:not(.submenu) > a.active i { color: #F26522; }
+/* collapsed sidebar: only the seal (dark sidebars otherwise force the full logo on) */
+@media (min-width: 992px) {
+  .mini-sidebar:not(.expand-menu) .sidebar .sidebar-logo .logo,
+  .mini-sidebar:not(.expand-menu) .sidebar .sidebar-logo .dark-logo { display: none !important; }
+}

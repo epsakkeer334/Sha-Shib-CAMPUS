@@ -33,7 +33,7 @@ class Settings
         // Appearance (admin panel)
         'theme.color' => 'primary',
         'theme.custom_color' => '#5B54D6',
-        'theme.sidebar' => 'light',
+        'theme.sidebar' => 'nightblue',
         'theme.topbar' => 'white',
         'theme.mode' => 'light',
         'theme.allow_user' => false,
@@ -78,7 +78,7 @@ class Settings
     public const SIDEBARS = [
         'light' => ['Light', '#FFFFFF'],
         'dark' => ['Charcoal', '#111827'],
-        'nightblue' => ['Night Blue', '#0F0F41'],
+        'nightblue' => ['Sha-Shib Navy', '#1D1C4C'],
         'royalblue' => ['Royal Blue', '#0039C6'],
         'indigo' => ['Indigo', '#391694'],
         'darkgray' => ['Slate', '#2E2E48'],

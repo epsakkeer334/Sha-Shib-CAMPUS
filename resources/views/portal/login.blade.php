@@ -29,7 +29,7 @@
 
         <form class="card rise" style="animation-delay: .12s; border-radius: 26px; padding: 36px 32px; gap: 18px;" wire:submit.prevent="login" aria-labelledby="signin-title">
             <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center;">
-                <span class="logo-mark" style="width: 56px; height: 56px; border-radius: 16px; font-size: 22px;" aria-hidden="true">{{ mb_strtoupper(mb_substr(config('camp.portal_name', config('app.name')), 0, 1)) }}</span>
+                <img src="{{ asset('brand/logo-navy.png') }}" alt="Sha-Shib Campus" width="240" height="38" style="display: block; width: 240px; max-width: 100%; height: auto; margin-bottom: 6px;">
                 <h2 id="signin-title" style="font-size: 23px; line-height: 30px;">Sign in</h2>
                 <p class="muted" style="margin: 0; font-size: 14px;">Use the email you registered with.</p>
             </div>

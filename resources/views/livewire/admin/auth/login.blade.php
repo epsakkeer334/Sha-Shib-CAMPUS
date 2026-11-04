@@ -1,9 +1,9 @@
 <div class="gl-page">
     <style>
         .gl-page {
-            --gl-indigo: #5b54d6;
-            --gl-indigo-2: #7c6cf2;
-            --gl-ink: #1b1f3b;
+            --gl-indigo: #F26522;
+            --gl-indigo-2: #F26522;
+            --gl-ink: #1D1C4C;
             --gl-muted: #6b7091;
             position: relative;
             min-height: 100vh;
@@ -12,9 +12,9 @@
             justify-content: center;
             padding: 32px 16px;
             overflow: hidden;
-            background: radial-gradient(1200px 700px at 10% 10%, #2b2a7a 0%, transparent 60%),
-                        radial-gradient(900px 600px at 95% 90%, #3a1f6e 0%, transparent 60%),
-                        linear-gradient(135deg, #0f1230 0%, #1a1b4b 50%, #12112e 100%);
+            background: radial-gradient(1200px 700px at 10% 10%, #2D2B7F 0%, transparent 60%),
+                        radial-gradient(900px 600px at 95% 90%, rgba(242, 101, 34, .30) 0%, transparent 60%),
+                        linear-gradient(135deg, #14133A 0%, #1D1C4C 50%, #15143C 100%);
             font-family: inherit;
         }
         /* Soft floating colour blobs behind the glass */
@@ -26,9 +26,9 @@
             animation: gl-float 18s ease-in-out infinite;
             pointer-events: none;
         }
-        .gl-blob.b1 { width: 420px; height: 420px; background: #6d5cff; top: -120px; left: -80px; }
-        .gl-blob.b2 { width: 360px; height: 360px; background: #ff7a59; bottom: -120px; right: -60px; animation-delay: -6s; opacity: .35; }
-        .gl-blob.b3 { width: 300px; height: 300px; background: #22c1c3; top: 45%; left: 42%; animation-delay: -12s; opacity: .25; }
+        .gl-blob.b1 { width: 420px; height: 420px; background: #4644B8; top: -120px; left: -80px; }
+        .gl-blob.b2 { width: 360px; height: 360px; background: #F26522; bottom: -120px; right: -60px; animation-delay: -6s; opacity: .35; }
+        .gl-blob.b3 { width: 300px; height: 300px; background: #F7941D; top: 45%; left: 42%; animation-delay: -12s; opacity: .25; }
         @keyframes gl-float {
             0%, 100% { transform: translate(0, 0) scale(1); }
             33% { transform: translate(40px, -30px) scale(1.08); }
@@ -91,7 +91,7 @@
             margin: 20px 0 12px;
         }
         .gl-brand h1 span {
-            background: linear-gradient(90deg, #b4a9ff, #ffb199);
+            background: linear-gradient(90deg, #FBB866, #F26522);
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
@@ -114,7 +114,7 @@
             display: grid; place-items: center;
             border-radius: 10px;
             font-size: 18px;
-            background: linear-gradient(135deg, rgba(124,108,242,.6), rgba(91,84,214,.35));
+            background: linear-gradient(135deg, rgba(247,148,29,.85), rgba(222,74,27,.7));
             color: #fff;
             flex: none;
         }
@@ -155,7 +155,7 @@
             width: 260px; height: 260px;
             right: -90px; bottom: -110px;
             border-radius: 50%;
-            background: radial-gradient(circle, rgba(255,140,105,.45), transparent 70%);
+            background: radial-gradient(circle, rgba(242,101,34,.45), transparent 70%);
             filter: blur(20px);
             pointer-events: none;
             z-index: -1;
@@ -169,7 +169,8 @@
             background: rgba(255,255,255,.92);
             box-shadow: 0 10px 24px rgba(5,6,30,.25);
         }
-        .gl-logo { display: block; width: 210px; max-width: 100%; height: auto; }
+        .gl-logo { display: block; width: 250px; max-width: 100%; height: auto; }
+        .gl-brand-logo { display: block; width: 360px; max-width: 100%; height: auto; }
         .gl-card h2 { color: #fff; font-size: 26px; font-weight: 700; margin: 0 0 6px; text-align: center; letter-spacing: -.01em; }
         .gl-card .sub { color: rgba(236,234,255,.72); font-size: 14px; text-align: center; margin: 0 0 26px; }
 
@@ -197,10 +198,10 @@
         .gl-input input:hover { background: rgba(255,255,255,.11); }
         .gl-input input:focus {
             background: rgba(255,255,255,.13);
-            border-color: rgba(180,169,255,.9);
-            box-shadow: 0 0 0 4px rgba(150,135,255,.22);
+            border-color: rgba(247,148,29,.9);
+            box-shadow: 0 0 0 4px rgba(242,101,34,.25);
         }
-        .gl-input:focus-within > i.lead { color: #d6d0ff; }
+        .gl-input:focus-within > i.lead { color: #FFD2B0; }
         /* keep browser autofill on the glass instead of a yellow box */
         .gl-input input:-webkit-autofill,
         .gl-input input:-webkit-autofill:hover,
@@ -208,7 +209,7 @@
             -webkit-text-fill-color: #fff;
             caret-color: #fff;
             transition: background-color 9999s ease-in-out 0s;
-            box-shadow: inset 0 0 0 100px rgba(60,55,140,.55);
+            box-shadow: inset 0 0 0 100px rgba(29,28,76,.65);
         }
         .gl-input.has-error input { border-color: rgba(255,120,120,.9); box-shadow: 0 0 0 4px rgba(255,90,90,.15); }
         .gl-input .toggle-password {
@@ -224,7 +225,7 @@
             border-color: rgba(255,255,255,.35);
         }
         .gl-row .form-check-input:checked { background-color: var(--gl-indigo-2); border-color: var(--gl-indigo-2); }
-        .gl-row .form-check-input:focus { box-shadow: 0 0 0 3px rgba(150,135,255,.3); }
+        .gl-row .form-check-input:focus { box-shadow: 0 0 0 3px rgba(242,101,34,.3); }
         .gl-row .form-check-label { color: rgba(236,234,255,.8); }
         .gl-row .hint { color: rgba(236,234,255,.6); display: inline-flex; align-items: center; gap: 5px; }
 
@@ -247,8 +248,8 @@
             font-weight: 600;
             font-size: 15px;
             letter-spacing: .01em;
-            background: linear-gradient(135deg, #8b7bff 0%, #6a5cf0 50%, #5146d1 100%);
-            box-shadow: 0 14px 30px rgba(91,84,214,.45), inset 0 1px 0 rgba(255,255,255,.3);
+            background: linear-gradient(135deg, #F7941D 0%, #F26522 50%, #DE4A1B 100%);
+            box-shadow: 0 14px 30px rgba(226,80,28,.42), inset 0 1px 0 rgba(255,255,255,.3);
             transition: transform .15s, box-shadow .15s, opacity .15s;
             display: flex; align-items: center; justify-content: center; gap: 8px;
         }
@@ -261,7 +262,7 @@
             transform: skewX(-20deg);
             transition: left .6s ease;
         }
-        .gl-btn:hover { transform: translateY(-1px); box-shadow: 0 18px 36px rgba(91,84,214,.55), inset 0 1px 0 rgba(255,255,255,.3); }
+        .gl-btn:hover { transform: translateY(-1px); box-shadow: 0 18px 36px rgba(226,80,28,.52), inset 0 1px 0 rgba(255,255,255,.3); }
         .gl-btn:hover::after { left: 120%; }
         .gl-btn:disabled { opacity: .8; transform: none; }
         .gl-btn i { vertical-align: -2px; margin-left: 4px; }
@@ -312,7 +313,7 @@
         {{-- Brand panel (desktop) --}}
         <div class="gl-brand">
             <div>
-                <span class="gl-chip"><span class="dot"></span> Sha-Shib CAMPUS</span>
+                <img src="{{ asset('brand/logo-white.png') }}" class="gl-brand-logo" alt="Sha-Shib Campus — Centralised Academic Management &amp; Performance Unified System">
                 <h1>Central Academic<br><span>Management Portal</span></h1>
                 <p class="lead-sm">One place for admissions, students, fees, scholarships and institute administration across the Sha-Shib Group.</p>
             </div>
@@ -329,7 +330,7 @@
         {{-- Sign-in card --}}
         <div class="gl-card">
             <span class="gl-logo-wrap">
-                <img src="{{ asset('admin/assets/img/logo.webp') }}" class="gl-logo" alt="Sha-Shib Group">
+                <img src="{{ asset('brand/logo-navy.png') }}" class="gl-logo" alt="Sha-Shib Campus">
             </span>
 
             <h2>Welcome back</h2>

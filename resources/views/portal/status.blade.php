@@ -45,7 +45,7 @@
         .st-head-side .badge { white-space: normal; height: auto !important; min-height: 38px; padding: 6px 14px !important; text-align: center; line-height: 1.3; }
         .er-card { border-radius: 18px; padding: 16px 20px; display: flex; flex-direction: column; gap: 4px; color: #fff;
             background: rgba(255, 255, 255, .09); -webkit-backdrop-filter: blur(14px) saturate(140%); backdrop-filter: blur(14px) saturate(140%);
-            border: 1px solid rgba(255, 255, 255, .20); box-shadow: 0 12px 30px rgba(4, 10, 30, .25); }
+            border: 1px solid rgba(255, 255, 255, .20); box-shadow: 0 12px 30px rgba(14, 13, 40, .25); }
         .er-card .er-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
         .er-card.issued { background: linear-gradient(135deg, rgba(242, 181, 68, .22), rgba(255, 255, 255, .08)); border-color: rgba(242, 181, 68, .5); }
         @media (max-width: 1000px) { .st-cols { grid-template-columns: minmax(0, 1fr); } }

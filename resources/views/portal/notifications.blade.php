@@ -1,6 +1,6 @@
 @php
     $tones = [
-        'indigo' => ['#E6ECFF', '#2338A8'], 'amber' => ['#FFF2DB', '#8A4B00'], 'green' => ['#E3F6EC', '#0B6B43'],
+        'indigo' => ['#E9E9F6', '#2D2B7F'], 'amber' => ['#FFF2DB', '#8A4B00'], 'green' => ['#E3F6EC', '#0B6B43'],
         'red' => ['#FDE7E5', '#A01F14'], 'sky' => ['#E0F2FE', '#075985'],
     ];
 @endphp

@@ -81,7 +81,7 @@
                 </div>
             @endif
 
-            <div wire:key="uploading-{{ $type }}" wire:loading wire:target="upload_{{ $type }}" style="padding: 10px 24px;" class="muted"><span class="spin" style="border-color: rgba(59, 79, 224, .25); border-top-color: var(--brand); vertical-align: -3px;"></span> Uploading {{ strtolower($label) }}…</div>
+            <div wire:key="uploading-{{ $type }}" wire:loading wire:target="upload_{{ $type }}" style="padding: 10px 24px;" class="muted"><span class="spin" style="border-color: rgba(var(--brand-rgb), .25); border-top-color: var(--brand); vertical-align: -3px;"></span> Uploading {{ strtolower($label) }}…</div>
             @error('upload_' . $type)<div class="error" style="padding: 10px 24px;" wire:key="error-{{ $type }}">{{ $message }}</div>@enderror
         @endforeach
         <div class="hint" style="padding: 14px 24px; background: rgba(242, 245, 252, .7);">After you submit, our admissions team checks each document. Anything to redo shows on your status page and comes as a message.</div>

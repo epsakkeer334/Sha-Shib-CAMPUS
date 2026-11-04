@@ -7,10 +7,10 @@
 
         <div class="header-left">
             <a href="{{ route($dashboardRoute) }}" class="logo">
-                <img src="{{ asset('admin/assets/img/small_logo.webp') }} " alt="Logo">
+                <img src="{{ asset('brand/logo-navy.png') }}" alt="Sha-Shib Campus" class="brand-logo">
             </a>
             <a href="{{ route($dashboardRoute) }}" class="dark-logo">
-                <img src="{{ asset('admin/assets/img/small_logo.webp') }}" alt="Logo">
+                <img src="{{ asset('brand/logo-white.png') }}" alt="Sha-Shib Campus" class="brand-logo">
             </a>
         </div>
 

@@ -7,14 +7,15 @@
     <!-- Logo -->
     <div class="sidebar-logo">
         <a href="{{ route('admin.dashboard') }}" class="logo logo-normal">
-            <img src="{{ asset('admin/assets/img/small_logo.png') }}" alt="Logo" class="img-fluid" style="max-width: 90%;">
+            <img src="{{ asset('brand/logo-navy.png') }}" alt="Sha-Shib Campus" class="img-fluid brand-logo">
         </a>
 
         <a href="{{ route('admin.dashboard') }}" class="logo-small">
-            <img src="{{ asset('admin/assets/img/small_logo.png') }}" alt="Logo">
+            <img src="{{ asset('brand/seal-navy.png') }}" alt="Sha-Shib Campus" class="brand-seal brand-seal-navy">
+            <img src="{{ asset('brand/seal-white.png') }}" alt="Sha-Shib Campus" class="brand-seal brand-seal-white">
         </a>
         <a href="{{ route('admin.dashboard') }}" class="dark-logo">
-            <img src="{{ asset('admin/assets/img/small_logo.png') }}" alt="Logo">
+            <img src="{{ asset('brand/logo-white.png') }}" alt="Sha-Shib Campus" class="img-fluid brand-logo">
         </a>
     </div>
     <!-- /Logo -->

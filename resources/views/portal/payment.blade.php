@@ -186,7 +186,7 @@
                             </span>
                             <input type="file" class="visually-hidden" wire:model="proof" accept=".jpg,.jpeg,.png,.pdf">
                         </label>
-                        <div wire:loading wire:target="proof" class="muted"><span class="spin" style="border-color: rgba(59, 79, 224, .25); border-top-color: var(--brand); vertical-align: -3px;"></span> Uploading screenshot…</div>
+                        <div wire:loading wire:target="proof" class="muted"><span class="spin" style="border-color: rgba(var(--brand-rgb), .25); border-top-color: var(--brand); vertical-align: -3px;"></span> Uploading screenshot…</div>
                         @error('proof')<span class="error">{{ $message }}</span>@enderror
 
                         <p style="margin: 0; font-size: 14px; color: var(--ink-2);">Our Accounts team will confirm the transfer, usually within one working day. Your receipt appears below once it’s confirmed.</p>

@@ -153,7 +153,7 @@
                 .addon-seats { font-size: 12px; font-weight: 700; color: var(--warn); background: var(--warn-bg); border-radius: 999px; padding: 1px 8px; }
                 .addon-seats.full { color: var(--danger); background: var(--danger-bg); }
                 @media (max-width: 600px) { .addon-card .card-head .end { display: none; } .choice.addon { min-height: 0; } }
-                .addon-sum { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border-radius: 14px; background: #F2F4FF; border: 1px solid #D6DCF7; font-size: 14px; animation: rise .3s var(--ease); }
+                .addon-sum { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border-radius: 14px; background: #F4F4FB; border: 1px solid #D6DCF7; font-size: 14px; animation: rise .3s var(--ease); }
             </style>
         @endif
 
