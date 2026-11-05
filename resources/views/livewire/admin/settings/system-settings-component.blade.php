@@ -251,7 +251,9 @@
             @endforeach
         </nav>
 
-        <div class="min-w-0">
+        {{-- Keyed by tab so switching tabs renders fresh inputs: re-using another tab's
+             wire:model / wire:model.defer checkbox sent updates without a property name. --}}
+        <div class="min-w-0" wire:key="ss-tab-{{ $tab }}">
             {{-- ───────────────────────── General ───────────────────────── --}}
             @if($tab === 'general')
                 <form wire:submit.prevent="save" class="ss-card">
