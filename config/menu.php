@@ -202,6 +202,7 @@ return [
                 'children' => [
                     ['label' => 'System Settings', 'icon' => 'ti ti-adjustments-horizontal', 'route' => 'admin.settings', 'roles' => ['super-admin']],
                     ['label' => 'Serial Numbers', 'icon' => 'ti ti-123', 'route' => 'admin.serials', 'permission' => 'serials.manage', 'roles' => ['super-admin']],
+                    ['label' => 'Email Templates', 'icon' => 'ti ti-mail-cog', 'route' => 'admin.email-templates', 'permission' => 'email_templates.manage'],
                 ],
             ],
             [
@@ -209,7 +210,7 @@ return [
                 'icon' => 'ti ti-activity',
                 'children' => [
                     ['label' => 'Audit Trail', 'icon' => 'ti ti-history', 'route' => 'admin.audit-trail', 'permission' => 'audit.view'],
-                    ['label' => 'Notification Log', 'icon' => 'ti ti-bell', 'route' => 'admin.notifications', 'permission' => 'notifications.view'],
+                    ['label' => 'Email & SMS Log', 'icon' => 'ti ti-mail-check', 'route' => 'admin.notifications', 'permission' => 'notifications.view'],
                 ],
             ],
         ],

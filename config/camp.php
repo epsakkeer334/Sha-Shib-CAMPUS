@@ -88,7 +88,8 @@ return [
             'audit.view' => 'View audit trail',
         ],
         'Notifications' => [
-            'notifications.view' => 'View notification log',
+            'notifications.view' => 'View notification log (emails and SMS)',
+            'email_templates.manage' => 'Manage email templates and sender details of the institute',
         ],
         'Serial Numbers' => [
             'serials.manage' => 'Manage serial number series',
@@ -100,7 +101,7 @@ return [
 
     // Default permissions per role (super-admin gets everything through Gate::before).
     'default_role_permissions' => [
-        'institute-admin' => ['users.view', 'users.create', 'users.update', 'users.delete', 'audit.view', 'notifications.view', 'institute_courses.view', 'institute_courses.manage', 'batches.manage', 'periods.manage', 'addon_programs.manage', 'students.view', 'students.create', 'students.update', 'students.delete', 'students.manage_er', 'students.bulk_update', 'onboarding.verify_documents', 'eligibility.override', 'enrollment.manage', 'fees.manage', 'payments.collect', 'scholarships.view', 'scholarships.manage', 'scholarships.assign'],
+        'institute-admin' => ['users.view', 'users.create', 'users.update', 'users.delete', 'audit.view', 'notifications.view', 'institute_courses.view', 'institute_courses.manage', 'batches.manage', 'periods.manage', 'addon_programs.manage', 'students.view', 'students.create', 'students.update', 'students.delete', 'students.manage_er', 'students.bulk_update', 'onboarding.verify_documents', 'eligibility.override', 'enrollment.manage', 'fees.manage', 'payments.collect', 'scholarships.view', 'scholarships.manage', 'scholarships.assign', 'email_templates.manage'],
         'accounts' => ['students.view', 'fees.manage', 'payments.collect', 'payments.verify', 'scholarships.view'],
         'training-manager' => ['students.view', 'enrollment.manage'],
         'bic' => [],

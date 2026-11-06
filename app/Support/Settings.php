@@ -18,7 +18,7 @@ class Settings
 {
     public const CACHE_KEY = 'camp.system_settings';
 
-    /** Keys stored encrypted. */
+    /** Keys stored encrypted (mail.password: old SMTP password row, kept readable; email now uses SMTP2GO from .env). */
     public const SECRET = ['mail.password'];
 
     public const DEFAULTS = [
@@ -39,15 +39,11 @@ class Settings
         'theme.allow_user' => false,
         'theme.loader' => true,
 
-        // Email
+        // Email — sent through the SMTP2GO API; key and sender live in .env (config/services.php → smtp2go)
         'mail.enabled' => false,
-        'mail.host' => 'mail.smtp2go.com',
-        'mail.port' => 2525,
-        'mail.encryption' => 'tls',
-        'mail.username' => '',
-        'mail.password' => '',
-        'mail.from_address' => '',
-        'mail.from_name' => 'Sha-Shib CAMPUS',
+
+        // Background jobs — send emails through the database queue worker run by the scheduler (see BackgroundJobs)
+        'queue.worker_enabled' => false,
 
         // Notifications (in-app bell)
         'notify.in_app' => true,
@@ -209,47 +205,20 @@ class Settings
     // ------------------------------------------------------------------ Runtime
 
     /**
-     * Push settings into Laravel config at boot: SMTP mailer, session lifetime, app name.
+     * Push settings into Laravel config at boot: session lifetime.
      */
     public static function applyRuntimeConfig(): void
     {
-        $s = static::all();
-
-        config(['session.lifetime' => max(5, (int) $s['security.session_lifetime'])]);
-
-        if (static::mailConfigured()) {
-            config([
-                'mail.default' => 'smtp',
-                'mail.mailers.smtp.host' => $s['mail.host'],
-                'mail.mailers.smtp.port' => (int) $s['mail.port'],
-                'mail.mailers.smtp.encryption' => $s['mail.encryption'] === 'none' ? null : $s['mail.encryption'],
-                'mail.mailers.smtp.username' => $s['mail.username'] ?: null,
-                'mail.mailers.smtp.password' => $s['mail.password'] ?: null,
-                'mail.from.address' => $s['mail.from_address'],
-                'mail.from.name' => $s['mail.from_name'] ?: $s['general.site_name'],
-            ]);
-        }
+        config(['session.lifetime' => max(5, (int) static::get('security.session_lifetime'))]);
     }
 
-    /**
-     * Drop the already-built SMTP mailer so the next email uses the current config
-     * (no-op under Mail::fake(), whose fake has no purge()).
-     */
-    public static function refreshMailer(): void
-    {
-        $manager = app('mail.manager');
-        if (method_exists($manager, 'purge')) {
-            $manager->purge('smtp');
-        }
-    }
-
-    /** SMTP details are complete enough to try sending. */
+    /** SMTP2GO API key and sender address are set in .env. */
     public static function mailConfigured(): bool
     {
-        return static::get('mail.host') !== '' && static::get('mail.from_address') !== '' && (int) static::get('mail.port') > 0;
+        return app(\App\Services\Email\Smtp2GoClient::class)->configured();
     }
 
-    /** Emails are actually sent (switch on + SMTP filled in). */
+    /** Emails are actually sent (switch on + SMTP2GO configured). */
     public static function emailEnabled(): bool
     {
         return static::bool('mail.enabled') && static::mailConfigured();

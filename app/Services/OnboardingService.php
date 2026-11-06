@@ -26,7 +26,7 @@ class OnboardingService
     use RecordsAuditTrail;
 
     public function __construct(
-        protected NotificationService $notifications,
+        protected EmailService $emails,
         protected SerialNumberService $serials,
         protected FeeService $fees,
         protected AppNotifier $inApp
@@ -296,9 +296,7 @@ class OnboardingService
         $this->refreshStatus($student->fresh());
 
         $this->inApp->notify('document_accepted', $student, ['document' => $document->type_label]);
-        $this->notifications->send($student, 'document_accepted', "Your {$document->type_label} is accepted",
-            "Dear {$student->first_name},\n\nWe checked your {$document->type_label} again and it is accepted. "
-            . "You do not need to upload it again.\n\n" . optional($student->institute)->name);
+        $this->emails->toStudent('document_accepted', $student, ['document' => $document->type_label]);
     }
 
     /**
@@ -347,9 +345,7 @@ class OnboardingService
         $this->refreshStatus($student->fresh());
 
         $this->inApp->notify('document_rejected', $student, ['document' => $document->type_label, 'reason' => $remarks]);
-        $this->notifications->send($student, 'document_rejected', "Action needed: re-upload your {$document->type_label}",
-            "Dear {$student->first_name},\n\nYour {$document->type_label} could not be accepted.\nReason: {$remarks}\n\n"
-            . "Please upload a new copy before {$student->formatted_onboarding_deadline}.\n\n" . optional($student->institute)->name);
+        $this->emails->toStudent('document_rejected', $student, ['document' => $document->type_label, 'reason' => $remarks]);
     }
 
     /**
@@ -364,9 +360,7 @@ class OnboardingService
 
         $labels = array_map(fn ($type) => config("camp.student_document_types.{$type}.0"), $missing);
         $this->inApp->notify('document_reminder', $student, ['documents' => implode(', ', $labels)]);
-        $this->notifications->send($student, 'document_reminder', 'Reminder: documents pending for your admission',
-            "Dear {$student->first_name},\n\nPlease upload the following documents:\n- " . implode("\n- ", $labels)
-            . "\n\nComplete onboarding before {$student->formatted_onboarding_deadline}.\n\n" . optional($student->institute)->name);
+        $this->emails->toStudent('document_reminder', $student, ['documents' => $labels]);
 
         $this->audit('remind', 'students', $student, ['description' => 'Reminder sent for: ' . implode(', ', $labels)]);
 
@@ -465,9 +459,7 @@ class OnboardingService
         ]);
 
         $this->inApp->notify('application_rejected', $student, ['reason' => $remarks]);
-        $this->notifications->send($student, 'application_rejected', 'Your admission application needs corrections',
-            "Dear {$student->first_name},\n\nYour application was returned for corrections.\nReason: {$remarks}\n\n"
-            . 'Please update it and submit again.' . "\n\n" . optional($student->institute)->name);
+        $this->emails->toStudent('application_rejected', $student, ['reason' => $remarks]);
     }
 
     /**
@@ -509,9 +501,7 @@ class OnboardingService
         app(PeriodService::class)->startFirstPeriod($student->fresh());
         $this->fees->generateDues($student->fresh());
 
-        $this->notifications->send($student, 'er_issued', "Your ER number: {$student->er_number}",
-            "Dear {$student->first_name},\n\nYour documents and fees are verified. Your ER number is {$student->er_number}.\n"
-            . 'Your ID card will be ready after it is signed by the Training Manager.' . "\n\n" . optional($student->institute)->name);
+        $this->emails->toStudent('er_issued', $student->fresh());
 
         return true;
     }

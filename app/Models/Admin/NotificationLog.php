@@ -14,9 +14,16 @@ class NotificationLog extends Model
         'notifiable_id',
         'channel',
         'event_type',
+        'template_key',
+        'email_template_id',
         'recipient',
+        'subject',
         'payload',
         'status',
+        'provider',
+        'provider_message_id',
+        'attempts',
+        'last_attempt_at',
         'error',
         'sent_at',
     ];
@@ -24,6 +31,8 @@ class NotificationLog extends Model
     protected $casts = [
         'payload' => 'array',
         'sent_at' => 'datetime',
+        'last_attempt_at' => 'datetime',
+        'attempts' => 'integer',
     ];
 
     protected $appends = ['status_html', 'formatted_created_at'];

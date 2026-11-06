@@ -9,15 +9,15 @@
     {{-- Header --}}
     <div class="mon-head mb-3">
         <div class="min-w-0">
-            <h2 class="mb-1 fw-bold">Notification Log</h2>
+            <h2 class="mb-1 fw-bold">Email &amp; SMS Log</h2>
             <nav>
                 <ol class="breadcrumb mb-1 sl-crumb">
                     <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}"><i class="ti ti-smart-home"></i></a></li>
                     <li class="breadcrumb-item">Monitoring</li>
-                    <li class="breadcrumb-item active">Notification Log</li>
+                    <li class="breadcrumb-item active">Email &amp; SMS Log</li>
                 </ol>
             </nav>
-            <div class="text-muted small">Emails and SMS messages sent to students and staff. Click a message to read it in full.</div>
+            <div class="text-muted small">Every email (sent through SMTP2GO) and SMS to students and staff. Click a message to see it as it was sent.</div>
         </div>
         {{-- Status tabs (counts within the institute filter) --}}
         <div class="nl-tabs" role="tablist">
@@ -30,7 +30,14 @@
 
     @if(($statusCounts['pending'] ?? 0) > 0 && $filterStatus !== 'pending')
         <div class="nl-note mb-3"><i class="ti ti-info-circle"></i>
-            <span>{{ number_format($statusCounts['pending']) }} {{ \Illuminate\Support\Str::plural('message', $statusCounts['pending']) }} not sent yet — {{ \App\Support\Settings::emailEnabled() ? 'they were queued before email sending was switched on' : 'email sending is switched off in System Settings → Email' }}, and SMS waits until a gateway is chosen.</span>
+            <span>{{ number_format($statusCounts['pending']) }} {{ \Illuminate\Support\Str::plural('message', $statusCounts['pending']) }} not sent yet — {{ \App\Support\Settings::emailEnabled() ? 'emails are being sent in the background, or were kept while sending was off (open one and use Retry)' : 'email sending is switched off in System Settings → Email' }}; SMS waits until a gateway is chosen.</span>
+        </div>
+    @endif
+
+    @if($isSuperAdmin && ($statusCounts['failed'] ?? 0) > 0)
+        <div class="nl-note nl-note-bad mb-3"><i class="ti ti-alert-triangle"></i>
+            <span>{{ number_format($statusCounts['failed']) }} {{ \Illuminate\Support\Str::plural('message', $statusCounts['failed']) }} could not be delivered. Open one to see the SMTP2GO error.</span>
+            <button type="button" class="btn btn-sm btn-outline-danger ms-auto text-nowrap" wire:click="retryFailed" wire:loading.attr="disabled" wire:target="retryFailed"><i class="ti ti-refresh me-1"></i> Retry failed emails</button>
         </div>
     @endif
 
@@ -123,7 +130,7 @@
                                 <span class="mon-chip mon-tone-violet">{{ NL::eventLabel($log->event_type) }}</span>
                                 <div class="mon-sub mt-1">{{ $type }}</div>
                             </td>
-                            <td><div class="mon-desc">{{ $log->payload['subject'] ?? \Illuminate\Support\Str::limit($log->payload['message'] ?? '—', 90) }}</div></td>
+                            <td><div class="mon-desc">{{ $log->subject ?? ($log->payload['subject'] ?? \Illuminate\Support\Str::limit($log->payload['message'] ?? '—', 90)) }}</div>@if($log->attempts > 1)<div class="mon-sub mt-1">{{ $log->attempts }} attempts</div>@endif</td>
                             <td class="text-nowrap">
                                 <span class="mon-chip mon-tone-{{ $statusTone }}">{{ $statusLabel }}</span>
                                 @if($log->status === 'sent' && $log->sent_at)<div class="mon-sub mt-1">{{ $log->sent_at->format('h:i A') }}</div>@endif
@@ -183,12 +190,16 @@
                             {{-- Email: as the recipient sees it --}}
                             <div class="nm-mail">
                                 <dl class="nm-mail-head">
-                                    <dt>From</dt><dd>{{ $selected['institute'] === 'Central' ? config('app.name') : $selected['institute'] }}</dd>
+                                    <dt>From</dt><dd>{{ $selected['from'] ?? ($selected['institute'] === 'Central' ? config('app.name') : $selected['institute']) }}@if($selected['reply_to']) <span class="nm-who">reply-to {{ $selected['reply_to'] }}</span>@endif</dd>
                                     <dt>To</dt><dd><strong>{{ $selected['name'] }}</strong>@if($selected['recipient']) &lt;{{ $selected['recipient'] }}&gt;@endif <span class="nm-who">{{ $selected['type'] }}</span></dd>
                                     <dt>Date</dt><dd>{{ $selected['created'] }} <span class="text-muted">({{ $selected['ago'] }})</span></dd>
                                     <dt>Subject</dt><dd><strong>{{ $selected['subject'] ?? '—' }}</strong></dd>
                                 </dl>
-                                <div class="nm-mail-body">{{ $selected['message'] ?? 'No message text was stored.' }}</div>
+                                @if($selected['html'])
+                                    <iframe class="nm-mail-frame" srcdoc="{{ $selected['html'] }}" title="Email as sent" sandbox=""></iframe>
+                                @else
+                                    <div class="nm-mail-body">{{ $selected['message'] ?? 'No message text was stored.' }}</div>
+                                @endif
                             </div>
                         @endif
 
@@ -201,6 +212,13 @@
                                 <dt>Institute</dt><dd>{{ $selected['institute'] }}</dd>
                                 <dt>Created</dt><dd>{{ $selected['created'] }}</dd>
                                 <dt>Sent</dt><dd>{{ $selected['sent'] ?? 'Not sent' }}</dd>
+                                @if($selected['template'])<dt>Template</dt><dd>{{ $selected['template'] }}</dd>@endif
+                                @if(!$isSms)
+                                    <dt>Provider</dt><dd>{{ $selected['provider'] ? strtoupper($selected['provider']) : '—' }}</dd>
+                                    <dt>SMTP2GO email id</dt><dd class="mon-mono">{{ $selected['provider_id'] ?: '—' }}</dd>
+                                    <dt>Attempts</dt><dd>{{ $selected['attempts'] }}@if($selected['last_attempt']) · last {{ $selected['last_attempt'] }}@endif</dd>
+                                @endif
+                                @if($selected['error'])<dt>Error</dt><dd class="text-break text-danger">{{ $selected['error'] }}</dd>@endif
                                 @foreach($selected['extra'] as $k => $v)
                                     <dt>{{ \App\Support\Readable::label($k) }}</dt><dd class="text-break">{{ \App\Support\Readable::value($v, $k) }}</dd>
                                 @endforeach
@@ -210,6 +228,9 @@
                     <div class="modal-footer">
                         @if($selected['link'])
                             <a href="{{ $selected['link'] }}" class="btn btn-outline-primary me-auto"><i class="ti ti-user me-1"></i> Open student's fees &amp; payments</a>
+                        @endif
+                        @if($selected['can_retry'])
+                            <button type="button" class="btn btn-warning" wire:click="retry({{ $selected['id'] }})" wire:loading.attr="disabled" wire:target="retry"><i class="ti ti-refresh me-1"></i> {{ $selected['status'] === 'failed' ? 'Retry' : 'Send now' }}</button>
                         @endif
                         <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Close</button>
                     </div>
@@ -230,6 +251,9 @@
         .mon-ui .nl-tabs .nl-tab-red.is-active span { background: #FEE2E2; color: #B91C1C; }
         .mon-ui .nl-note { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: #FFFBEB; border: 1px solid #FDE68A; font-size: 13px; color: #78350F; }
         .mon-ui .nl-note i { font-size: 18px; color: #D97706; }
+        .mon-ui .nl-note-bad { background: #FEF2F2; border-color: #FECACA; color: #7F1D1D; }
+        .mon-ui .nl-note-bad i { color: #DC2626; }
+        .mon-modal .nm-mail-frame { display: block; width: 100%; height: 520px; border: 0; border-top: 1px solid #E5E7EB; background: #EEF0F6; }
         .mon-ui .nl-channel { width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; }
         .mon-ui .nl-channel-email { background: #E0F2FE; color: #0369A1; }
         .mon-ui .nl-channel-sms { background: #DCFCE7; color: #15803D; }

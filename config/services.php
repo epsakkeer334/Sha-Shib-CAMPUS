@@ -31,4 +31,14 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    // All CAMP emails go out through the SMTP2GO HTTP API (App\Services\EmailService).
+    // The sender address must be on a domain verified in SMTP2GO.
+    'smtp2go' => [
+        'api_key' => env('SMTP2GO_API_KEY'),
+        'sender_email' => env('SMTP2GO_SENDER_EMAIL'),
+        'sender_name' => env('SMTP2GO_SENDER_NAME', 'Sha-Shib CAMPUS'),
+        'endpoint' => env('SMTP2GO_ENDPOINT', 'https://api.smtp2go.com/v3/email/send'),
+        'timeout' => (int) env('SMTP2GO_TIMEOUT', 20),
+    ],
+
 ];

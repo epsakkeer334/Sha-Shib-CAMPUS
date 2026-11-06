@@ -77,7 +77,7 @@ Only Super Admin adds/edits institutes. Students are created by Module 2 (onboar
 
 **Side menu** ✅ — role × menu matrix in `config/menu.php`, rendered by `App\Services\MenuService`. An item shows when its route exists and the user has the listed role/permission, so menu items for Modules 2–8 appear automatically as each module is built. Non-Super-Admin dashboards show the same items as quick links.
 
-**Permissions** ✅ — defined in `config/camp.php` → `permissions` (Module 1: `institutes.manage`, `users.view/create/update/delete`, `roles.manage`, `audit.view`, `notifications.view`, `serials.manage`; Module 1A: `masters.manage` ✅ — Super Admin only, hidden from the matrix; `institute_courses.view` / `institute_courses.manage` ✅ — default for Institute Admin, own institute only (Super Admin: all institutes); planned: `payments.collect`, `payments.verify`, `payments.refund` — Accounts, for Module 2; Module 2C ✅: `scholarships.view` (Institute Admin, Accounts), `scholarships.manage` and `scholarships.assign` (Institute Admin); Module 2.7 ✅: `eligibility.override` (Institute Admin); Module 2.8–2.9 ✅: `students.manage_er`, `students.bulk_update` (Institute Admin); Module 2.10 ✅: `addon_programs.manage` (Institute Admin)); editable per role on the Roles & Permissions screen. Super Admin passes every check (`Gate::before`).
+**Permissions** ✅ — defined in `config/camp.php` → `permissions` (Module 1: `institutes.manage`, `users.view/create/update/delete`, `roles.manage`, `audit.view`, `notifications.view`, `serials.manage`, `email_templates.manage` ✅ (Institute Admin, own institute); Module 1A: `masters.manage` ✅ — Super Admin only, hidden from the matrix; `institute_courses.view` / `institute_courses.manage` ✅ — default for Institute Admin, own institute only (Super Admin: all institutes); planned: `payments.collect`, `payments.verify`, `payments.refund` — Accounts, for Module 2; Module 2C ✅: `scholarships.view` (Institute Admin, Accounts), `scholarships.manage` and `scholarships.assign` (Institute Admin); Module 2.7 ✅: `eligibility.override` (Institute Admin); Module 2.8–2.9 ✅: `students.manage_er`, `students.bulk_update` (Institute Admin); Module 2.10 ✅: `addon_programs.manage` (Institute Admin)); editable per role on the Roles & Permissions screen. Super Admin passes every check (`Gate::before`).
 
 ---
 
@@ -94,7 +94,7 @@ Common columns from `BaseModel` (`created_by`, `updated_by`, `deleted_at`, `time
 
 **Livewire components:** `Admin\Institutes\InstitutesComponent` ✅, `Admin\Users\UsersComponent` ✅ (all users, or one institute's users via Institutes → Users), `Admin\Roles\RolesComponent` ✅ (role × permission matrix), `Admin\AuditTrail\AuditTrailComponent` ✅, `Admin\Notifications\NotificationLogComponent` ✅
 
-**Services / support:** `SerialNumberService` ✅, `NotificationService` ✅ (email sent + logged; SMS logged as pending until a gateway is chosen), `MenuService` ✅, `BelongsToInstitute` trait ✅ (for Module 2+ models), `EnsureUserIsActive` middleware ✅ (blocks inactive users, users without a role, and users of inactive institutes)
+**Services / support:** `SerialNumberService` ✅, `EmailService` ✅ (all email via SMTP2GO, in the background, logged), `NotificationService` ✅ (email → EmailService; SMS logged as pending until a gateway is chosen), `MenuService` ✅, `BelongsToInstitute` trait ✅ (for Module 2+ models), `EnsureUserIsActive` middleware ✅ (blocks inactive users, users without a role, and users of inactive institutes)
 
 **Tables**
 
@@ -170,19 +170,39 @@ Roles via spatie tables (`2025_11_26_064444_create_permission_tables`).
 | channel | enum(sms,email) |  |
 | recipient | string nullable | email / phone used |
 | event_type | string | `er_issued`, `exam_approved`, `result_published`, `mou_expiry` |
-| payload | json |  |
-| status | enum(pending,sent,failed) |  |
+| template_key | string nullable | email template used (`config/email_templates.php`) ✅ |
+| email_template_id | bigint FK nullable | saved version used (`email_templates`), null = built-in default ✅ |
+| subject | string nullable | ✅ |
+| payload | json | `subject`, `message` (text), `html` (as sent), `sender_name`, `reply_to` |
+| status | enum(pending,sent,failed) | pending = waiting / switched off; failed = SMTP2GO refused or unreachable |
+| provider / provider_message_id | string nullable | `smtp2go` / SMTP2GO `email_id` ✅ |
+| attempts / last_attempt_at | tinyint / timestamp nullable | ✅ |
 | error | text nullable |  |
 | sent_at | timestamp nullable |  |
 
+#### Email — SMTP2GO service ✅ built
+All email goes through **one** service, `App\Services\EmailService` → `App\Services\Email\Smtp2GoClient` → `POST https://api.smtp2go.com/v3/email/send` (header `X-Smtp2go-Api-Key`). No module sends mail itself; `NotificationService::send()` hands its email channel to the same service.
+
+- **Credentials:** `.env` only — `SMTP2GO_API_KEY`, `SMTP2GO_SENDER_EMAIL` (domain verified in SMTP2GO), `SMTP2GO_SENDER_NAME` (`config/services.php` → `smtp2go`). The admin screens show the key masked.
+- **Background:** the email is written to `notifications_log` as `pending`, then `App\Jobs\SendEmailJob` sends it — by default right after the response has gone to the browser (`dispatchAfterResponse`, PHP-FPM, no worker needed). With the **queue worker** switched on (System Settings ▸ Background Jobs) and the scheduler running, it goes on the `database` queue `emails`, 3 tries (1 min, 5 min) for timeouts / rate limits / 5xx. Worker on but the scheduler silent for 3 minutes → falls back to after-the-response, so nothing gets stuck. The user never waits for SMTP2GO. Only the two **test** buttons send and wait, to show the answer.
+- **Background jobs** (`App\Support\BackgroundJobs`, table `background_heartbeats`): one cron line `* * * * * php artisan schedule:run`. The scheduler (`app/Console/Kernel.php`) checks in every minute and starts `queue:work database --queue=emails --stop-when-empty --max-time=50` while the worker is on or emails still wait. The worker checks in from the `Looping` event and counts `JobProcessed` / `JobFailed`. The tab shows each one's state (running / late / not running / never), last check-in, hits today, last-hour strip (60 minutes), jobs done / failed, the queue (waiting, oldest, failed jobs), **Send waiting emails now** (runs the worker in the request, audited) and the cron line for Plesk.
+- **Switched off / not configured:** logged `pending` with the reason; Super Admin sends it later with **Retry** (single, or "Retry failed emails").
+- **Templates** (`config/email_templates.php` — default wording, placeholders): `er_issued`, `application_rejected`, `document_accepted`, `document_rejected`, `document_reminder`, `payment_received`, `payment_rejected`, `test_email`. Table `email_templates` (institute_id null = group version, else that institute's version; subject, body, button text / link, status on/off). Lookup: institute → group → default. Body is plain text with `{placeholders}`, blank line = paragraph, `- ` bullets, `**bold**`; values are HTML-escaped; wrapped in the branded layout `resources/views/emails/layout.blade.php` (navy header with logo, institute footer) plus a plain-text part.
+- **Per institute** (`institute_email_settings`): sender name, reply-to (default: institute email), signature.
+- **Screen:** Administration ▸ System ▸ **Email Templates** (`admin.email-templates`, permission `email_templates.manage` — Institute Admin by default, own institute only; Super Admin: group version or any institute). Template list with Default / Group / Institute / Off tags, editor with placeholder chips, live preview, send test, reset, sender details.
+- **Log:** Monitoring ▸ **Email & SMS Log** (`admin.notifications`) — subject, template, status, SMTP2GO id, attempts, error, the email as sent; Retry for Super Admin.
+- **Not done yet:** password-reset / e-mail verification emails (the Breeze routes in `routes/auth.php` are not loaded; staff reset passwords via Users), staff emails, SMS.
+- Migration `2026_11_06_000001_create_email_templates_and_email_log` (additive; also Laravel's `jobs` table). Tests `Module1EmailTest` (SMTP2GO always faked).
+
 #### System Settings (Super Admin) ✅ built
-Administration ▸ System ▸ **System Settings** (`admin.settings`, role `super-admin` only). One table `system_settings` (key unique, value JSON, updated_by); read through `App\Support\Settings` (cached, defaults in `Settings::DEFAULTS`, so a missing row or table behaves as before) and the `setting('key')` helper. Every save is written to the audit trail (SMTP password masked).
+Administration ▸ System ▸ **System Settings** (`admin.settings`, role `super-admin` only). One table `system_settings` (key unique, value JSON, updated_by); read through `App\Support\Settings` (cached, defaults in `Settings::DEFAULTS`, so a missing row or table behaves as before) and the `setting('key')` helper. Every save is written to the audit trail.
 
 | Tab | Settings | Effect |
 |---|---|---|
 | General | system name, organisation, support email / phone, address, footer text | browser title, admin footer, email sender name |
 | Appearance | primary colour (7 presets + custom), sidebar, top bar, light / dark, page loader, "let users change their own theme" | admin layout writes the theme into the template's localStorage keys before `theme-script.js`; customiser gear hidden unless allowed |
-| Email | **send emails on / off** (default off), SMTP host / port / encryption / username / password (encrypted) / from; quick-fill SMTP2GO, GoDaddy, Gmail, Microsoft 365; **send test email** | `NotificationService` sends only when on and complete, otherwise logs `pending` |
+| Email | **send emails on / off** (default off; can only be switched on when SMTP2GO is set in `.env`), SMTP2GO status (key masked, sender), today's sent / pending / failed, **send test email** | `EmailService` sends only when on and configured, otherwise logs `pending` (see *Email — SMTP2GO service*) |
+| Background Jobs | **send emails through the queue worker** on / off (default off), live status of the scheduler and the email worker (last check-in, hits today, last 60 minutes, jobs done / failed, refreshes every 30 s), email queue (waiting / oldest / failed), **send waiting emails now**, cron setup | `SendEmailJob` queues only while on **and** the scheduler is alive (see *Email — SMTP2GO service*) |
 | Notifications | in-app master switch, staff / students, each workflow event on / off | `AppNotifier` skips what is switched off |
 | Admissions | accept new applications, closed message | portal hides "Start your application"; `/admissions/apply` redirects home; existing applicants unaffected |
 | System | session timeout; server health (env, debug, PHP, DB, storage, disk); clear cache | `session.lifetime` set at boot |

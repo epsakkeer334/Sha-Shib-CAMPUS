@@ -277,7 +277,7 @@ class Module1CoreTest extends TestCase
         $labels = fn (User $u) => collect(MenuService::flatFor($u))->flatMap(fn ($s) => array_column($s['items'], 'label'))->all();
 
         $super = $labels($this->makeUser('super-admin'));
-        foreach (['Dashboard', 'Institutes', 'Users', 'Roles & Permissions', 'Audit Trail', 'Notification Log'] as $label) {
+        foreach (['Dashboard', 'Institutes', 'Users', 'Roles & Permissions', 'Audit Trail', 'Email & SMS Log'] as $label) {
             $this->assertContains($label, $super);
         }
 
@@ -297,13 +297,14 @@ class Module1CoreTest extends TestCase
         $this->assertSame(['Document Verification', 'Payment Verification', 'ER & ID Cards'], array_column($groups['Admissions']['items'][1]['children'], 'label'));
         $this->assertSame(['Dashboard', 'Master Data'], array_column($groups['Main']['items'], 'label')); // Master Data at the top
         $this->assertSame(['Users & Permissions', 'System', 'Monitoring'], array_column($groups['Administration']['items'], 'label'));
-        $this->assertSame(['System Settings'], array_column($groups['Administration']['items'][1]['children'], 'label'));
+        $this->assertSame(['System Settings', 'Email Templates'], array_column($groups['Administration']['items'][1]['children'], 'label'));
         $group = $groups['Administration']['items'][0];
         $this->assertSame(['Users', 'Roles & Permissions'], array_column($group['children'], 'label'));
 
         // Institute Admin's groups only contain what they may open.
         $instGroups = collect(MenuService::for($this->makeUser('institute-admin', $this->instA)))->keyBy('title');
         $this->assertSame(['Users'], array_column($instGroups['Administration']['items'][0]['children'], 'label'));
+        $this->assertSame(['Email Templates'], array_column($instGroups['Administration']['items'][1]['children'], 'label')); // own institute's emails
 
         // Accounts: only what its permissions allow (Module 2 fees & payments); modules not built yet stay hidden.
         $this->assertSame(['Dashboard', 'Fee Structure', 'Payment Settings', 'Scholarships', 'All Students', 'Payment Verification'], $labels($this->makeUser('accounts', $this->instA)));
@@ -480,7 +481,7 @@ class Module1CoreTest extends TestCase
             ->call('clearFilters')->set('search', 're-upload')->assertSee('Document needs attention')->assertDontSee('Your ER number')
             ->call('clearFilters')->call('view', $sent->id)->assertDispatchedBrowserEvent('open-notification-log-modal')
             ->assertSet('selected.message', "Dear Alpha,\n\nYour ER number is ER-2026-00001.")
-            ->assertSet('selected.extra', ['er' => 'ER-2026-00001'])->assertSet('selected.event', 'ER Issued')
+            ->assertSet('selected.extra', ['er' => 'ER-2026-00001'])->assertSet('selected.event', 'ER number issued')
             ->assertSee('Your ER number is ER-2026-00001.');
 
         $this->actingAs($this->makeUser('institute-admin', $this->instA));

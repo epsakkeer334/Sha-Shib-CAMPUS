@@ -21,7 +21,7 @@ use App\Support\Settings;
 use Database\Seeders\admin\MasterDataSeeder;
 use Database\Seeders\admin\RoleSeeder;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -128,49 +128,63 @@ class Module1SystemSettingsTest extends TestCase
             ->assertSee('"sidebar":"indigo"', false)->assertSee('.sidebar-contact, #theme-setting { display: none !important; }', false);
     }
 
-    public function test_smtp_password_is_encrypted_and_kept_when_left_empty(): void
+    /** What the faked SMTP2GO API answers: [body, HTTP status]. */
+    protected array $smtpReply = [];
+
+    protected function fakeSmtp2Go(): void
     {
+        config(['services.smtp2go.api_key' => 'api-TEST00001234', 'services.smtp2go.sender_email' => 'no-reply@camp.test']);
+        $this->smtpReply = [['request_id' => 'r1', 'data' => ['succeeded' => 1, 'failed' => 0, 'failures' => [], 'email_id' => '1abcDE-TEST']], 200];
+        Http::preventStrayRequests();
+        Http::fake(['api.smtp2go.com/*' => fn () => Http::response($this->smtpReply[0], $this->smtpReply[1])]);
+    }
+
+    public function test_email_can_be_switched_on_only_when_smtp2go_is_configured(): void
+    {
+        config(['services.smtp2go.api_key' => null, 'services.smtp2go.sender_email' => null]);
         $c = Livewire::actingAs($this->super)->test(SystemSettingsComponent::class)->set('tab', 'email')
-            ->set('s.mail.enabled', true)->set('s.mail.host', '')->call('save')->assertHasErrors(['s.mail.host'])
-            ->set('s.mail.host', 'mail.smtp2go.com')->set('s.mail.from_address', 'no-reply@camp.test')->set('mailPassword', 'Secret#123')->call('save')->assertHasNoErrors();
+            ->assertSee('SMTP2GO_API_KEY')
+            ->set('s.mail.enabled', true)->call('save')->assertHasErrors(['s.mail.enabled']);
+        $this->assertFalse(Settings::emailEnabled());
 
-        $raw = SystemSetting::where('key', 'mail.password')->value('value');
-        $this->assertStringNotContainsString('Secret#123', $raw);
-        $this->assertSame('Secret#123', Settings::get('mail.password'));
+        $this->fakeSmtp2Go();
+        $c->set('s.mail.enabled', true)->call('save')->assertHasNoErrors()->assertSee('api-…1234')->assertDontSee('api-TEST00001234');
         $this->assertTrue(Settings::emailEnabled());
-
-        // Saving again with an empty password field keeps it; the audit never shows it
-        $c->set('s.mail.port', 587)->call('save');
-        $this->assertSame('Secret#123', Settings::get('mail.password'));
-        $this->assertStringNotContainsString('Secret#123', json_encode(AuditTrail::where('module', 'System Settings')->pluck('meta')));
-
-        $c->call('removePassword');
-        $this->assertSame('', Settings::get('mail.password'));
     }
 
     public function test_email_is_sent_only_when_switched_on(): void
     {
-        Mail::fake();
+        $this->fakeSmtp2Go();
         $service = app(NotificationService::class);
 
         $service->send($this->super, 'test_event', 'Hello', 'Body');
         $log = NotificationLog::latest('id')->first();
         $this->assertSame('pending', $log->status);
         $this->assertStringContainsString('switched off', $log->error);
+        Http::assertNothingSent();
 
-        Settings::set(['mail.enabled' => true, 'mail.host' => 'smtp.test', 'mail.port' => 2525, 'mail.from_address' => 'no-reply@camp.test']);
+        Settings::set(['mail.enabled' => true]);
         $service->send($this->super, 'test_event', 'Hello', 'Body');
-        $this->assertSame('sent', NotificationLog::latest('id')->first()->status);
+        $log = NotificationLog::latest('id')->first();
+        $this->assertSame('pending', $log->status); // sent in the background, after the response
+        $this->app->terminate();
+        $this->assertSame('sent', $log->fresh()->status);
+        $this->assertSame('1abcDE-TEST', $log->fresh()->provider_message_id);
     }
 
-    public function test_test_email_reports_success(): void
+    public function test_test_email_reports_success_and_failure(): void
     {
-        Mail::fake();
+        $this->fakeSmtp2Go();
 
         Livewire::actingAs($this->super)->test(SystemSettingsComponent::class)->set('tab', 'email')
-            ->call('applyPreset', 'godaddy')->assertSet('s.mail.host', 'smtpout.secureserver.net')->assertSet('s.mail.port', 465)
-            ->set('s.mail.from_address', 'no-reply@camp.test')->set('testEmail', 'me@camp.test')->call('sendTest')
+            ->set('testEmail', 'me@camp.test')->call('sendTest')
             ->assertHasNoErrors()->assertSet('testResult.ok', true);
+        Http::assertSent(fn ($r) => $r->hasHeader('X-Smtp2go-Api-Key', 'api-TEST00001234') && $r['to'] === ['"super-admin" <me@camp.test>']);
+
+        $this->smtpReply = [['data' => ['error' => 'Invalid API key', 'error_code' => 'E_ApiResponseCodes.API_KEY_INVALID']], 401];
+        Livewire::actingAs($this->super)->test(SystemSettingsComponent::class)->set('tab', 'email')
+            ->set('testEmail', 'me@camp.test')->call('sendTest')
+            ->assertSet('testResult.ok', false)->assertSee('Invalid API key');
     }
 
     public function test_notification_switches_stop_in_app_notifications(): void

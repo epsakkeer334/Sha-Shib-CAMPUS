@@ -31,7 +31,7 @@ class FeeService
     use RecordsAuditTrail;
 
     public function __construct(
-        protected NotificationService $notifications,
+        protected EmailService $emails,
         protected SerialNumberService $serials,
         protected AppNotifier $inApp
     ) {
@@ -477,9 +477,9 @@ class FeeService
 
         $student = $payment->student;
         $this->inApp->notify('payment_approved', $student, ['amount' => money_inr($payment->amount), 'receipt' => $payment->receipt_number, 'fee' => optional($payment->due)->fee_head]);
-        $this->notifications->send($student, 'payment_received', "Payment received — receipt {$payment->receipt_number}",
-            "Dear {$student->first_name},\n\nWe have received " . money_inr($payment->amount)
-            . ' towards ' . optional($payment->due)->fee_head . ".\nReceipt number: {$payment->receipt_number}\n\n" . optional($student->institute)->name);
+        $this->emails->toStudent('payment_received', $student, [
+            'amount' => money_inr($payment->amount), 'fee' => optional($payment->due)->fee_head, 'receipt' => $payment->receipt_number,
+        ]);
     }
 
     public function rejectPayment(StudentPayment $payment, string $reason): void
@@ -496,10 +496,9 @@ class FeeService
 
         $student = $payment->student;
         $this->inApp->notify('payment_rejected', $student, ['amount' => money_inr($payment->amount), 'reason' => $reason]);
-        $this->notifications->send($student, 'payment_rejected', 'Your payment could not be confirmed',
-            "Dear {$student->first_name},\n\nYour payment of " . money_inr($payment->amount)
-            . ($payment->transaction_reference ? " (ref. {$payment->transaction_reference})" : '')
-            . " could not be confirmed.\nReason: {$reason}\n\n" . optional($student->institute)->name);
+        $this->emails->toStudent('payment_rejected', $student, [
+            'amount' => money_inr($payment->amount), 'reference' => $payment->transaction_reference ?: '—', 'reason' => $reason,
+        ]);
     }
 
     /**

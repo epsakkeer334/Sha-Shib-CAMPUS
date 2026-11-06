@@ -111,11 +111,6 @@
         .ss-note.info { background: #EFF6FF; color: #1E40AF; border: 1px solid #BFDBFE; }
         .ss-note.ok { background: #F0FDF4; color: #166534; border: 1px solid #BBF7D0; }
         .ss-note.bad { background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; word-break: break-word; }
-        .ss-presets { display: flex; flex-wrap: wrap; gap: 6px; }
-        .ss-presets button { border: 1px solid var(--ss-line); background: #fff; border-radius: 999px; padding: 4px 12px; font-size: 12.5px; color: #374151; }
-        .ss-presets button:hover { border-color: #A5B4FC; color: var(--ss-indigo); }
-        .ss-pw { position: relative; }
-        .ss-pw .saved { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 11.5px; color: #047857; background: #ECFDF5; padding: 2px 8px; border-radius: 999px; }
         /* system info */
         .ss-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 14px; }
         .ss-info-box { border: 1px solid var(--ss-line); border-radius: 14px; overflow: hidden; }
@@ -187,6 +182,50 @@
         .ss-health-counts .c { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: #fff; }
         .ss-health-counts .c.ok { color: #15803D; } .ss-health-counts .c.warn { color: #B45309; } .ss-health-counts .c.bad { color: #B91C1C; }
         .ss-info-box h6 i { color: #64748B; margin-right: 4px; }
+        /* background jobs */
+        .bj-answer { display: flex; gap: 12px; padding: 14px 16px; border-radius: 14px; background: linear-gradient(135deg, #F5F3FF, #FAFAFF); border: 1px solid #DDD6FE; }
+        .bj-answer-ico { width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font-size: 19px; background: #fff; color: #7C3AED; flex-shrink: 0; }
+        .bj-answer b { display: block; font-size: 14px; color: var(--ss-ink); }
+        .bj-answer p { margin: 2px 0 0; font-size: 13px; color: #4B5563; line-height: 1.5; }
+        .bj-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+        .bj-head h6 { margin: 0; font-size: 14px; font-weight: 700; color: var(--ss-ink); display: flex; align-items: center; gap: 6px; }
+        .bj-refresh { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ss-muted); }
+        .bj-pulse { width: 7px; height: 7px; border-radius: 50%; background: #22C55E; animation: ssPulse 1.6s ease-in-out infinite; }
+        .bj-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); gap: 12px; }
+        .bj-tile { border: 1px solid var(--ss-line); border-radius: 14px; padding: 14px; background: #fff; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+        .bj-tile-head { display: flex; align-items: center; gap: 10px; }
+        .bj-tile-head b { display: block; font-size: 14px; color: var(--ss-ink); }
+        .bj-tile-head small { display: block; font-size: 11.5px; color: var(--ss-muted); line-height: 1.35; }
+        .ss-card-head .ss-badge { white-space: nowrap; flex-shrink: 0; }
+        .bj-ico { width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+        .bj-ico.scheduler { background: #DBEAFE; color: #2563EB; } .bj-ico.worker { background: #EDE9FE; color: #7C3AED; } .bj-ico.queue { background: #FEF3C7; color: #D97706; }
+        .bj-state { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+        .bj-state > span { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+        .bj-state.running { background: #DCFCE7; color: #15803D; } .bj-state.running > span { animation: ssPulse 1.6s ease-in-out infinite; }
+        .bj-state.late { background: #FEF3C7; color: #B45309; } .bj-state.down { background: #FEE2E2; color: #B91C1C; }
+        .bj-state.never, .bj-state.off { background: #F1F5F9; color: #64748B; }
+        .bj-last { padding: 10px 12px; border-radius: 10px; background: var(--ss-soft); }
+        .bj-last span { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #94A3B8; }
+        .bj-last b { display: block; font-size: 15px; color: var(--ss-ink); }
+        .bj-last small { font-size: 11.5px; color: var(--ss-muted); }
+        .bj-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+        .bj-metrics > div { text-align: center; padding: 6px 4px; border: 1px dashed var(--ss-line); border-radius: 10px; min-width: 0; }
+        .bj-metrics b { display: block; font-size: 16px; color: var(--ss-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .bj-metrics b em { font-style: normal; font-size: 11px; color: #94A3B8; font-weight: 600; }
+        .bj-metrics small { font-size: 11px; color: var(--ss-muted); }
+        .bj-strip { display: grid; grid-template-columns: repeat(60, minmax(0, 1fr)); gap: 1px; height: 22px; }
+        .bj-strip i { border-radius: 2px; background: #E5E7EB; }
+        .bj-strip i.hit { background: #22C55E; }
+        .bj-strip-axis { display: flex; justify-content: space-between; margin-top: -8px; font-size: 10.5px; color: #94A3B8; }
+        .bj-err { display: flex; gap: 6px; font-size: 12px; color: #991B1B; background: #FEF2F2; border-radius: 10px; padding: 8px 10px; word-break: break-word; }
+        .bj-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; }
+        .bj-mode { display: flex; gap: 8px; align-items: flex-start; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--ss-line); font-size: 13px; color: #374151; }
+        .bj-mode i { font-size: 17px; color: var(--ss-indigo); margin-top: 1px; }
+        .bj-steps { margin: 0; padding-left: 20px; font-size: 13px; color: #374151; display: grid; gap: 6px; }
+        .bj-steps code { white-space: nowrap; font-size: 12px; background: #F1F5F9; padding: 1px 6px; border-radius: 5px; color: #334155; }
+        .bj-cron { min-height: 0 !important; padding: 14px 16px !important; }
+        .bj-foot-note { margin: 12px 0 0; font-size: 12.5px; color: var(--ss-muted); }
+        .ss-pill .dot.warn { background: #FBBF24; box-shadow: 0 0 0 3px rgba(251, 191, 36, .2); }
         /* card titles */
         .ss-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
         .ss-head-ico { width: 40px; height: 40px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
@@ -231,6 +270,7 @@
         <div class="ss-hero-side">
             <div class="ss-pills">
                 <button type="button" class="ss-pill" wire:click="setTab('email')"><span class="dot {{ $emailLive ? 'on' : 'off' }}"></span> Email {{ $emailLive ? 'on' : 'off' }}</button>
+                <button type="button" class="ss-pill" wire:click="setTab('jobs')"><span class="dot {{ ['worker' => 'on', 'fallback' => 'warn', 'direct' => 'off'][$workerMode] }}"></span> Worker {{ ['worker' => 'on', 'fallback' => 'fallback', 'direct' => 'off'][$workerMode] }}</button>
                 <button type="button" class="ss-pill" wire:click="setTab('notifications')"><span class="dot {{ setting('notify.in_app') ? 'on' : 'off' }}"></span> Notifications {{ setting('notify.in_app') ? 'on' : 'off' }}</button>
                 <button type="button" class="ss-pill" wire:click="setTab('admissions')"><span class="dot {{ setting('portal.registration_open') ? 'on' : 'off' }}"></span> Admissions {{ setting('portal.registration_open') ? 'open' : 'closed' }}</button>
             </div>
@@ -404,85 +444,47 @@
             @if($tab === 'email')
                 <form wire:submit.prevent="save" class="ss-card">
                     <div class="ss-card-head">
-                        <div class="ss-title"><span class="ss-head-ico blue"><i class="ti ti-mail"></i></span><div class="min-w-0"><h5>Email</h5><p>Outgoing email for notifications (payments, approvals, ER numbers …).</p></div></div>
+                        <div class="ss-title"><span class="ss-head-ico blue"><i class="ti ti-mail"></i></span><div class="min-w-0"><h5>Email</h5><p>Outgoing email for students and staff (payments, documents, ER numbers …), sent through SMTP2GO.</p></div></div>
                         @if($emailLive)
                             <span class="ss-badge ok"><i class="ti ti-circle-check"></i> Sending</span>
                         @elseif(setting('mail.enabled'))
-                            <span class="ss-badge warn"><i class="ti ti-alert-triangle"></i> Incomplete</span>
+                            <span class="ss-badge warn"><i class="ti ti-alert-triangle"></i> SMTP2GO not set</span>
                         @else
                             <span class="ss-badge off"><i class="ti ti-circle-off"></i> Off</span>
                         @endif
                     </div>
                     <div class="ss-card-body">
                         <div class="ss-switch-row is-main mb-4">
-                            <span class="d-flex gap-3 align-items-center min-w-0"><span class="ico"><i class="ti ti-send"></i></span><span class="min-w-0"><b>Send emails</b><small>Off: emails are kept in the Notification Log as “pending” and nothing is sent.</small></span></span>
+                            <span class="d-flex gap-3 align-items-center min-w-0"><span class="ico"><i class="ti ti-send"></i></span><span class="min-w-0"><b>Send emails</b><small>Off: emails are kept in the Email &amp; SMS Log as “pending” and can be sent later with Retry.</small></span></span>
                             <label class="ss-switch"><input type="checkbox" wire:model.defer="s.mail.enabled"><span></span></label>
                         </div>
+                        @error('s.mail.enabled')<div class="ss-note bad mb-3"><i class="ti ti-alert-circle"></i><span>{{ $message }}</span></div>@enderror
 
-                        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-                            <p class="ss-section mb-0">SMTP server</p>
-                            <div class="ss-presets">
-                                <small class="text-muted me-1 align-self-center">Quick fill:</small>
-                                @foreach(\App\Http\Livewire\Admin\Settings\SystemSettingsComponent::SMTP_PRESETS as $key => [$label])
-                                    <button type="button" wire:click="applyPreset('{{ $key }}')">{{ $label }}</button>
-                                @endforeach
+                        <div class="ss-info">
+                            <div class="ss-info-box">
+                                <h6><i class="ti ti-plug-connected me-1"></i> SMTP2GO (from .env)</h6>
+                                <div class="ss-info-row"><span>API key</span><span class="s {{ $smtp2go['key'] ? 'ok' : 'bad' }}"></span><span class="min-w-0"><b>{{ $smtp2go['key'] ?: 'Not set' }}</b>@if(!$smtp2go['key'])<small>Add SMTP2GO_API_KEY to .env</small>@endif</span></div>
+                                <div class="ss-info-row"><span>Sender address</span><span class="s {{ filter_var($smtp2go['sender_email'], FILTER_VALIDATE_EMAIL) ? 'ok' : 'bad' }}"></span><span class="min-w-0"><b>{{ $smtp2go['sender_email'] ?: 'Not set' }}</b>@if(!$smtp2go['sender_email'])<small>Add SMTP2GO_SENDER_EMAIL to .env</small>@endif</span></div>
+                                <div class="ss-info-row"><span>Sender name</span><span class="s info"></span><span class="min-w-0"><b>{{ $smtp2go['sender_name'] ?: '—' }}</b><small class="text-muted">Institutes can set their own</small></span></div>
                             </div>
-                        </div>
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label">SMTP host</label>
-                                <input type="text" class="form-control @error('s.mail.host') is-invalid @enderror" wire:model.defer="s.mail.host" placeholder="mail.smtp2go.com">
-                                @error('s.mail.host')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <label class="form-label">Port</label>
-                                <input type="number" class="form-control @error('s.mail.port') is-invalid @enderror" wire:model.defer="s.mail.port">
-                                @error('s.mail.port')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <label class="form-label">Encryption</label>
-                                <select class="form-select" wire:model.defer="s.mail.encryption">
-                                    <option value="tls">TLS (587 / 2525)</option>
-                                    <option value="ssl">SSL (465)</option>
-                                    <option value="none">None</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Username</label>
-                                <input type="text" class="form-control" wire:model.defer="s.mail.username" autocomplete="off">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Password</label>
-                                <div class="ss-pw">
-                                    <input type="password" class="form-control" wire:model.defer="mailPassword" autocomplete="new-password" placeholder="{{ $passwordSaved ? 'Leave empty to keep the saved password' : 'SMTP password or API key' }}">
-                                    @if($passwordSaved && $mailPassword === '')<span class="saved"><i class="ti ti-lock"></i> saved</span>@endif
-                                </div>
-                                @if($passwordSaved)
-                                    <div class="ss-hint">Stored encrypted. <a href="#" class="text-danger" data-ss-confirm="removePassword" data-icon="ti-lock-off" data-variant="danger" data-title="Remove SMTP password" data-text="The saved SMTP password will be deleted. Emails can't be sent until you enter it again." data-ok="Yes, Remove">Remove</a></div>
-                                @endif
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">From address</label>
-                                <input type="email" class="form-control @error('s.mail.from_address') is-invalid @enderror" wire:model.defer="s.mail.from_address" placeholder="no-reply@shashibcampus.com">
-                                @error('s.mail.from_address')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                                <div class="ss-hint">Use an address on a domain verified with your mail provider.</div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">From name</label>
-                                <input type="text" class="form-control" wire:model.defer="s.mail.from_name" placeholder="Sha-Shib CAMPUS">
+                            <div class="ss-info-box">
+                                <h6><i class="ti ti-clock-play me-1"></i> Delivery</h6>
+                                <div class="ss-info-row"><span>Sent</span><span class="s ok"></span><span class="min-w-0"><b>In the background</b><small class="text-muted">{{ ucfirst($smtp2go['background']) }}</small></span></div>
+                                <div class="ss-info-row"><span>Today</span><span class="s {{ $smtp2go['today']['failed'] ? 'warn' : 'info' }}"></span><span class="min-w-0"><b>{{ $smtp2go['today']['sent'] }} sent · {{ $smtp2go['today']['pending'] }} pending · {{ $smtp2go['today']['failed'] }} failed</b></span></div>
+                                <div class="ss-info-row"><span>See also</span><span class="s info"></span><span class="min-w-0"><b><a href="{{ route('admin.notifications', ['channel' => 'email']) }}">Email &amp; SMS Log</a> · <a href="{{ route('admin.email-templates') }}">Email Templates</a></b></span></div>
                             </div>
                         </div>
 
                         <div class="ss-note info mt-4">
-                            <i class="ti ti-server-2"></i>
-                            <span><b>GoDaddy VPS:</b> outgoing port 25 is usually blocked. Use port <b>2525</b> or <b>587</b> (TLS), or <b>465</b> (SSL). SMTP2GO works on 2525 and gives the best delivery.</span>
+                            <i class="ti ti-key"></i>
+                            <span>The API key and sender are kept in the server's <b>.env</b> file (<code>SMTP2GO_API_KEY</code>, <code>SMTP2GO_SENDER_EMAIL</code>, <code>SMTP2GO_SENDER_NAME</code>), never in the database. The sender address must be on a domain verified in SMTP2GO. Each institute can set its own sender name, reply-to and signature in Email Templates.</span>
                         </div>
                     </div>
-                    <div class="ss-card-foot"><small><i class="ti ti-shield-lock"></i> The password is encrypted with the app key.</small>@include('livewire.admin.settings.partials.save-button')</div>
+                    <div class="ss-card-foot"><small><i class="ti ti-shield-lock"></i> Uses the SMTP2GO API over HTTPS.</small>@include('livewire.admin.settings.partials.save-button')</div>
                 </form>
 
                 <div class="ss-card">
-                    <div class="ss-card-head"><div class="ss-title"><span class="ss-head-ico teal"><i class="ti ti-send"></i></span><div class="min-w-0"><h5>Send a test email</h5><p>Uses the details in the form above, saved or not.</p></div></div></div>
+                    <div class="ss-card-head"><div class="ss-title"><span class="ss-head-ico teal"><i class="ti ti-send"></i></span><div class="min-w-0"><h5>Send a test email</h5><p>Sends the “Test email” template through SMTP2GO now and shows the answer — works even while sending is off.</p></div></div></div>
                     <div class="ss-card-body">
                         <form wire:submit.prevent="sendTest" class="d-flex flex-wrap gap-2">
                             <input type="email" class="form-control @error('testEmail') is-invalid @enderror" wire:model.defer="testEmail" placeholder="you@example.com" style="flex: 1 1 240px; max-width: 360px;">
@@ -500,6 +502,155 @@
                         @endif
                     </div>
                 </div>
+            @endif
+
+            {{-- ───────────────────────── Background Jobs ───────────────────────── --}}
+            @if($tab === 'jobs')
+                @php
+                    $stateText = ['running' => 'Running', 'late' => 'Late', 'down' => 'Not running', 'never' => 'Never run', 'off' => 'Off'];
+                    $workerState = !setting('queue.worker_enabled') && in_array($jobs['worker']['state'], ['never', 'down'], true) ? 'off' : $jobs['worker']['state'];
+                    $modeBadge = ['worker' => ['ok', 'ti-player-play', 'Queue worker'], 'fallback' => ['warn', 'ti-alert-triangle', 'Fallback: after the page'], 'direct' => ['off', 'ti-bolt', 'After the page']][$jobs['mode']];
+                @endphp
+                <form wire:submit.prevent="save" class="ss-card">
+                    <div class="ss-card-head">
+                        <div class="ss-title"><span class="ss-head-ico violet"><i class="ti ti-server-bolt"></i></span><div class="min-w-0"><h5>Background jobs</h5><p>How emails are sent without making anyone wait.</p></div></div>
+                        <span class="ss-badge {{ $modeBadge[0] }}"><i class="ti {{ $modeBadge[1] }}"></i> {{ $modeBadge[2] }}</span>
+                    </div>
+                    <div class="ss-card-body">
+                        <div class="bj-answer mb-3">
+                            <span class="bj-answer-ico"><i class="ti ti-help-circle"></i></span>
+                            <div class="min-w-0">
+                                <b>Do I need a queue worker?</b>
+                                <p><strong>No.</strong> With the worker off, each email is sent right after the page has loaded — nobody waits and nothing else has to run.
+                                    Switch the worker on for <strong>automatic retries</strong> (after 1 and 5 minutes) when SMTP2GO is busy or unreachable. It needs the scheduler cron job below.</p>
+                            </div>
+                        </div>
+
+                        <div class="ss-switch-row is-main">
+                            <span class="d-flex gap-3 align-items-center min-w-0">
+                                <span class="ico"><i class="ti ti-player-play"></i></span>
+                                <span class="min-w-0"><b>Send emails through the queue worker</b>
+                                    <small>On: emails wait on the “emails” queue and the scheduler sends them every minute. Off: sent right after the page responds.</small></span>
+                            </span>
+                            <label class="ss-switch"><input type="checkbox" wire:model.defer="s.queue.worker_enabled"><span></span></label>
+                        </div>
+                        @error('s.queue.worker_enabled')<div class="text-danger small mt-2">{{ $message }}</div>@enderror
+
+                        @if($jobs['mode'] === 'fallback')
+                            <div class="ss-note bad mt-3"><i class="ti ti-alert-triangle"></i>
+                                <span>The worker is on, but the scheduler has not checked in for {{ intdiv($jobs['stale'], 60) }} minutes — so emails are sent right after the page instead (nothing gets stuck). Add the cron job below to use the worker.</span></div>
+                        @endif
+
+                        {{-- Live status --}}
+                        <div class="bj-head mt-4">
+                            <h6><i class="ti ti-activity-heartbeat"></i> Live status</h6>
+                            <span class="bj-refresh" wire:loading.remove wire:target="runWaiting"><span class="bj-pulse"></span> Refreshes every 30 s · {{ now()->format('H:i:s') }}</span>
+                        </div>
+                        <div class="bj-grid" wire:poll.30s>
+                            @foreach([
+                                ['scheduler', 'Scheduler', 'ti-clock-play', 'Cron · schedule:run every minute', $jobs['scheduler'], $jobs['scheduler']['state']],
+                                ['worker', 'Email worker', 'ti-engine', 'queue:work · “emails” queue', $jobs['worker'], $workerState],
+                            ] as [$key, $title, $icon, $sub, $st, $state])
+                                <div class="bj-tile">
+                                    <div class="bj-tile-head">
+                                        <span class="bj-ico {{ $key }}"><i class="ti {{ $icon }}"></i></span>
+                                        <span class="min-w-0 flex-grow-1"><b>{{ $title }}</b><small>{{ $sub }}</small></span>
+                                        <span class="bj-state {{ $state }}"><span></span>{{ $stateText[$state] }}</span>
+                                    </div>
+                                    <div class="bj-last">
+                                        <span>Last check-in</span>
+                                        <b>{{ $st['last'] ? $st['last']->diffForHumans() : 'Never' }}</b>
+                                        @if($st['last'])<small>{{ $st['last']->format('d M Y, H:i:s') }}</small>@endif
+                                    </div>
+                                    <div class="bj-metrics">
+                                        <div><b>{{ number_format($st['today']) }}</b><small>Hits today</small></div>
+                                        <div><b>{{ $st['hour'] }}<em>/60</em></b><small>Last hour</small></div>
+                                        @if($key === 'worker')
+                                            <div><b>{{ number_format($st['processed']) }}</b><small>Jobs done</small></div>
+                                        @else
+                                            <div><b>{{ number_format($st['total']) }}</b><small>All time</small></div>
+                                        @endif
+                                    </div>
+                                    <div class="bj-strip" aria-label="Check-ins in the last 60 minutes">
+                                        @foreach($st['strip'] as $m)<i class="{{ $m['hit'] ? 'hit' : '' }}" title="{{ $m['label'] }}{{ $m['hit'] ? ' · checked in' : '' }}"></i>@endforeach
+                                    </div>
+                                    <div class="bj-strip-axis"><span>60 min ago</span><span>now</span></div>
+                                    @if($key === 'worker' && $st['failed'])
+                                        <div class="bj-err"><i class="ti ti-alert-circle"></i><span><b>{{ $st['failed'] }} failed job{{ $st['failed'] === 1 ? '' : 's' }}</b>@if($st['last_error']) · {{ \Illuminate\Support\Str::limit($st['last_error'], 140) }}@endif</span></div>
+                                    @endif
+                                </div>
+                            @endforeach
+
+                            <div class="bj-tile">
+                                <div class="bj-tile-head">
+                                    <span class="bj-ico queue"><i class="ti ti-stack-2"></i></span>
+                                    <span class="min-w-0 flex-grow-1"><b>Email queue</b><small>Emails waiting for the worker</small></span>
+                                    <span class="bj-state {{ $jobs['queue']['waiting'] ? 'late' : 'running' }}"><span></span>{{ $jobs['queue']['waiting'] ? 'Waiting' : 'Empty' }}</span>
+                                </div>
+                                <div class="bj-last">
+                                    <span>Oldest waiting</span>
+                                    <b>{{ $jobs['queue']['oldest'] ? $jobs['queue']['oldest']->diffForHumans() : 'Nothing waiting' }}</b>
+                                    @if($jobs['queue']['oldest'])<small>{{ $jobs['queue']['oldest']->format('d M Y, H:i:s') }}</small>@endif
+                                </div>
+                                <div class="bj-metrics">
+                                    <div><b>{{ number_format($jobs['queue']['waiting']) }}</b><small>Waiting</small></div>
+                                    <div><b class="{{ $jobs['queue']['failed'] ? 'text-danger' : '' }}">{{ number_format($jobs['queue']['failed']) }}</b><small>Failed jobs</small></div>
+                                    <div><b>{{ $jobs['worker']['last_job'] ? $jobs['worker']['last_job']->diffForHumans(null, true, true) : '—' }}</b><small>Last job</small></div>
+                                </div>
+                                <div class="bj-actions">
+                                    <button type="button" class="btn btn-sm btn-dark" wire:click="runWaiting" wire:loading.attr="disabled" wire:target="runWaiting" @if(!$jobs['queue']['waiting']) disabled @endif>
+                                        <span wire:loading.remove wire:target="runWaiting"><i class="ti ti-send me-1"></i> Send waiting emails now</span>
+                                        <span wire:loading wire:target="runWaiting"><span class="spinner-border spinner-border-sm me-1"></span> Sending…</span>
+                                    </button>
+                                    <a href="{{ route('admin.notifications', ['channel' => 'email']) }}" class="btn btn-sm btn-light"><i class="ti ti-mail-check me-1"></i> Email log</a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bj-mode mt-3">
+                            <i class="ti ti-route"></i>
+                            <span>Right now emails are sent <b>{{ $jobs['mode_label'] }}</b>.</span>
+                        </div>
+                    </div>
+                    <div class="ss-card-foot"><small><i class="ti ti-history"></i> Changes are recorded in the audit trail.</small>@include('livewire.admin.settings.partials.save-button')</div>
+                </form>
+
+                {{-- Cron setup --}}
+                <div class="ss-card">
+                    <div class="ss-card-head"><div class="ss-title"><span class="ss-head-ico slate"><i class="ti ti-terminal-2"></i></span><div class="min-w-0"><h5>Set up the scheduler (once)</h5><p>One cron job runs every background task, including the email worker. No long-running process is needed.</p></div></div>
+                        <span class="ss-badge {{ $jobs['scheduler']['state'] === 'running' ? 'ok' : 'warn' }}"><i class="ti {{ $jobs['scheduler']['state'] === 'running' ? 'ti-circle-check' : 'ti-clock' }}"></i> {{ $jobs['scheduler']['state'] === 'running' ? 'Cron is working' : 'Not detected yet' }}</span>
+                    </div>
+                    <div class="ss-card-body">
+                        <ol class="bj-steps">
+                            <li><b>Plesk</b> ▸ Websites &amp; Domains ▸ your domain ▸ <b>Scheduled Tasks</b> ▸ <b>Add Task</b></li>
+                            <li>Task type: <b>Run a command</b> · Run: <b>Cron style</b> <code>* * * * *</code> (every minute)</li>
+                            <li>Command — paste this line without the five stars, or use the whole line with <code>crontab -e</code> over SSH:</li>
+                        </ol>
+                        <div class="ss-term-win mt-2">
+                            <div class="ss-term-bar">
+                                <span class="dots"><i class="r"></i><i class="y"></i><i class="g"></i></span>
+                                <span class="ttl">crontab</span>
+                                <button type="button" class="ss-term-copy ms-auto" title="Copy" data-bj-copy="{{ $jobs['cron'] }}"><i class="ti ti-copy"></i></button>
+                            </div>
+                            <pre class="ss-term-body bj-cron"><span class="t-prompt">$</span> <span class="t-cmd">{{ $jobs['cron'] }}</span></pre>
+                        </div>
+                        <p class="bj-foot-note"><i class="ti ti-info-circle"></i> Within a minute of saving the task, the <b>Scheduler</b> tile above shows “Running”. Then switch the queue worker on.</p>
+                    </div>
+                </div>
+                <script>
+                    (function () {
+                        if (window.__bjCopy) return;
+                        window.__bjCopy = true;
+                        document.addEventListener('click', function (e) {
+                            var btn = e.target.closest('[data-bj-copy]');
+                            if (!btn || !navigator.clipboard) return;
+                            navigator.clipboard.writeText(btn.dataset.bjCopy).then(function () {
+                                btn.innerHTML = '<i class="ti ti-check"></i>';
+                                setTimeout(function () { btn.innerHTML = '<i class="ti ti-copy"></i>'; }, 1500);
+                            });
+                        });
+                    })();
+                </script>
             @endif
 
             {{-- ───────────────────────── Notifications ───────────────────────── --}}

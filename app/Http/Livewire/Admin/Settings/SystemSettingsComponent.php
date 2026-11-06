@@ -4,20 +4,22 @@ namespace App\Http\Livewire\Admin\Settings;
 
 use App\Models\Admin\SystemSetting;
 use App\Models\User;
+use App\Services\EmailService;
 use App\Support\ArtisanRunner;
+use App\Support\BackgroundJobs;
 use App\Support\PhpCliFinder;
 use App\Support\Settings;
 use App\Traits\RecordsAuditTrail;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Livewire\Component;
 
 /**
  * Super Admin → Administration → System → System Settings.
- * Tabs: General, Appearance, Email, Notifications, Admissions, System. Each tab saves on its own
- * and every change is written to the audit trail (the SMTP password is masked).
+ * Tabs: General, Appearance, Email, Background Jobs, Notifications, Admissions, System. Each tab saves on its own
+ * and every change is written to the audit trail. Email goes out through SMTP2GO (key and sender in .env).
  */
 class SystemSettingsComponent extends Component
 {
@@ -26,7 +28,8 @@ class SystemSettingsComponent extends Component
     public const TABS = [
         'general' => ['General', 'ti ti-building', 'Organisation name and contact details'],
         'appearance' => ['Appearance', 'ti ti-palette', 'Theme colour, sidebar and top bar'],
-        'email' => ['Email', 'ti ti-mail', 'Sending on / off and SMTP server'],
+        'email' => ['Email', 'ti ti-mail', 'Sending on / off, SMTP2GO and test email'],
+        'jobs' => ['Background Jobs', 'ti ti-server-bolt', 'Queue worker, scheduler and check-ins'],
         'notifications' => ['Notifications', 'ti ti-bell', 'In-app alerts for staff and students'],
         'admissions' => ['Admissions', 'ti ti-school', 'Online registration on the portal'],
         'system' => ['System', 'ti ti-server', 'Session, server health and cache'],
@@ -36,7 +39,8 @@ class SystemSettingsComponent extends Component
     protected const GROUPS = [
         'general' => ['general.site_name', 'general.organisation', 'general.support_email', 'general.support_phone', 'general.address', 'general.footer_text'],
         'appearance' => ['theme.color', 'theme.custom_color', 'theme.sidebar', 'theme.topbar', 'theme.mode', 'theme.allow_user', 'theme.loader'],
-        'email' => ['mail.enabled', 'mail.host', 'mail.port', 'mail.encryption', 'mail.username', 'mail.from_address', 'mail.from_name'],
+        'email' => ['mail.enabled'],
+        'jobs' => ['queue.worker_enabled'],
         'notifications' => ['notify.in_app', 'notify.staff', 'notify.student'],
         'admissions' => ['portal.registration_open', 'portal.closed_message'],
         'system' => ['security.session_lifetime'],
@@ -49,10 +53,6 @@ class SystemSettingsComponent extends Component
 
     /** event key → enabled (in-app notifications) */
     public array $events = [];
-
-    /** New SMTP password; empty keeps the saved one. */
-    public string $mailPassword = '';
-    public bool $passwordSaved = false;
 
     public string $testEmail = '';
     public ?array $testResult = null;
@@ -93,9 +93,6 @@ class SystemSettingsComponent extends Component
         $disabled = (array) $all['notify.disabled_events'];
         $this->events = collect(array_keys(config('workflow_notifications.events', [])))
             ->mapWithKeys(fn ($event) => [$event => !in_array($event, $disabled, true)])->all();
-
-        $this->passwordSaved = $all['mail.password'] !== '';
-        $this->mailPassword = '';
     }
 
     public function setTab(string $tab): void
@@ -129,14 +126,14 @@ class SystemSettingsComponent extends Component
                 's.theme.loader' => 'boolean',
             ],
             'email' => [
-                's.mail.enabled' => 'boolean',
-                's.mail.host' => 'required_if:s.mail.enabled,true|nullable|string|max:150',
-                's.mail.port' => 'required|integer|between:1,65535',
-                's.mail.encryption' => 'required|in:tls,ssl,none',
-                's.mail.username' => 'nullable|string|max:150',
-                's.mail.from_address' => 'required_if:s.mail.enabled,true|nullable|email|max:150',
-                's.mail.from_name' => 'nullable|string|max:100',
-                'mailPassword' => 'nullable|string|max:200',
+                's.mail.enabled' => ['boolean', function ($attribute, $value, $fail) {
+                    if ($value && !Settings::mailConfigured()) {
+                        $fail('Add SMTP2GO_API_KEY and SMTP2GO_SENDER_EMAIL to the .env file before switching email on.');
+                    }
+                }],
+            ],
+            'jobs' => [
+                's.queue.worker_enabled' => 'boolean',
             ],
             'notifications' => [
                 's.notify.in_app' => 'boolean',
@@ -158,16 +155,7 @@ class SystemSettingsComponent extends Component
     {
         return [
             's.general.site_name' => 'system name', 's.general.organisation' => 'organisation', 's.general.support_email' => 'support email',
-            's.theme.custom_color' => 'custom colour', 's.mail.host' => 'SMTP host', 's.mail.port' => 'port',
-            's.mail.from_address' => 'from address', 's.portal.closed_message' => 'closed message', 's.security.session_lifetime' => 'session timeout',
-        ];
-    }
-
-    protected function messages(): array
-    {
-        return [
-            's.mail.host.required_if' => 'Enter the SMTP host to switch email sending on.',
-            's.mail.from_address.required_if' => 'Enter the from address to switch email sending on.',
+            's.theme.custom_color' => 'custom colour', 's.portal.closed_message' => 'closed message', 's.security.session_lifetime' => 'session timeout',
         ];
     }
 
@@ -186,9 +174,6 @@ class SystemSettingsComponent extends Component
             };
         }
 
-        if ($this->tab === 'email' && $this->mailPassword !== '') {
-            $values['mail.password'] = $this->mailPassword;
-        }
         if ($this->tab === 'notifications') {
             $values['notify.disabled_events'] = array_values(array_keys(array_filter($this->events, fn ($on) => !$on)));
         }
@@ -222,69 +207,74 @@ class SystemSettingsComponent extends Component
         $this->s['theme']['color'] = $color;
     }
 
-    /** Common SMTP providers → [label, host, port, encryption]. GoDaddy VPS blocks port 25, so none use it. */
-    public const SMTP_PRESETS = [
-        'smtp2go' => ['SMTP2GO', 'mail.smtp2go.com', 2525, 'tls'],
-        'godaddy' => ['GoDaddy Email', 'smtpout.secureserver.net', 465, 'ssl'],
-        'gmail' => ['Gmail / Workspace', 'smtp.gmail.com', 587, 'tls'],
-        'office365' => ['Microsoft 365', 'smtp.office365.com', 587, 'tls'],
-    ];
-
-    public function applyPreset(string $preset): void
-    {
-        if ($p = static::SMTP_PRESETS[$preset] ?? null) {
-            [, $this->s['mail']['host'], $this->s['mail']['port'], $this->s['mail']['encryption']] = $p;
-        }
-    }
-
-    public function removePassword(): void
-    {
-        Settings::set(['mail.password' => '']);
-        $this->audit('update', 'System Settings', null, ['description' => 'Removed the SMTP password']);
-        $this->loadForm();
-        $this->dispatchBrowserEvent('show-toast', ['type' => 'success', 'message' => 'SMTP password removed.']);
-    }
-
     // ------------------------------------------------------------------ Email test
 
     /**
-     * Sends a test email with the details currently in the form (saved or not).
+     * Sends the "Test email" template through SMTP2GO and waits for the answer (the one email that is not
+     * sent in the background — the Super Admin wants the result). Works while sending is switched off.
      */
-    public function sendTest(): void
+    public function sendTest(EmailService $emails): void
     {
-        $this->validate([
-            'testEmail' => 'required|email',
-            's.mail.host' => 'required|string',
-            's.mail.port' => 'required|integer|between:1,65535',
-            's.mail.from_address' => 'required|email',
-        ], [], ['testEmail' => 'test address', 's.mail.host' => 'SMTP host', 's.mail.from_address' => 'from address']);
+        $this->validate(['testEmail' => 'required|email'], [], ['testEmail' => 'test address']);
 
-        $m = $this->s['mail'];
-        config([
-            'mail.default' => 'smtp',
-            'mail.mailers.smtp.host' => $m['host'],
-            'mail.mailers.smtp.port' => (int) $m['port'],
-            'mail.mailers.smtp.encryption' => $m['encryption'] === 'none' ? null : $m['encryption'],
-            'mail.mailers.smtp.username' => $m['username'] ?: null,
-            'mail.mailers.smtp.password' => $this->mailPassword !== '' ? $this->mailPassword : (Settings::get('mail.password') ?: null),
-            'mail.mailers.smtp.timeout' => 15,
-            'mail.from.address' => $m['from_address'],
-            'mail.from.name' => $m['from_name'] ?: $this->s['general']['site_name'] ?? 'CAMPUS',
+        $log = $emails->sendTemplate('test_email', auth()->user(), ['sent_at' => now()->format('d M Y, h:i A')], [
+            'email' => $this->testEmail, 'institute_id' => null, 'now' => true, 'force' => true,
         ]);
-        Settings::refreshMailer(); // rebuild the SMTP mailer with the details above
 
-        try {
-            $site = Settings::get('general.site_name');
-            Mail::raw(
-                "This is a test email from {$site}.\n\nIf you can read this, the SMTP settings work. Sent " . now()->format('d M Y, h:i A') . '.',
-                fn ($mail) => $mail->to($this->testEmail)->subject("{$site} — test email")
-            );
-            $this->testResult = ['ok' => true, 'message' => "Test email sent to {$this->testEmail}. Check the inbox (and spam folder)."];
-        } catch (\Throwable $e) {
-            $this->testResult = ['ok' => false, 'message' => Str::limit($e->getMessage(), 400)];
-        }
+        $this->testResult = $log->status === 'sent'
+            ? ['ok' => true, 'message' => "Test email sent to {$this->testEmail} (SMTP2GO id {$log->provider_message_id}). Check the inbox and spam folder."]
+            : ['ok' => false, 'message' => $log->error ?: 'SMTP2GO did not accept the email.'];
 
         $this->audit('update', 'System Settings', null, ['description' => 'Sent a test email to ' . $this->testEmail . ($this->testResult['ok'] ? '' : ' (failed)')]);
+    }
+
+    // ------------------------------------------------------------------ Background jobs
+
+    /**
+     * Sends the emails waiting on the "emails" queue now, inside this request (the same worker the scheduler
+     * runs each minute). For when the scheduler is not running yet, or to clear the queue at once.
+     */
+    public function runWaiting(): void
+    {
+        $before = BackgroundJobs::waiting();
+        if ($before === 0) {
+            $this->dispatchBrowserEvent('show-toast', ['type' => 'info', 'message' => 'No emails are waiting in the queue.']);
+
+            return;
+        }
+
+        BackgroundJobs::$manualRun = true;
+        try {
+            Artisan::call('queue:work', [
+                'connection' => BackgroundJobs::CONNECTION, '--queue' => BackgroundJobs::QUEUE,
+                '--stop-when-empty' => true, '--max-jobs' => 100, '--max-time' => 25, '--tries' => 3,
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+        } finally {
+            BackgroundJobs::$manualRun = false;
+        }
+
+        $left = BackgroundJobs::waiting();
+        $done = max(0, $before - $left);
+        $this->audit('update', 'System Settings', null, ['description' => "Ran the email queue now ({$done} of {$before} processed)"]);
+        $this->dispatchBrowserEvent('show-toast', [
+            'type' => $left ? 'warning' : 'success',
+            'message' => "{$done} queued email" . ($done === 1 ? '' : 's') . ' processed' . ($left ? " — {$left} still waiting (retry later)." : '.'),
+        ]);
+    }
+
+    protected function jobsInfo(): array
+    {
+        return [
+            'mode' => BackgroundJobs::mode(),
+            'mode_label' => BackgroundJobs::modeLabel(),
+            'scheduler' => BackgroundJobs::status(BackgroundJobs::SCHEDULER),
+            'worker' => BackgroundJobs::status(BackgroundJobs::WORKER),
+            'queue' => BackgroundJobs::queueStatus(),
+            'cron' => BackgroundJobs::cronCommand(),
+            'stale' => BackgroundJobs::STALE_AFTER,
+        ];
     }
 
     // ------------------------------------------------------------------ System
@@ -411,13 +401,31 @@ class SystemSettingsComponent extends Component
             'app' => [
                 ['Cache driver', config('cache.default'), 'info', null],
                 ['Session driver', config('session.driver') . ' · ' . config('session.lifetime') . ' min', 'info', null],
-                ['Queue', config('queue.default'), 'info', null],
+                ['Email delivery', ['worker' => 'Queue worker', 'fallback' => 'After the page (worker fallback)', 'direct' => 'After the page'][BackgroundJobs::mode()],
+                    BackgroundJobs::mode() === 'fallback' ? 'warn' : 'info', BackgroundJobs::mode() === 'fallback' ? 'The scheduler is not running — see Background Jobs' : null],
                 ['Storage folder', $storageWritable ? 'Writable' : 'Not writable', $storageWritable ? 'ok' : 'bad', $storageWritable ? null : 'chown -R www-data storage bootstrap/cache'],
                 ['bootstrap/cache', $cacheWritable ? 'Writable' : 'Not writable', $cacheWritable ? 'ok' : 'bad', null],
                 ['Public storage link', File::exists(public_path('storage')) ? 'Linked' : 'Missing', File::exists(public_path('storage')) ? 'ok' : 'warn', File::exists(public_path('storage')) ? null : 'Run: php artisan storage:link'],
             ],
             'cache' => $this->cacheStatus(),
             'disk' => $total ?['free' => $free, 'total' => $total, 'used_pct' => round(100 - $free / $total * 100)] : null,
+        ];
+    }
+
+    /** SMTP2GO details from .env for the Email tab (the API key only masked), plus today's sending figures. */
+    protected function smtp2goInfo(): array
+    {
+        $client = app(\App\Services\Email\Smtp2GoClient::class);
+        $today = \App\Models\Admin\NotificationLog::where('channel', 'email')->where('created_at', '>=', today())
+            ->selectRaw('status, COUNT(*) as total')->groupBy('status')->pluck('total', 'status');
+
+        return [
+            'configured' => $client->configured(),
+            'key' => $client->maskedKey(),
+            'sender_email' => $client->senderEmail(),
+            'sender_name' => $client->defaultSenderName(),
+            'background' => BackgroundJobs::modeLabel(),
+            'today' => ['sent' => (int) ($today['sent'] ?? 0), 'pending' => (int) ($today['pending'] ?? 0), 'failed' => (int) ($today['failed'] ?? 0)],
         ];
     }
 
@@ -431,6 +439,9 @@ class SystemSettingsComponent extends Component
                 ->groupBy('stage'),
             'stages' => config('workflow_notifications.stages', []),
             'emailLive' => Settings::emailEnabled(),
+            'smtp2go' => $this->tab === 'email' ? $this->smtp2goInfo() : null,
+            'jobs' => $this->tab === 'jobs' ? $this->jobsInfo() : null,
+            'workerMode' => BackgroundJobs::mode(),
             'info' => $this->tab === 'system' ? $this->systemInfo() : null,
             'lastChange' => $this->lastChange(),
         ])->layout('layouts.admin.master');
