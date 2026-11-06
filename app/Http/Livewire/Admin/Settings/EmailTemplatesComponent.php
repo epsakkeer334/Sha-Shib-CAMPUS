@@ -48,8 +48,8 @@ class EmailTemplatesComponent extends Component
         } elseif ($this->scope !== '' && !Institute::whereKey($this->scope)->exists()) {
             $this->scope = '';
         }
-        if (!array_key_exists($this->selectedKey, $this->emails()->catalogue())) {
-            $this->selectedKey = array_key_first($this->emails()->catalogue());
+        if (!array_key_exists($this->selectedKey, $this->catalogue())) {
+            $this->selectedKey = array_key_first($this->catalogue());
         }
         $this->testEmail = (string) $user->email;
         $this->loadTemplate();
@@ -74,6 +74,14 @@ class EmailTemplatesComponent extends Component
         return app(EmailService::class);
     }
 
+    /** Templates this user may edit: staff emails are sent by the Super Admin only, so only they see those. */
+    protected function catalogue(): array
+    {
+        $all = $this->emails()->catalogue();
+
+        return Auth::user()->isSuperAdmin() ? $all : array_filter($all, fn ($t) => ($t['audience'] ?? '') !== 'staff');
+    }
+
     protected function instituteId(): ?int
     {
         return $this->scope !== '' ? (int) $this->scope : null;
@@ -95,7 +103,7 @@ class EmailTemplatesComponent extends Component
 
     public function select($key)
     {
-        if (!array_key_exists($key, $this->emails()->catalogue())) {
+        if (!array_key_exists($key, $this->catalogue())) {
             return;
         }
         $this->selectedKey = $key;
@@ -271,7 +279,7 @@ class EmailTemplatesComponent extends Component
     public function render()
     {
         $emails = $this->emails();
-        $catalogue = $emails->catalogue();
+        $catalogue = $this->catalogue();
         $instituteId = $this->instituteId();
         $isSuperAdmin = Auth::user()->isSuperAdmin();
 

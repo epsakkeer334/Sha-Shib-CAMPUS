@@ -22,7 +22,21 @@ return [
         'admissions' => ['Admissions', 'ti ti-school'],
         'documents' => ['Documents', 'ti ti-file-check'],
         'payments' => ['Fees & payments', 'ti ti-cash'],
+        // Ready-made wording for Communication ▸ Send Email (loaded into the form, can be changed before sending)
+        'announcements' => ['Announcements (Send Email)', 'ti ti-speakerphone'],
         'system' => ['System', 'ti ti-settings'],
+    ],
+
+    /** Extra placeholders of Send Email to students (App\Services\BulkEmailService). */
+    'bulk_student_placeholders' => [
+        'batch' => 'Batch (code · name)',
+        'parent_name' => 'Parent / guardian name',
+        'outstanding' => 'Fees still to pay (amount)',
+    ],
+
+    /** Placeholders of Send Email to staff. */
+    'staff_placeholders' => [
+        'role' => 'Role of the staff member',
     ],
 
     /** Available in every template. */
@@ -122,6 +136,61 @@ return [
             'subject' => 'Your payment could not be confirmed',
             'body' => "Dear {first_name},\n\nYour payment of **{amount}** (reference: {reference}) could not be confirmed.\n\nReason: {reason}\n\nPlease check the details and submit the payment again.",
             'button' => ['Go to payments', '{portal_url}'],
+        ],
+
+        'announcement_students' => [
+            'name' => 'Announcement to students',
+            'group' => 'announcements',
+            'audience' => 'student',
+            'description' => 'General notice to students, sent from Send Email (by batch, course, institute or chosen students).',
+            'placeholders' => ['batch' => 'Batch', 'parent_name' => 'Parent / guardian name', 'outstanding' => 'Fees still to pay'],
+            'subject' => 'Important update from {institute_name}',
+            'body' => "Dear {recipient_name},\n\n[Write your announcement here.]\n\nFor any questions, reply to this email or contact the office at {institute_phone}.",
+            'button' => null,
+        ],
+
+        'fee_reminder_students' => [
+            'name' => 'Fee payment reminder',
+            'group' => 'announcements',
+            'audience' => 'student',
+            'description' => 'Reminder to pay outstanding fees, sent from Send Email. {outstanding} is the amount still to pay.',
+            'placeholders' => ['batch' => 'Batch', 'parent_name' => 'Parent / guardian name', 'outstanding' => 'Fees still to pay'],
+            'subject' => 'Fee reminder — {student_name}',
+            'body' => "Dear {recipient_name},\n\nThis is a reminder that fees of **{outstanding}** are still to be paid for **{student_name}** ({course}).\n\nPlease pay at the earliest through the student portal or at the accounts office. Ignore this email if you have already paid.",
+            'button' => ['Pay now', '{portal_url}'],
+        ],
+
+        'class_update_students' => [
+            'name' => 'Class / schedule update',
+            'group' => 'announcements',
+            'audience' => 'student',
+            'description' => 'Change of class, timetable or holiday notice, sent from Send Email.',
+            'placeholders' => ['batch' => 'Batch', 'parent_name' => 'Parent / guardian name', 'outstanding' => 'Fees still to pay'],
+            'subject' => 'Schedule update for batch {batch}',
+            'body' => "Dear {recipient_name},\n\nPlease note the following change for batch **{batch}**:\n\n- Date: [date]\n- Time: [time]\n- Venue: [venue]\n\nThank you.",
+            'button' => null,
+        ],
+
+        'announcement_staff' => [
+            'name' => 'Announcement to staff',
+            'group' => 'announcements',
+            'audience' => 'staff',
+            'description' => 'Notice to institute users and staff, sent by the Super Admin from Send Email.',
+            'placeholders' => ['role' => 'Role of the staff member'],
+            'subject' => 'Notice for {institute_name} staff',
+            'body' => "Dear {recipient_name},\n\n[Write your notice here.]",
+            'button' => null,
+        ],
+
+        'meeting_staff' => [
+            'name' => 'Staff meeting',
+            'group' => 'announcements',
+            'audience' => 'staff',
+            'description' => 'Meeting invitation to institute staff, sent by the Super Admin from Send Email.',
+            'placeholders' => ['role' => 'Role of the staff member'],
+            'subject' => 'Meeting: [topic] on [date]',
+            'body' => "Dear {recipient_name},\n\nYou are invited to a meeting:\n\n- Topic: [topic]\n- Date and time: [date, time]\n- Place / link: [venue or meeting link]\n\nPlease be on time.",
+            'button' => null,
         ],
 
         'test_email' => [

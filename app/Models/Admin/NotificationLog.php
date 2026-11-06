@@ -16,6 +16,7 @@ class NotificationLog extends Model
         'event_type',
         'template_key',
         'email_template_id',
+        'email_campaign_id',
         'recipient',
         'subject',
         'payload',
@@ -45,6 +46,12 @@ class NotificationLog extends Model
     public function institute()
     {
         return $this->belongsTo(Institute::class);
+    }
+
+    /** The Send Email send this email belongs to, if any. */
+    public function campaign()
+    {
+        return $this->belongsTo(EmailCampaign::class, 'email_campaign_id');
     }
 
     /**

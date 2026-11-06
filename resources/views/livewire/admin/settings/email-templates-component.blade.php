@@ -52,27 +52,53 @@
     <div class="et-layout">
         {{-- Template list --}}
         <div class="et-side">
-            <div class="et-panel et-list">
-                <div class="et-panel-title">Templates</div>
+            <div class="et-panel et-list" id="et-menu">
+                <div class="et-menu-head">
+                    <span class="et-panel-title p-0">Templates <em>{{ $allItems->count() }}</em></span>
+                    <span class="et-menu-tools" wire:ignore>
+                        <button type="button" data-et-groups="open" title="Expand all"><i class="ti ti-arrows-vertical"></i></button>
+                        <button type="button" data-et-groups="close" title="Collapse all"><i class="ti ti-fold"></i></button>
+                    </span>
+                </div>
+                <div class="et-menu-search" wire:ignore>
+                    <i class="ti ti-search"></i>
+                    <input type="search" id="et-menu-filter" placeholder="Find a template…" aria-label="Find a template" autocomplete="off">
+                </div>
                 @foreach($groups as $groupKey => [$groupLabel, $groupIcon])
                     @if($list->has($groupKey))
-                        <div class="et-group"><i class="{{ $groupIcon }}"></i> {{ $groupLabel }}</div>
-                        @foreach($list->get($groupKey) as $item)
-                            <button type="button" class="et-item {{ $item['key'] === $selectedKey ? 'is-active' : '' }}" wire:click="select('{{ $item['key'] }}')" wire:key="eti-{{ $item['key'] }}">
-                                <span class="et-dot {{ $item['on'] ? 'on' : 'off' }}" title="{{ $item['on'] ? 'Sending' : 'Switched off' }}"></span>
-                                <span class="min-w-0 flex-grow-1">
-                                    <span class="et-item-name">{{ $item['name'] }}</span>
-                                    <span class="et-item-sub">
-                                        @if($item['source'] === 'institute')<span class="et-tag inst">Institute</span>
-                                        @elseif($item['source'] === 'group')<span class="et-tag group">Group</span>
-                                        @else<span class="et-tag def">Default</span>@endif
-                                        @if(!$item['on'])<span class="et-tag off">Off</span>@endif
-                                    </span>
-                                </span>
-                            </button>
-                        @endforeach
+                        @php
+                            $groupItems = $list->get($groupKey);
+                            $hasActive = $groupItems->contains('key', $selectedKey);
+                            $groupOff = $groupItems->where('on', false)->count();
+                        @endphp
+                        <details class="et-group-box {{ $hasActive ? 'has-active' : '' }}" data-et-group="{{ $groupKey }}" wire:key="etg-{{ $groupKey }}" wire:ignore.self @if($hasActive) open @endif>
+                            <summary class="et-group-head">
+                                <span class="et-group-ico"><i class="{{ $groupIcon }}"></i></span>
+                                <span class="et-group-name">{{ $groupLabel }}</span>
+                                @if($groupOff)<span class="et-group-off" title="{{ $groupOff }} switched off">{{ $groupOff }} off</span>@endif
+                                <span class="et-group-count">{{ $groupItems->count() }}</span>
+                                <i class="ti ti-chevron-down et-group-chev"></i>
+                            </summary>
+                            <div class="et-group-items">
+                                @foreach($groupItems as $item)
+                                    <button type="button" class="et-item {{ $item['key'] === $selectedKey ? 'is-active' : '' }}" wire:click="select('{{ $item['key'] }}')" wire:key="eti-{{ $item['key'] }}" data-et-name="{{ mb_strtolower($item['name'] . ' ' . $item['description']) }}">
+                                        <span class="et-dot {{ $item['on'] ? 'on' : 'off' }}" title="{{ $item['on'] ? 'Sending' : 'Switched off' }}"></span>
+                                        <span class="min-w-0 flex-grow-1">
+                                            <span class="et-item-name">{{ $item['name'] }}</span>
+                                            <span class="et-item-sub">
+                                                @if($item['source'] === 'institute')<span class="et-tag inst">Institute</span>
+                                                @elseif($item['source'] === 'group')<span class="et-tag group">Group</span>
+                                                @else<span class="et-tag def">Default</span>@endif
+                                                @if(!$item['on'])<span class="et-tag off">Off</span>@endif
+                                            </span>
+                                        </span>
+                                    </button>
+                                @endforeach
+                            </div>
+                        </details>
                     @endif
                 @endforeach
+                <div class="et-menu-empty" id="et-menu-empty" hidden>No template matches.</div>
                 <div class="et-legend">
                     <span><span class="et-tag def">Default</span> built in</span>
                     <span><span class="et-tag group">Group</span> all institutes</span>
@@ -105,7 +131,7 @@
                         <div class="et-kicker">
                             <i class="{{ $groups[$entry['group']][1] ?? 'ti ti-mail' }}"></i> {{ $groups[$entry['group']][0] ?? '' }}
                             <span class="et-sep">•</span>
-                            <i class="ti {{ $entry['audience'] === 'student' ? 'ti-school' : 'ti-user' }}"></i> {{ $entry['audience'] === 'student' ? 'Sent to the student' : 'Sent to the person chosen' }}
+                            <i class="ti {{ ['student' => 'ti-school', 'staff' => 'ti-users'][$entry['audience']] ?? 'ti-user' }}"></i> {{ ['student' => 'Sent to the student', 'staff' => 'Sent to institute staff'][$entry['audience']] ?? 'Sent to the person chosen' }}
                         </div>
                         <h5 class="et-name">{{ $entry['name'] }}</h5>
                         <p class="et-desc">{{ $entry['description'] }}</p>
@@ -347,9 +373,34 @@
 
         /* Template list */
         .et-ui .et-side { position: sticky; top: 80px; min-width: 0; }
-        .et-ui .et-list { padding: 8px; }
+        .et-ui .et-list { padding: 8px; max-height: calc(100vh - 100px); overflow-y: auto; scrollbar-width: thin; }
         .et-ui .et-panel-title { padding: 8px 10px 2px; font-size: 14px; font-weight: 700; color: var(--et-ink); }
-        .et-ui .et-group { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #94A3B8; padding: 12px 10px 4px; }
+        /* Toggle menu: one collapsible box per group */
+        .et-ui .et-menu-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 8px 8px 10px; }
+        .et-ui .et-panel-title em { font-style: normal; margin-left: 4px; padding: 0 7px; border-radius: 999px; background: #F1F5F9; color: var(--et-muted); font-size: 11px; font-weight: 700; vertical-align: 2px; }
+        .et-ui .et-menu-tools { display: inline-flex; gap: 2px; }
+        .et-ui .et-menu-tools button { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 8px; background: transparent; color: #64748B; font-size: 15px; }
+        .et-ui .et-menu-tools button:hover { background: var(--et-soft); border-color: var(--et-line); color: var(--et-ink); }
+        .et-ui .et-menu-search { position: relative; margin: 0 2px 8px; }
+        .et-ui .et-menu-search i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94A3B8; font-size: 15px; pointer-events: none; }
+        .et-ui .et-menu-search input { width: 100%; height: 34px; padding: 0 10px 0 32px; border: 1px solid var(--et-line); border-radius: 10px; background: var(--et-soft); font-size: 13px; color: var(--et-ink); outline: 0; transition: border-color .15s, background .15s; }
+        .et-ui .et-menu-search input:focus { background: #fff; border-color: #F8A77F; box-shadow: 0 0 0 3px rgba(242, 101, 34, .1); }
+        .et-ui .et-group-box { margin: 0 2px 6px; border: 1px solid var(--et-line); border-radius: 12px; background: #fff; overflow: hidden; }
+        .et-ui .et-group-box.has-active { border-color: #FED7C3; }
+        .et-ui .et-group-head { display: flex; align-items: center; gap: 9px; padding: 9px 10px; cursor: pointer; list-style: none; user-select: none; transition: background .12s; }
+        .et-ui .et-group-head::-webkit-details-marker { display: none; }
+        .et-ui .et-group-head::marker { content: ""; }
+        .et-ui .et-group-head:hover { background: var(--et-soft); }
+        .et-ui .et-group-box[open] > .et-group-head { background: var(--et-soft); border-bottom: 1px solid var(--et-line); }
+        .et-ui .et-group-ico { width: 28px; height: 28px; flex-shrink: 0; border-radius: 8px; display: grid; place-items: center; background: #EEF2FF; color: #4338CA; font-size: 15px; }
+        .et-ui .et-group-box.has-active .et-group-ico { background: #FFF1E8; color: #C2410C; }
+        .et-ui .et-group-name { flex: 1 1 auto; min-width: 0; font-size: 13px; font-weight: 700; color: var(--et-ink); line-height: 1.25; }
+        .et-ui .et-group-count { min-width: 22px; padding: 0 6px; border-radius: 999px; background: #F1F5F9; color: #475569; font-size: 11px; font-weight: 700; text-align: center; line-height: 18px; }
+        .et-ui .et-group-off { padding: 0 6px; border-radius: 999px; background: #FEE2E2; color: #B91C1C; font-size: 10.5px; font-weight: 700; line-height: 18px; white-space: nowrap; }
+        .et-ui .et-group-chev { color: #94A3B8; font-size: 16px; transition: transform .18s; }
+        .et-ui .et-group-box[open] .et-group-chev { transform: rotate(180deg); }
+        .et-ui .et-group-items { padding: 4px; }
+        .et-ui .et-menu-empty { padding: 14px 10px; text-align: center; font-size: 12.5px; color: #94A3B8; }
         .et-ui .et-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-top: 2px; border: 1px solid transparent; border-radius: 10px; background: transparent; text-align: left; color: var(--et-ink); transition: background .12s, border-color .12s; }
         .et-ui .et-item:hover { background: var(--et-soft); }
         .et-ui .et-item.is-active { background: #FFF6F0; border-color: #FED7C3; }
@@ -454,6 +505,38 @@
     </style>
 
     <script>
+        // Template menu: expand / collapse all groups, and find a template by name.
+        (function () {
+            if (window.__etMenu) return;
+            window.__etMenu = true;
+            function filterMenu() {
+                var input = document.getElementById('et-menu-filter'), menu = document.getElementById('et-menu');
+                if (!input || !menu) return;
+                var term = input.value.trim().toLowerCase(), any = false;
+                menu.querySelectorAll('.et-group-box').forEach(function (box) {
+                    var hits = 0;
+                    box.querySelectorAll('.et-item').forEach(function (item) {
+                        var show = !term || (item.dataset.etName || '').indexOf(term) !== -1;
+                        item.hidden = !show; if (show) hits++;
+                    });
+                    box.hidden = hits === 0;
+                    if (term && hits) box.open = true;
+                    if (hits) any = true;
+                });
+                var empty = document.getElementById('et-menu-empty');
+                if (empty) empty.hidden = any;
+            }
+            document.addEventListener('input', function (e) { if (e.target.id === 'et-menu-filter') filterMenu(); });
+            document.addEventListener('click', function (e) {
+                var btn = e.target.closest('[data-et-groups]');
+                if (!btn) return;
+                document.querySelectorAll('#et-menu .et-group-box').forEach(function (box) { box.open = btn.dataset.etGroups === 'open'; });
+            });
+            document.addEventListener('livewire:load', function () {
+                if (window.Livewire && Livewire.hook) Livewire.hook('message.processed', filterMenu);
+            });
+        })();
+
         // Message editor helpers: insert a placeholder, wrap the selection in **bold**, or start the line with "- ".
         (function () {
             if (window.__etChips) return;

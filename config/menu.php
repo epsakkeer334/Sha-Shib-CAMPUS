@@ -206,6 +206,14 @@ return [
                 ],
             ],
             [
+                'label' => 'Communication',
+                'icon' => 'ti ti-speakerphone',
+                'children' => [
+                    ['label' => 'Send Email', 'icon' => 'ti ti-mail-forward', 'route' => 'admin.emails.send', 'permission' => 'emails.send'],
+                    ['label' => 'Sent Emails', 'icon' => 'ti ti-mail-opened', 'route' => 'admin.emails.sent', 'permission' => 'emails.send'],
+                ],
+            ],
+            [
                 'label' => 'Monitoring',
                 'icon' => 'ti ti-activity',
                 'children' => [

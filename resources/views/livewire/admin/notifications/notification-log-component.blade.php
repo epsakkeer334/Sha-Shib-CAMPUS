@@ -213,6 +213,7 @@
                                 <dt>Created</dt><dd>{{ $selected['created'] }}</dd>
                                 <dt>Sent</dt><dd>{{ $selected['sent'] ?? 'Not sent' }}</dd>
                                 @if($selected['template'])<dt>Template</dt><dd>{{ $selected['template'] }}</dd>@endif
+                                @if($selected['campaign_id'])<dt>Part of</dt><dd>@can('emails.send')<a href="{{ route('admin.emails.sent', ['campaign' => $selected['campaign_id']]) }}">Sent email #{{ $selected['campaign_id'] }}</a>@else Sent email #{{ $selected['campaign_id'] }}@endcan</dd>@endif
                                 @if(!$isSms)
                                     <dt>Provider</dt><dd>{{ $selected['provider'] ? strtoupper($selected['provider']) : '—' }}</dd>
                                     <dt>SMTP2GO email id</dt><dd class="mon-mono">{{ $selected['provider_id'] ?: '—' }}</dd>

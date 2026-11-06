@@ -296,7 +296,8 @@ class Module1CoreTest extends TestCase
         $this->assertSame(['Students', 'Onboarding'], array_column($groups['Admissions']['items'], 'label'));
         $this->assertSame(['Document Verification', 'Payment Verification', 'ER & ID Cards'], array_column($groups['Admissions']['items'][1]['children'], 'label'));
         $this->assertSame(['Dashboard', 'Master Data'], array_column($groups['Main']['items'], 'label')); // Master Data at the top
-        $this->assertSame(['Users & Permissions', 'System', 'Monitoring'], array_column($groups['Administration']['items'], 'label'));
+        $this->assertSame(['Users & Permissions', 'System', 'Communication', 'Monitoring'], array_column($groups['Administration']['items'], 'label'));
+        $this->assertSame(['Send Email', 'Sent Emails'], array_column($groups['Administration']['items'][2]['children'], 'label'));
         $this->assertSame(['System Settings', 'Email Templates'], array_column($groups['Administration']['items'][1]['children'], 'label'));
         $group = $groups['Administration']['items'][0];
         $this->assertSame(['Users', 'Roles & Permissions'], array_column($group['children'], 'label'));
@@ -305,6 +306,7 @@ class Module1CoreTest extends TestCase
         $instGroups = collect(MenuService::for($this->makeUser('institute-admin', $this->instA)))->keyBy('title');
         $this->assertSame(['Users'], array_column($instGroups['Administration']['items'][0]['children'], 'label'));
         $this->assertSame(['Email Templates'], array_column($instGroups['Administration']['items'][1]['children'], 'label')); // own institute's emails
+        $this->assertSame(['Send Email', 'Sent Emails'], array_column($instGroups['Administration']['items'][2]['children'], 'label'));
 
         // Accounts: only what its permissions allow (Module 2 fees & payments); modules not built yet stay hidden.
         $this->assertSame(['Dashboard', 'Fee Structure', 'Payment Settings', 'Scholarships', 'All Students', 'Payment Verification'], $labels($this->makeUser('accounts', $this->instA)));

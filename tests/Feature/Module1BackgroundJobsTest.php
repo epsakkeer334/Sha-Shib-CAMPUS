@@ -35,6 +35,7 @@ class Module1BackgroundJobsTest extends TestCase
         parent::setUp();
         $this->seed(RoleSeeder::class);
         Settings::flush();
+        DB::table('background_heartbeats')->delete(); // start from "never run" (rolled back with the test)
 
         config(['services.smtp2go.api_key' => 'api-TEST00001234', 'services.smtp2go.sender_email' => 'no-reply@camp.test', 'queue.default' => 'sync']);
         Http::preventStrayRequests();

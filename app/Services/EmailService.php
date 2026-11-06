@@ -79,7 +79,9 @@ class EmailService
      * An email with its own subject and text (no template), on the same layout and log.
      *
      * @param  array  $options  institute_id, email, event_type, now (send and wait — test buttons only),
-     *                          rendered (an already rendered email from render(); $body is then ignored)
+     *                          rendered (an already rendered email from render(); $body is then ignored),
+     *                          log (extra notifications_log columns, e.g. template_key, email_campaign_id),
+     *                          to_name (name shown to the receiver when it is not $to, e.g. a parent)
      */
     public function sendCustom(Model $to, string $subject, string $body, array $options = []): NotificationLog
     {
@@ -87,7 +89,7 @@ class EmailService
         $rendered = $options['rendered'] ?? $this->render(['subject' => $subject, 'body' => $body, 'button_text' => null, 'button_url' => null], $this->recipientVars($to) + $this->commonVars($instituteId), $instituteId);
         $rendered['subject'] = $subject !== '' ? $subject : $rendered['subject'];
 
-        $log = $this->createLog($to, $options['email'] ?? $to->email, $instituteId, $options['event_type'] ?? 'custom', $rendered, []);
+        $log = $this->createLog($to, $options['email'] ?? $to->email, $instituteId, $options['event_type'] ?? 'custom', $rendered, (array) ($options['log'] ?? []), $options['to_name'] ?? null);
 
         return !empty($options['now']) ? $this->sendWaiting($log) : $this->queue($log);
     }
@@ -164,7 +166,7 @@ class EmailService
         return $log->refresh();
     }
 
-    protected function createLog(Model $to, ?string $email, ?int $instituteId, string $event, array $rendered, array $extra): NotificationLog
+    protected function createLog(Model $to, ?string $email, ?int $instituteId, string $event, array $rendered, array $extra, ?string $toName = null): NotificationLog
     {
         $email = trim((string) $email);
 
@@ -180,7 +182,7 @@ class EmailService
                 'subject' => $rendered['subject'],
                 'message' => $rendered['text'],
                 'html' => $rendered['html'],
-                'to_name' => $this->nameOf($to),
+                'to_name' => $toName ?? $this->nameOf($to),
                 'sender_name' => $rendered['sender_name'],
                 'reply_to' => $rendered['reply_to'],
             ],
@@ -289,8 +291,8 @@ class EmailService
             }
         }
 
-        $institute = $instituteId ? Institute::find($instituteId) : null;
-        $settings = $instituteId ? InstituteEmailSetting::where('institute_id', $instituteId)->first() : null;
+        $institute = $this->institute($instituteId);
+        $settings = $this->senderSettings($instituteId);
         $signature = trim((string) optional($settings)->signature);
         $siteName = (string) Settings::get('general.site_name');
 
@@ -329,6 +331,7 @@ class EmailService
             'reason' => 'The scan is not clear — the name and date of birth cannot be read.', 'document' => '10th Marksheet',
             'documents' => ['Medical Certificate', '12th Marksheet'], 'amount' => money_inr(25000), 'fee' => 'Semester 1 tuition fee',
             'receipt' => 'RCPT-2026-00125', 'reference' => 'UPI 412345678901', 'sent_at' => now()->format('d M Y, h:i A'),
+            'batch' => 'SHA-B11-2026 · B1.1 June 2026', 'parent_name' => 'Suresh Menon', 'outstanding' => money_inr(18500), 'role' => 'Training Manager (TM)',
         ];
 
         $vars = $samples;
@@ -366,7 +369,7 @@ class EmailService
 
     public function commonVars(?int $instituteId): array
     {
-        $institute = $instituteId ? Institute::find($instituteId) : null;
+        $institute = $this->institute($instituteId);
 
         return [
             'institute_name' => $institute->name ?? (string) Settings::get('general.organisation'),
@@ -376,6 +379,30 @@ class EmailService
             'portal_url' => route('portal.login'),
             'support_email' => (string) Settings::get('general.support_email'),
         ];
+    }
+
+    /** Institute and its sender details, looked up once per service instance (one send to many people renders the same institute often). */
+    protected array $institutes = [];
+    protected array $senderSettings = [];
+
+    protected function institute(?int $instituteId): ?Institute
+    {
+        if (!$instituteId) {
+            return null;
+        }
+
+        return array_key_exists($instituteId, $this->institutes) ? $this->institutes[$instituteId] : ($this->institutes[$instituteId] = Institute::find($instituteId));
+    }
+
+    protected function senderSettings(?int $instituteId): ?InstituteEmailSetting
+    {
+        if (!$instituteId) {
+            return null;
+        }
+
+        return array_key_exists($instituteId, $this->senderSettings)
+            ? $this->senderSettings[$instituteId]
+            : ($this->senderSettings[$instituteId] = InstituteEmailSetting::where('institute_id', $instituteId)->first());
     }
 
     protected function nameOf(Model $to): string

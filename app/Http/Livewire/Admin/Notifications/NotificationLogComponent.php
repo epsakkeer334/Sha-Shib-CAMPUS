@@ -129,6 +129,12 @@ class NotificationLogComponent extends Component
         if ($event === 'template_test') {
             return 'Template test';
         }
+        if ($event === 'bulk_email') {
+            return 'Send Email';
+        }
+        if ($event === 'bulk_email_test') {
+            return 'Send Email test';
+        }
 
         return $event ? Str::of($event)->replace('_', ' ')->title()->replace(['Er ', 'Id '], ['ER ', 'ID '])->__toString() : '—';
     }
@@ -173,6 +179,7 @@ class NotificationLogComponent extends Component
             'from' => $payload['sender_name'] ?? null,
             'reply_to' => $payload['reply_to'] ?? null,
             'template' => $log->template_key ? (config("email_templates.templates.{$log->template_key}.name") ?? $log->template_key) : null,
+            'campaign_id' => $log->email_campaign_id,
             'provider' => $log->provider,
             'provider_id' => $log->provider_message_id,
             'attempts' => (int) $log->attempts,

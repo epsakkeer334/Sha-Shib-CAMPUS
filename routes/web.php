@@ -84,6 +84,11 @@ Route::prefix('admin')->middleware(['auth', 'staff', 'active.user'])->group(func
     Route::get('/email-templates', Admin\Settings\EmailTemplatesComponent::class)->name('admin.email-templates')->middleware('permission:email_templates.manage');
     Route::get('/audit-trail', AuditTrailComponent::class)->name('admin.audit-trail')->middleware('permission:audit.view');
     Route::get('/notifications', NotificationLogComponent::class)->name('admin.notifications')->middleware('permission:notifications.view');
+    // Communication — one email to many students (selected / batch / course / institute), Super Admin also to staff
+    Route::middleware('permission:emails.send')->group(function () {
+        Route::get('/emails/send', \App\Http\Livewire\Admin\Emails\SendEmailComponent::class)->name('admin.emails.send');
+        Route::get('/emails/sent', \App\Http\Livewire\Admin\Emails\SentEmailsComponent::class)->name('admin.emails.sent');
+    });
 
     // Institute Management — courses offered per institute (Super Admin: any institute; others: own institute)
     Route::middleware('permission:institute_courses.view')->group(function () {
