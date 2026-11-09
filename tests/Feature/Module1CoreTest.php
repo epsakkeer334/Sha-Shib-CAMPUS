@@ -542,6 +542,23 @@ class Module1CoreTest extends TestCase
         $this->get(route('admin.dashboard'))->assertOk()->assertSee('Faculty Dashboard')->assertSee('Attendance to upload per subject')->assertSee('Institute Snapshot');
     }
 
+    /** @test */
+    public function setup_checklist_is_not_done_when_there_are_no_institutes()
+    {
+        // A fresh live install: no institutes yet → the "every institute ..." checks must not show as done
+        $method = new \ReflectionMethod(\App\Services\DashboardService::class, 'superAdminChecklist');
+        $method->setAccessible(true);
+        $checks = $method->invoke(app(\App\Services\DashboardService::class), collect(), null);
+
+        $this->assertSame('0 active institutes', $checks[0][1]);
+        foreach (array_slice($checks, 0, 5) as $check) {
+            $this->assertFalse($check[0], $check[1] . ' should be to-do');
+        }
+        $this->assertSame('Institute Admin for every institute', $checks[1][1]);
+        $this->assertSame('Add an institute first', $checks[1][2]);
+        $this->assertSame('Assign courses to institutes first', $checks[3][2]);
+    }
+
     public function test_serial_numbers_are_sequential_per_series_and_year()
     {
         $service = app(SerialNumberService::class);

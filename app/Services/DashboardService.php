@@ -410,13 +410,17 @@ class DashboardService
                 ->whereColumn('course_fees.course_id', 'institute_courses.course_id')->whereNull('course_fees.deleted_at');
         })->count();
         $withoutPayments = $active->filter(fn ($i) => !InstitutePaymentGateway::enabled()->where('institute_id', $i->id)->exists());
+        // "Every institute / course ..." is only done when there is something to check — with none it is still to do
+        $hasInstitutes = $active->isNotEmpty();
+        $hasOfferings = $hasInstitutes && InstituteCourse::whereIn('institute_id', $active->pluck('id'))->exists();
+        $needInstitute = 'Add an institute first';
 
         return [
-            [$active->isNotEmpty(), $active->count() . ' active ' . ($active->count() === 1 ? 'institute' : 'institutes'), 'Add institutes under Institute Management', 'admin.institutes'],
-            [$withoutAdmin->isEmpty(), $withoutAdmin->isEmpty() ? 'Every institute has an Institute Admin' : $withoutAdmin->count() . ' without an Institute Admin', $withoutAdmin->pluck('name')->take(3)->implode(', '), 'admin.users'],
-            [$withoutCourses->isEmpty(), $withoutCourses->isEmpty() ? 'Every institute offers courses' : $withoutCourses->count() . ' without courses', $withoutCourses->pluck('name')->take(3)->implode(', '), 'admin.institute-courses'],
-            [$offeringsWithoutFees === 0, $offeringsWithoutFees === 0 ? 'Every course has a fee structure' : $offeringsWithoutFees . ' course offerings without fees', 'Set them up under Fee Structure', 'admin.onboarding.fee-structure'],
-            [$withoutPayments->isEmpty(), $withoutPayments->isEmpty() ? 'Payment methods set for every institute' : $withoutPayments->count() . ' without payment methods', $withoutPayments->pluck('name')->take(3)->implode(', '), 'admin.institute-payment-settings'],
+            [$hasInstitutes, $active->count() . ' active ' . ($active->count() === 1 ? 'institute' : 'institutes'), 'Add institutes under Institute Management', 'admin.institutes'],
+            [$hasInstitutes && $withoutAdmin->isEmpty(), !$hasInstitutes ? 'Institute Admin for every institute' : ($withoutAdmin->isEmpty() ? 'Every institute has an Institute Admin' : $withoutAdmin->count() . ' without an Institute Admin'), $hasInstitutes ? $withoutAdmin->pluck('name')->take(3)->implode(', ') : $needInstitute, 'admin.users'],
+            [$hasInstitutes && $withoutCourses->isEmpty(), !$hasInstitutes ? 'Courses offered by every institute' : ($withoutCourses->isEmpty() ? 'Every institute offers courses' : $withoutCourses->count() . ' without courses'), $hasInstitutes ? $withoutCourses->pluck('name')->take(3)->implode(', ') : $needInstitute, 'admin.institute-courses'],
+            [$hasOfferings && $offeringsWithoutFees === 0, !$hasOfferings ? 'Fee structure for every course' : ($offeringsWithoutFees === 0 ? 'Every course has a fee structure' : $offeringsWithoutFees . ' course offerings without fees'), !$hasOfferings ? 'Assign courses to institutes first' : 'Set them up under Fee Structure', 'admin.onboarding.fee-structure'],
+            [$hasInstitutes && $withoutPayments->isEmpty(), !$hasInstitutes ? 'Payment methods for every institute' : ($withoutPayments->isEmpty() ? 'Payment methods set for every institute' : $withoutPayments->count() . ' without payment methods'), $hasInstitutes ? $withoutPayments->pluck('name')->take(3)->implode(', ') : $needInstitute, 'admin.institute-payment-settings'],
             [(bool) $currentYear, $currentYear ? 'Academic year ' . $currentYear->name . ' is set up' : 'No academic year covers today', 'Master Data → Academic Years', 'admin.masters.academic-years'],
             [\App\Support\Settings::emailEnabled(), \App\Support\Settings::emailEnabled() ? 'Email sending is on' : 'Email sending is switched off', 'System Settings → Email', 'admin.settings'],
         ];
