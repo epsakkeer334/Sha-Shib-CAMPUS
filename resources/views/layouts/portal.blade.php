@@ -385,11 +385,10 @@
 <div class="page">
     @php
         $openApply = \App\Support\Settings::bool('portal.registration_open');
-        $footInst = $portalStudent ? $portalStudent->institute : null;
+        // Footer contact: Sha-Shib Group head office (same for every visitor and student)
         $contact = [
-            'address' => $footInst ? trim($footInst->address . ' ' . $footInst->city) : setting('general.address'),
-            'phone' => $footInst ? $footInst->phone : setting('general.support_phone'),
-            'email' => $footInst ? $footInst->email : setting('general.support_email'),
+            'email' => 'info@shashibgroup.org',
+            'phone' => '+91 9967 97 4241',
         ];
         $navLinks = $portalStudent
             ? [[route('portal.status'), 'My application', 'portal.status'], [route('portal.notifications'), 'Notifications', 'portal.notifications'], ['#contact', 'Contact', null]]
@@ -494,14 +493,11 @@
             <div>
                 <h3>Contact</h3>
                 <ul class="foot-contact">
-                    @if($contact['address'])
-                        <li><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17.5 C10 17.5 4.5 12.4 4.5 8.3 A5.5 5.5 0 0 1 15.5 8.3 C15.5 12.4 10 17.5 10 17.5 Z"></path><circle cx="10" cy="8.3" r="2"></circle></svg><span>{{ $contact['address'] }}</span></li>
+                    @if($contact['email'])
+                        <li><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4.5" width="15" height="11" rx="2"></rect><path d="M3 5.5 L10 11 L17 5.5"></path></svg><a href="mailto:{{ $contact['email'] }}" style="word-break: break-all;">{{ $contact['email'] }}</a></li>
                     @endif
                     @if($contact['phone'])
                         <li><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 3 H7.5 L9 7 L7 8.3 C7.9 10.2 9.8 12.1 11.7 13 L13 11 L17 12.5 V15.5 C17 16.3 16.3 17 15.5 17 C9.2 16.6 3.4 10.8 3 4.5 C3 3.7 3.7 3 4.5 3 Z"></path></svg><a href="tel:{{ preg_replace('/[^0-9+]/', '', $contact['phone']) }}">{{ $contact['phone'] }}</a></li>
-                    @endif
-                    @if($contact['email'])
-                        <li><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4.5" width="15" height="11" rx="2"></rect><path d="M3 5.5 L10 11 L17 5.5"></path></svg><a href="mailto:{{ $contact['email'] }}" style="word-break: break-all;">{{ $contact['email'] }}</a></li>
                     @endif
                     @unless(array_filter($contact))
                         <li style="display: block;">Questions about your application? Contact the admissions office of your institute.</li>
