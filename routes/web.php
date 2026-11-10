@@ -83,6 +83,7 @@ Route::prefix('admin')->middleware(['auth', 'staff', 'active.user'])->group(func
     Route::get('/settings', Admin\Settings\SystemSettingsComponent::class)->name('admin.settings')->middleware('role:super-admin');
     Route::get('/email-templates', Admin\Settings\EmailTemplatesComponent::class)->name('admin.email-templates')->middleware('permission:email_templates.manage');
     Route::get('/audit-trail', AuditTrailComponent::class)->name('admin.audit-trail')->middleware('permission:audit.view');
+    Route::get('/login-activity', Admin\Monitoring\LoginActivityComponent::class)->name('admin.login-activity')->middleware('role:super-admin');
     Route::get('/notifications', NotificationLogComponent::class)->name('admin.notifications')->middleware('permission:notifications.view');
     // Communication — one email to many students (selected / batch / course / institute), Super Admin also to staff
     Route::middleware('permission:emails.send')->group(function () {

@@ -219,6 +219,7 @@ return [
                 'children' => [
                     ['label' => 'Audit Trail', 'icon' => 'ti ti-history', 'route' => 'admin.audit-trail', 'permission' => 'audit.view'],
                     ['label' => 'Email & SMS Log', 'icon' => 'ti ti-mail-check', 'route' => 'admin.notifications', 'permission' => 'notifications.view'],
+                    ['label' => 'Login Activity', 'icon' => 'ti ti-login', 'route' => 'admin.login-activity', 'roles' => ['super-admin']],
                 ],
             ],
         ],

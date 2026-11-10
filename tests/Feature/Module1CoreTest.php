@@ -277,13 +277,14 @@ class Module1CoreTest extends TestCase
         $labels = fn (User $u) => collect(MenuService::flatFor($u))->flatMap(fn ($s) => array_column($s['items'], 'label'))->all();
 
         $super = $labels($this->makeUser('super-admin'));
-        foreach (['Dashboard', 'Institutes', 'Users', 'Roles & Permissions', 'Audit Trail', 'Email & SMS Log'] as $label) {
+        foreach (['Dashboard', 'Institutes', 'Users', 'Roles & Permissions', 'Audit Trail', 'Email & SMS Log', 'Login Activity'] as $label) {
             $this->assertContains($label, $super);
         }
 
         $instAdmin = $labels($this->makeUser('institute-admin', $this->instA));
         $this->assertContains('Users', $instAdmin);
         $this->assertContains('Audit Trail', $instAdmin);
+        $this->assertNotContains('Login Activity', $instAdmin);
         $this->assertNotContains('Institutes', $instAdmin);
         $this->assertNotContains('Roles & Permissions', $instAdmin);
 

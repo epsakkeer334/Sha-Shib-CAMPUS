@@ -29,10 +29,12 @@ class UseStudentGuard
     /**
      * Sign out of the current guard only. The whole session is reset only when nobody is signed in on the
      * other side; otherwise the session id is renewed and the other login is kept.
+     * The sign-out is written to Login Activity ($reason: when it was not the user's own choice).
      */
-    public static function signOut(Request $request): void
+    public static function signOut(Request $request, ?string $reason = null): void
     {
         $current = Auth::getDefaultDriver();
+        \App\Services\LoginLogger::logout(Auth::guard($current)->user(), $current === static::GUARD ? 'portal' : 'admin', $reason);
         Auth::guard($current)->logout();
 
         $other = $current === static::GUARD ? 'web' : static::GUARD;

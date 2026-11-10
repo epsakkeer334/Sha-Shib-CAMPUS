@@ -246,6 +246,7 @@ class DetailsPage extends Component
 
         session()->regenerate();
         $user->update(['last_login_at' => now(), 'last_login_ip' => request()->ip()]);
+        \App\Services\LoginLogger::login($user, 'portal', 'New registration');
         session()->flash('toast', ['type' => 'success', 'message' => 'Your login is created and your details are saved. Next: academic details.']);
 
         // No documents yet at registration, so payment is not open: continue with Academic.

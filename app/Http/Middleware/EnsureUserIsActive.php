@@ -17,7 +17,7 @@ class EnsureUserIsActive
         $user = Auth::user();
 
         if ($user && ($reason = static::blockReason($user))) {
-            UseStudentGuard::signOut($request);
+            UseStudentGuard::signOut($request, 'Signed out automatically — ' . rtrim($reason, '.'));
 
             return redirect()->route('admin.login')->with('error', $reason);
         }

@@ -27,6 +27,10 @@ class Kernel extends ConsoleKernel
             ->everyMinute()->withoutOverlapping(10)
             ->when(fn () => BackgroundJobs::shouldRunWorker())
             ->name('camp:email-worker');
+
+        // Login Activity keeps one year (App\Models\Admin\LoginLog::KEEP_DAYS)
+        $schedule->command('model:prune', ['--model' => [\App\Models\Admin\LoginLog::class]])
+            ->dailyAt('02:30')->name('camp:prune-login-logs');
     }
 
     /**

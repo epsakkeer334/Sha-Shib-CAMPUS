@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Session;
 use Jenssegers\Agent\Agent;
 use App\Http\Middleware\EnsureUserIsActive;
+use App\Services\LoginLogger;
 
 class Login extends Component
 {
@@ -48,6 +49,7 @@ class Login extends Component
             $user = Auth::user();
 
             if ($reason = EnsureUserIsActive::blockReason($user)) {
+                LoginLogger::blocked($user, 'admin', $reason);
                 Auth::logout();
                 $this->errorMessage = $reason;
                 return;
@@ -58,6 +60,7 @@ class Login extends Component
                 'last_login_at' => now(),
                 'last_login_ip' => request()->ip(),
             ]);
+            LoginLogger::login($user, 'admin');
 
             // Optional: Store login session info
             Session::put('login_info', [
@@ -70,6 +73,7 @@ class Login extends Component
             return redirect()->intended(route('admin.dashboard'));
         }
 
+        LoginLogger::failed($this->email, 'admin');
         $this->errorMessage = 'Invalid credentials. Please try again.';
     }
 
