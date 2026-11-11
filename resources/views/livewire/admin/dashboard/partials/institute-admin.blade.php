@@ -120,7 +120,7 @@
                     @forelse($d['offerings']->take(6) as $o)
                         <div class="db-row">
                             <span class="db-av tone-pink" style="font-size: 10px;">{{ \Illuminate\Support\Str::limit(optional($o->course)->code, 5, '') }}</span>
-                            <div class="db-row-main"><div class="db-row-title">{{ optional($o->course)->name }}</div><div class="db-row-sub">{{ optional($o->course)->period_summary }}</div></div>
+                            <div class="db-row-main"><div class="db-row-title">{{ optional($o->course)->name }}</div><div class="db-row-sub"><span class="fw-semibold">{{ optional($o->course)->code }}</span> · {{ optional($o->course)->period_summary }}</div></div>
                             @unless($o->status)<span class="db-chip tone-red">Inactive</span>@endunless
                         </div>
                     @empty

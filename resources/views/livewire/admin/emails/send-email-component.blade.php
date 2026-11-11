@@ -83,7 +83,7 @@
                                 <div class="se-pills">
                                     <button type="button" class="se-pill {{ !$courses ? 'on' : '' }}" wire:click="clear('courses')">All</button>
                                     @forelse($courseOptions as $c)
-                                        <button type="button" class="se-pill {{ in_array($c->id, $courses) ? 'on' : '' }}" wire:click="toggle('courses', {{ $c->id }})" wire:key="sc-{{ $c->id }}">{{ $c->name }}</button>
+                                        <button type="button" class="se-pill {{ in_array($c->id, $courses) ? 'on' : '' }}" wire:click="toggle('courses', {{ $c->id }})" wire:key="sc-{{ $c->id }}" title="{{ $c->name }}">{{ $c->display_name }}</button>
                                     @empty
                                         <span class="se-empty">No courses offered yet.</span>
                                     @endforelse

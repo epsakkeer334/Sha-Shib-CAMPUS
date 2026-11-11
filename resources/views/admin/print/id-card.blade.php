@@ -32,7 +32,7 @@
         @endif
         <div style="display: flex; flex-direction: column; gap: .8mm; min-width: 0;">
             <strong style="font-size: 3.8mm; line-height: 4.4mm;">{{ $student->full_name }}</strong>
-            <span style="font-size: 2.7mm; line-height: 3.3mm;">{{ optional($student->course)->name }}</span>
+            <span style="font-size: 2.7mm; line-height: 3.3mm;">{{ optional($student->course)->display_name }}</span>
             <span class="mono" style="font-size: 3.2mm; margin-top: 1mm;">{{ $student->er_number }}</span>
             <span class="muted" style="font-size: 2.4mm;">Issued {{ $card->issue_date ? $card->issue_date->format('d M Y') : now()->format('d M Y') }}</span>
         </div>

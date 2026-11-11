@@ -150,7 +150,7 @@
                                 {!! $student->status_html !!}
                             </div>
                             <div class="small text-muted text-truncate">
-                                {{ optional($student->course)->name }} · {{ $student->email }} · {{ $student->phone }}
+                                {{ optional($student->course)->display_name }} · {{ $student->email }} · {{ $student->phone }}
                             </div>
                             <div class="d-flex gap-3 small mt-1 flex-wrap">
                                 <span class="text-muted"><i class="ti ti-calendar"></i> Joined {{ $student->formatted_joining_date }}</span>

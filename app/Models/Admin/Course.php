@@ -32,6 +32,12 @@ class Course extends BaseModel
         'period_months' => 'integer',
     ];
 
+    /** "B1.1 — Aircraft Maintenance Engineering": how a course is shown across the system (code first). */
+    public function getDisplayNameAttribute(): string
+    {
+        return $this->code ? "{$this->code} — {$this->name}" : (string) $this->name;
+    }
+
     /** Number of academic periods of the course (semesters / terms / modules …). */
     public function getTotalPeriodsAttribute(): int
     {

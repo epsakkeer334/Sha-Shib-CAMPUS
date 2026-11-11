@@ -254,7 +254,7 @@ class SendEmailComponent extends Component
             'institutes' => $r['list']->pluck('institute_id')->unique()->count(),
             'sample' => $r['list']->take(6)->map(fn ($x) => [
                 'name' => $x['name'], 'email' => $x['email'], 'kind' => $x['kind'],
-                'sub' => $x['kind'] === 'staff' ? $x['model']->role_display_name : ($x['model']->er_number ?: optional($x['model']->course)->name),
+                'sub' => $x['kind'] === 'staff' ? $x['model']->role_display_name : ($x['model']->er_number ?: optional($x['model']->course)->display_name),
             ])->values()->all(),
             'first' => $first ? ['id' => $first['model']->getKey(), 'kind' => $first['kind'], 'email' => $first['email'], 'name' => $first['name']] : null,
         ];

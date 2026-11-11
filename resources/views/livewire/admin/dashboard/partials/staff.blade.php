@@ -74,7 +74,7 @@
                     <div class="db-row-sub text-uppercase fw-semibold mb-2">Courses</div>
                     <div class="d-flex flex-wrap gap-1 mb-3">
                         @forelse($d['courses'] as $o)
-                            <span class="db-chip tone-pink" title="{{ optional($o->course)->name }}">{{ optional($o->course)->code }}</span>
+                            <span class="db-chip tone-pink" title="{{ optional($o->course)->name }}">{{ optional($o->course)->display_name }}</span>
                         @empty
                             <span class="db-row-sub">No courses yet.</span>
                         @endforelse

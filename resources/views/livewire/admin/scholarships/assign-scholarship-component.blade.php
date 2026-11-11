@@ -332,7 +332,7 @@
                             <i class="ti ti-users-minus fs-1 d-block mb-2 opacity-50"></i>
                             @if($s && $show === 'assigned')Nobody has this scholarship yet.
                             @elseif($s && $show === 'revoked')No revoked assignments.
-                            @elseif($s)No eligible students{{ $filtered ? ' match these filters' : '' }} — the scholarship is for {{ optional($s->course)->name }}{{ $s->batch ? ' (batch ' . $s->batch->code . ')' : '' }}, admitted students only.
+                            @elseif($s)No eligible students{{ $filtered ? ' match these filters' : '' }} — the scholarship is for {{ optional($s->course)->display_name }}{{ $s->batch ? ' (batch ' . $s->batch->code . ')' : '' }}, admitted students only.
                             @else No admitted students{{ $filtered ? ' match these filters' : ' yet' }}.@endif
                             @if($filtered)<div class="mt-2"><button type="button" class="btn btn-sm btn-light border" wire:click="clearFilters">Clear filters</button></div>@endif
                         </div>
@@ -356,7 +356,7 @@
                                 </span>
                                 <span class="min-w-0 text-start">
                                     <span class="d-block fw-semibold text-truncate">{{ $opt->name }}</span>
-                                    <small class="text-muted d-block text-truncate">{{ $opt->code }} · {{ optional($opt->course)->name }} · {{ $opt->periods_label }}</small>
+                                    <small class="text-muted d-block text-truncate">{{ $opt->code }} · {{ optional($opt->course)->display_name }} · {{ $opt->periods_label }}</small>
                                 </span>
                                 <i class="ti ti-chevron-right ms-auto text-muted"></i>
                             </button>
@@ -372,7 +372,7 @@
                         </div>
                         <div class="min-w-0 flex-grow-1">
                             <div class="fw-bold text-truncate">{{ $s->name }} <span class="sc-code ms-1">{{ $s->code }}</span></div>
-                            <div class="small text-muted text-truncate">{{ optional($s->course)->name }} · {{ $s->batch ? 'Batch ' . $s->batch->code : 'every batch' }}</div>
+                            <div class="small text-muted text-truncate">{{ optional($s->course)->display_name }} · {{ $s->batch ? 'Batch ' . $s->batch->code : 'every batch' }}</div>
                             <div class="as-covers mt-1">
                                 @foreach(range(1, max(1, (int) optional($s->course)->total_periods)) as $n)<span class="{{ in_array($n, $s->periods, true) ? 'is-on' : '' }}">{{ $n }}</span>@endforeach
                                 <small class="text-muted ms-1">{{ $s->applies_to === 'all_fees' ? '+ one-time' : 'semester fees' }}</small>
@@ -435,7 +435,7 @@
                             <h4 class="mb-0 text-truncate">{{ $feeStudent->full_name }}</h4>
                             <div class="as-fm-meta">
                                 <span class="font-monospace">{{ $feeStudent->er_number }}</span>
-                                <span>{{ optional($feeStudent->course)->name }}</span>
+                                <span>{{ optional($feeStudent->course)->display_name }}</span>
                                 @if($feeStudent->batch)<span>Batch {{ $feeStudent->batch->code }}</span>@endif
                                 @if($feeStudent->current_period_label)<span>{{ $feeStudent->current_period_label }}</span>@endif
                             </div>

@@ -55,7 +55,7 @@ return [
     'student_placeholders' => [
         'student_name' => 'Student full name',
         'er_number' => 'ER number (empty until issued)',
-        'course' => 'Course name',
+        'course' => 'Course (code — name)',
         'deadline' => 'Onboarding deadline (date)',
     ],
 

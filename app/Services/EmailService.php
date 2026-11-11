@@ -327,7 +327,7 @@ class EmailService
     {
         $samples = [
             'student_name' => 'Arjun Menon', 'first_name' => 'Arjun', 'recipient_name' => 'Arjun Menon', 'er_number' => 'ER-2026-00042',
-            'course' => 'Aircraft Maintenance Engineering (AME)', 'deadline' => now()->addDays(14)->format('d M Y'),
+            'course' => 'B1.1 — Aircraft Maintenance Engineering', 'deadline' => now()->addDays(14)->format('d M Y'),
             'reason' => 'The scan is not clear — the name and date of birth cannot be read.', 'document' => '10th Marksheet',
             'documents' => ['Medical Certificate', '12th Marksheet'], 'amount' => money_inr(25000), 'fee' => 'Semester 1 tuition fee',
             'receipt' => 'RCPT-2026-00125', 'reference' => 'UPI 412345678901', 'sent_at' => now()->format('d M Y, h:i A'),
@@ -351,7 +351,7 @@ class EmailService
             'first_name' => $student->first_name,
             'recipient_name' => $student->full_name,
             'er_number' => $student->er_number,
-            'course' => optional($student->course)->name,
+            'course' => optional($student->course)->display_name,
             'deadline' => $student->formatted_onboarding_deadline,
         ];
     }

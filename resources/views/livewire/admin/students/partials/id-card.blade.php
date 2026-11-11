@@ -11,7 +11,7 @@
         @endif
         <div class="d-flex flex-column" style="gap: 3px; min-width: 0;">
             <span class="fw-semibold" style="font-size: 15px; line-height: 18px;">{{ $student->full_name }}</span>
-            <span style="font-size: 11px; line-height: 14px; color: #2E3833;">{{ optional($student->course)->name }}</span>
+            <span style="font-size: 11px; line-height: 14px; color: #2E3833;">{{ optional($student->course)->display_name }}</span>
             <span class="amount fw-medium mt-1" style="font-size: 13px;">{{ $student->er_number }}</span>
             <span style="font-size: 10px; color: #56605A;">Issued {{ $card && $card->issue_date ? $card->issue_date->format('d M Y') : '—' }}</span>
         </div>

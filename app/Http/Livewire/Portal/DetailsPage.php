@@ -338,7 +338,7 @@ class DetailsPage extends Component
             'student' => $student,
             'readOnly' => $student && !$this->canEditDetails($student),
             'institutes' => Institute::active()->whereHas('instituteCourses', fn ($q) => $q->where('status', true))->orderBy('name')->pluck('name', 'id'),
-            'courses' => $institute ? $institute->offeredCourses()->orderBy('name')->get(['courses.id', 'courses.name'])->pluck('name', 'id') : collect(),
+            'courses' => $institute ? $institute->offeredCourses()->orderBy('name')->get(['courses.id', 'courses.name', 'courses.code'])->mapWithKeys(fn ($c) => [$c->id => $c->display_name]) : collect(),
             // Fees of the chosen course, shown before registering
             'courseFees' => $this->institute_id && $this->course_id
                 ? CourseFee::active()->where('institute_id', $this->institute_id)->where('course_id', $this->course_id)->orderByDesc('admission_fee')->orderBy('sort_order')->get()
