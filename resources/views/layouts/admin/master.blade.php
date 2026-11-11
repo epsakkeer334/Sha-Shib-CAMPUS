@@ -132,7 +132,7 @@
 	<!-- Custom JS -->
 	<script src="{{ asset('admin/assets/js/todo.js') }}"></script>
 	<script src="{{ asset('admin/assets/js/theme-colorpicker.js') }}"></script>
-    <script src="{{ asset('admin/assets/js/script.js') }}"></script>
+    <script src="{{ asset('admin/assets/js/script.js') }}?v={{ @filemtime(public_path('admin/assets/js/script.js')) }}"></script>
     <script src="{{ asset('admin/assets/js/custom-script.js') }}"></script>
 
     <script src="{{ asset('admin/assets/plugins/flatpickr/flatpickr.min.js') }}"></script>

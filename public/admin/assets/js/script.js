@@ -212,9 +212,15 @@ Template Name: Smarthr - Bootstrap Admin Template
 			if($(this).parent().hasClass('submenu')) {
 				e.preventDefault();
 			}
+			if(!$(this).parent().hasClass('submenu')) {
+				return;
+			}
 			if(!$(this).hasClass('subdrop')) {
-				$('ul', $(this).parents('ul:first')).slideUp(250);
-				$('a', $(this).parents('ul:first')).removeClass('subdrop');
+				// Accordion over the whole side menu (all sections): opening a group closes every other open group,
+				// except the groups this one sits in.
+				var $li = $(this).parent();
+				$('.sidebar-menu li.submenu').not($li).not($li.parents('li.submenu'))
+					.children('a.subdrop').removeClass('subdrop').next('ul').slideUp(250);
 				$(this).next('ul').slideDown(350);
 				$(this).addClass('subdrop');
 			} else if($(this).hasClass('subdrop')) {
