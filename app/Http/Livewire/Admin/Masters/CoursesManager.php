@@ -3,10 +3,85 @@
 namespace App\Http\Livewire\Admin\Masters;
 
 use App\Models\Admin\Course;
+use App\Models\Admin\Student;
 use Illuminate\Validation\Rule;
+use Livewire\WithPagination;
 
+/**
+ * Master Data → Academic → Courses. Own list (code, name, structure, institutes, students),
+ * shared add / edit / delete from MasterCrudComponent.
+ */
 class CoursesManager extends MasterCrudComponent
 {
+    use WithPagination;
+
+    protected $paginationTheme = 'bootstrap';
+
+    public $search = '';
+    public $filterStatus = ''; // '' | active | inactive | unassigned
+
+    protected $queryString = ['search' => ['except' => ''], 'filterStatus' => ['except' => '', 'as' => 'show']];
+
+    public function updated($property)
+    {
+        if (in_array($property, ['search', 'filterStatus'], true)) {
+            $this->resetPage();
+        }
+    }
+
+    public function clearFilters()
+    {
+        $this->reset(['search', 'filterStatus']);
+        $this->resetPage();
+    }
+
+    /** Status switch in the list: same change and audit as Edit → Status. */
+    public function toggleStatus($id)
+    {
+        $course = Course::findOrFail($id);
+        $old = ['status' => $course->status];
+        $course->update(['status' => !$course->status]);
+        $this->auditUpdate($course, $this->module(), $old, ['status' => $course->status], 'Updated Course: ' . $this->recordLabel($course));
+        $this->toast('success', $course->code . ($course->status ? ' is active again.' : ' is inactive: hidden from new course choices, kept on existing records.'));
+    }
+
+    protected function listView(): string
+    {
+        return 'livewire.admin.masters.courses';
+    }
+
+    protected function listData(): array
+    {
+        $courses = Course::query()
+            ->withCount([
+                'instituteCourses as offerings_count',
+                'instituteCourses as active_offerings_count' => fn ($q) => $q->where('status', true),
+                'students',
+                'eligibilityCriteria',
+            ])
+            ->with(['instituteCourses' => fn ($q) => $q->with('institute:id,name,code')->orderByDesc('status')])
+            ->when(trim($this->search) !== '', function ($q) {
+                $term = '%' . trim($this->search) . '%';
+                $q->where(fn ($w) => $w->where('name', 'like', $term)->orWhere('code', 'like', $term)->orWhere('description', 'like', $term));
+            })
+            ->when($this->filterStatus === 'active', fn ($q) => $q->where('status', true))
+            ->when($this->filterStatus === 'inactive', fn ($q) => $q->where('status', false))
+            ->when($this->filterStatus === 'unassigned', fn ($q) => $q->doesntHave('instituteCourses'))
+            ->orderBy('code')
+            ->paginate(15);
+
+        return [
+            'courses' => $courses,
+            'stats' => [
+                'total' => Course::count(),
+                'active' => Course::where('status', true)->count(),
+                'inactive' => Course::where('status', false)->count(),
+                'unassigned' => Course::doesntHave('instituteCourses')->count(),
+                'students' => Student::whereNotNull('course_id')->count(),
+            ],
+            'hasFilters' => trim($this->search) !== '' || $this->filterStatus !== '',
+        ];
+    }
     protected function modelClass(): string
     {
         return Course::class;

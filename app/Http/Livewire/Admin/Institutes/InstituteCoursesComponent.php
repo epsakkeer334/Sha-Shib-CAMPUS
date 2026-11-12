@@ -2,7 +2,10 @@
 
 namespace App\Http\Livewire\Admin\Institutes;
 
+use App\Models\Admin\AddonProgram;
+use App\Models\Admin\Batch;
 use App\Models\Admin\Course;
+use App\Models\Admin\CourseFee;
 use App\Models\Admin\Institute;
 use App\Models\Admin\InstituteCourse;
 use App\Models\Admin\Student;
@@ -11,6 +14,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
+use Livewire\WithPagination;
 
 /**
  * Institute Management → Institute Courses: which master-data courses each institute offers.
@@ -21,7 +25,9 @@ use Livewire\Component;
  */
 class InstituteCoursesComponent extends Component
 {
-    use RecordsAuditTrail;
+    use RecordsAuditTrail, WithPagination;
+
+    protected $paginationTheme = 'bootstrap';
 
     public $institute_id = null;
     public $course_ids = [];
@@ -33,6 +39,15 @@ class InstituteCoursesComponent extends Component
     // Set when opened from Institutes → Courses
     public $scopeInstituteId = null;
     public $scopeInstituteName = null;
+
+    // List filters. Query-string keys avoid 'institute' (the route parameter) and 'status' (the form field).
+    public $search = '';
+    public $filterInstitute = '';
+    public $filterStatus = ''; // '' | active | inactive | setup
+
+    protected $queryString = [
+        'search' => ['except' => ''], 'filterInstitute' => ['except' => '', 'as' => 'inst'], 'filterStatus' => ['except' => '', 'as' => 'show'],
+    ];
 
     protected $listeners = [
         'editRecord' => 'edit',
@@ -105,6 +120,30 @@ class InstituteCoursesComponent extends Component
             'course_ids.*' => [Rule::exists('courses', 'id')->where('status', true)->whereNull('deleted_at')],
             'status' => 'boolean',
         ];
+    }
+
+    public function updated($property)
+    {
+        if (in_array($property, ['search', 'filterInstitute', 'filterStatus'], true)) {
+            $this->resetPage();
+        }
+    }
+
+    public function clearFilters()
+    {
+        $this->reset(['search', 'filterInstitute', 'filterStatus']);
+        $this->resetPage();
+    }
+
+    /** Status switch in the list: same change and audit as Edit → Status. */
+    public function toggleStatus($id)
+    {
+        $this->authorizeManage();
+        $link = $this->links()->findOrFail($id);
+        $old = ['status' => $link->status];
+        $link->update(['status' => !$link->status]);
+        $this->auditUpdate($link, 'institute_courses', $old, ['status' => $link->status], 'Updated course offering: ' . $this->linkLabel($link));
+        $this->toast('success', optional($link->course)->code . ' is now ' . ($link->status ? 'offered to new students.' : 'inactive (not offered to new students).'));
     }
 
     public function updatedInstituteId()
@@ -250,7 +289,66 @@ class InstituteCoursesComponent extends Component
             $availableCourses = Course::active()->whereNotIn('id', $linked)->orderBy('name')->get(['id', 'name', 'code']);
         }
 
+        $user = Auth::user();
+        $isSuperAdmin = $user->isSuperAdmin();
+        $instituteFilter = $this->scopeInstituteId ?: ($isSuperAdmin ? $this->filterInstitute : null);
+
+        // Rows of the same institute + course in another table (students, batches, fees, add-ons).
+        $same = fn ($query, $table) => $query->whereColumn("{$table}.institute_id", 'institute_courses.institute_id')
+            ->whereColumn("{$table}.course_id", 'institute_courses.course_id');
+        $feeHeads = fn () => $same(CourseFee::query()->where('course_fees.status', true), 'course_fees');
+        $noFees = fn ($q) => $q->select(DB::raw(1))->from('course_fees')->where('course_fees.status', true)->whereNull('course_fees.deleted_at')
+            ->whereColumn('course_fees.institute_id', 'institute_courses.institute_id')->whereColumn('course_fees.course_id', 'institute_courses.course_id');
+
+        $base = InstituteCourse::visibleTo($user)
+            ->when($instituteFilter, fn ($q) => $q->where('institute_courses.institute_id', $instituteFilter));
+
+        $stats = [
+            'total' => (clone $base)->count(),
+            'active' => (clone $base)->where('status', true)->count(),
+            'inactive' => (clone $base)->where('status', false)->count(),
+            'setup' => (clone $base)->where('status', true)->whereNotExists($noFees)->count(),
+            'students' => Student::whereExists(fn ($q) => $q->select(DB::raw(1))->from('institute_courses')->whereNull('institute_courses.deleted_at')
+                ->when(!$isSuperAdmin, fn ($w) => $w->where('institute_courses.institute_id', $user->institute_id))
+                ->when($instituteFilter, fn ($w) => $w->where('institute_courses.institute_id', $instituteFilter))
+                ->whereColumn('institute_courses.institute_id', 'students.institute_id')
+                ->whereColumn('institute_courses.course_id', 'students.course_id'))->count(),
+        ];
+
+        $offerings = (clone $base)
+            ->with(['institute:id,name,code', 'course'])
+            ->select('institute_courses.*')
+            ->selectSub($same(Student::query()->selectRaw('count(*)'), 'students'), 'students_count')
+            ->selectSub($same(Batch::query()->selectRaw('count(*)'), 'batches'), 'batches_count')
+            ->selectSub($same(Batch::query()->selectRaw('count(*)')->where('batches.status', true)
+                ->where(fn ($q) => $q->whereNull('batches.end_date')->orWhereDate('batches.end_date', '>=', today())), 'batches'), 'open_batches_count')
+            ->selectSub($feeHeads()->selectRaw('count(*)'), 'fee_heads_count')
+            ->selectSub($same(AddonProgram::query()->selectRaw('count(*)')->where('addon_programs.status', true), 'addon_programs'), 'addons_count')
+            ->when($this->search !== '', function ($q) {
+                $term = '%' . trim($this->search) . '%';
+                $q->where(fn ($w) => $w->whereHas('course', fn ($c) => $c->where('name', 'like', $term)->orWhere('code', 'like', $term))
+                    ->orWhereHas('institute', fn ($i) => $i->where('name', 'like', $term)->orWhere('code', 'like', $term)));
+            })
+            ->when($this->filterStatus === 'active', fn ($q) => $q->where('institute_courses.status', true))
+            ->when($this->filterStatus === 'inactive', fn ($q) => $q->where('institute_courses.status', false))
+            ->when($this->filterStatus === 'setup', fn ($q) => $q->where('institute_courses.status', true)
+                ->whereNotExists($noFees))
+            ->join('courses', 'courses.id', '=', 'institute_courses.course_id')
+            ->join('institutes', 'institutes.id', '=', 'institute_courses.institute_id')
+            ->orderBy('institutes.name')->orderBy('courses.code')
+            ->paginate(20);
+
         return view('livewire.admin.institutes.institute-courses-component', [
+            'offerings' => $offerings,
+            'stats' => $stats,
+            'isSuperAdmin' => $isSuperAdmin,
+            'hasFilters' => $this->search !== '' || $this->filterStatus !== '' || ($this->filterInstitute !== '' && !$this->scopeInstituteId),
+            'links' => [
+                'students' => $user->can('students.view'),
+                'batches' => $user->can('fees.manage') && $user->can('batches.manage'),
+                'fees' => $user->can('fees.manage'),
+                'addons' => $user->can('fees.manage') && $user->can('addon_programs.manage'),
+            ],
             'institutes' => Institute::visibleTo(Auth::user())->orderBy('name')->get(['id', 'name', 'code']),
             'availableCourses' => $availableCourses,
             'editing' => $this->isEdit ? $this->links()->with(['institute', 'course'])->find($this->recordId) : null,

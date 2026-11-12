@@ -216,6 +216,18 @@ abstract class MasterCrudComponent extends Component
         $this->dispatchBrowserEvent('show-toast', ['type' => $type, 'message' => $message]);
     }
 
+    /** Page view. A screen with its own list overrides this and includes partials.master-modals. */
+    protected function listView(): string
+    {
+        return 'livewire.admin.masters.master-crud';
+    }
+
+    /** Extra data for an overridden listView(). */
+    protected function listData(): array
+    {
+        return [];
+    }
+
     public function render()
     {
         $fields = collect($this->fields())->map(function ($field) {
@@ -226,7 +238,7 @@ abstract class MasterCrudComponent extends Component
             return $field;
         })->all();
 
-        return view('livewire.admin.masters.master-crud', [
+        return view($this->listView(), $this->listData() + [
             'fields' => $fields,
             'columns' => array_merge(
                 [['label' => '#', 'field' => 'id', 'sortable' => true]],

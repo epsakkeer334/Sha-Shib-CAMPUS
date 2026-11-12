@@ -182,7 +182,7 @@ class Module1AMasterDataTest extends TestCase
         foreach ($routes as $route) {
             $this->get(route($route))->assertOk();
         }
-        $this->get(route('admin.institute-courses'))->assertOk()->assertSee('Institute Code'); // Super Admin sees every institute
+        $this->get(route('admin.institute-courses'))->assertOk()->assertSee('All institutes'); // Super Admin sees (and filters by) every institute
         $this->get(route('admin.institute-courses.institute', $this->institute->id))->assertOk();
 
         $this->actingAs($this->makeUser('institute-admin', $this->institute));
@@ -251,8 +251,8 @@ class Module1AMasterDataTest extends TestCase
         $admin = $this->makeUser('institute-admin', $this->institute);
         $this->actingAs($admin);
 
-        // Own institute only → no Institute / Institute Code columns in the list
-        $this->get(route('admin.institute-courses'))->assertOk()->assertDontSee('Institute Code')->assertSee('Course Code');
+        // Own institute only → no institute filter or Institute column in the list
+        $this->get(route('admin.institute-courses'))->assertOk()->assertDontSee('All institutes')->assertSee('Course Code');
         $this->get(route('admin.institute-courses.institute', $this->institute->id))->assertOk();
         $this->get(route('admin.institute-courses.institute', $other->id))->assertNotFound();
 
@@ -271,6 +271,59 @@ class Module1AMasterDataTest extends TestCase
         // Cannot edit or delete another institute's course link.
         $this->expectException(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
         Livewire::test(InstituteCoursesComponent::class)->call('edit', $otherLink->id);
+    }
+
+    public function test_courses_list_filters_and_status_switch()
+    {
+        $offered = $this->makeCourse('OF-' . uniqid());
+        $spare = $this->makeCourse('SP-' . uniqid());
+        InstituteCourse::create(['institute_id' => $this->institute->id, 'course_id' => $offered->id, 'status' => true]);
+
+        $this->actingAs($this->super);
+        $this->get(route('admin.masters.courses'))->assertOk()->assertSee($offered->code)->assertSee('Not offered');
+
+        Livewire::test(CoursesManager::class)
+            ->set('filterStatus', 'unassigned')
+            ->assertViewHas('courses', fn ($rows) => $rows->contains('id', $spare->id) && !$rows->contains('id', $offered->id))
+            ->call('clearFilters')
+            ->set('search', $offered->code)
+            ->assertViewHas('courses', fn ($rows) => $rows->pluck('id')->all() === [$offered->id] && $rows->first()->offerings_count === 1)
+            ->call('toggleStatus', $spare->id);
+
+        $this->assertFalse($spare->fresh()->status);
+        $this->assertTrue(AuditTrail::where('module', 'courses')->where('action', 'update')->where('reference_id', $spare->id)->exists());
+    }
+
+    public function test_institute_courses_list_switch_and_needs_fees_filter()
+    {
+        $withFees = $this->makeCourse('F1-' . uniqid());
+        $noFees = $this->makeCourse('N1-' . uniqid());
+        $feeLink = InstituteCourse::create(['institute_id' => $this->institute->id, 'course_id' => $withFees->id, 'status' => true]);
+        $bareLink = InstituteCourse::create(['institute_id' => $this->institute->id, 'course_id' => $noFees->id, 'status' => true]);
+        \App\Models\Admin\CourseFee::create(['institute_id' => $this->institute->id, 'course_id' => $withFees->id, 'fee_head' => 'Admission fee', 'amount' => 1000, 'status' => true]);
+
+        $this->actingAs($this->makeUser('institute-admin', $this->institute));
+
+        // "Needs fees" = active offerings without a fee structure.
+        Livewire::test(InstituteCoursesComponent::class)
+            ->assertViewHas('stats', fn ($s) => $s['total'] === 2 && $s['setup'] === 1)
+            ->set('filterStatus', 'setup')
+            ->assertViewHas('offerings', fn ($rows) => $rows->pluck('id')->all() === [$bareLink->id])
+            ->set('search', $withFees->code)
+            ->assertViewHas('offerings', fn ($rows) => $rows->isEmpty())
+            ->call('clearFilters')
+            ->assertViewHas('offerings', fn ($rows) => $rows->count() === 2 && $rows->firstWhere('id', $feeLink->id)->fee_heads_count === 1);
+
+        // The list switch deactivates the offering and is audited.
+        Livewire::test(InstituteCoursesComponent::class)->call('toggleStatus', $bareLink->id);
+        $this->assertFalse($bareLink->fresh()->status);
+        $this->assertTrue(AuditTrail::where('module', 'institute_courses')->where('action', 'update')->where('reference_id', $bareLink->id)->exists());
+
+        // View-only users cannot use the switch.
+        \Spatie\Permission\Models\Role::findByName('institute-admin')->revokePermissionTo('institute_courses.manage');
+        $this->actingAs($this->makeUser('institute-admin', $this->institute));
+        Livewire::test(InstituteCoursesComponent::class)->call('toggleStatus', $bareLink->id)->assertForbidden();
+        $this->assertFalse($bareLink->fresh()->status);
     }
 
     public function test_institute_courses_permissions_view_and_manage()
