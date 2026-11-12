@@ -144,7 +144,7 @@
 
     {{-- Add / edit --}}
     <div class="modal fade" id="batchModal" tabindex="-1" aria-hidden="true" wire:ignore.self>
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content bt-modal">
                 <div class="modal-header">
                     <div class="d-flex align-items-center gap-2">
