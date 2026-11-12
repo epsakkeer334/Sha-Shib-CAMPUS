@@ -159,6 +159,20 @@ class Module1SendEmailTest extends TestCase
         $this->assertStringStartsWith('Sent email "Hello {first_name}" to 4 receivers', data_get($audit->meta, 'description'));
     }
 
+    public function test_who_receives_it_folds_to_a_summary(): void
+    {
+        $this->student(['first_name' => 'Anu']);
+
+        $this->compose($this->admin)
+            ->call('toggle', 'batches', $this->batchA->id)
+            ->set('receiversOpen', false)
+            ->assertSee($this->batchA->code)->assertSee('Any status')->assertSee('Email to student')
+            ->assertDontSee('Done, collapse')
+            ->set('receiversOpen', true)
+            ->assertSee('Done, collapse')
+            ->assertSet('batches', [$this->batchA->id]); // folding keeps the choices
+    }
+
     public function test_institute_admin_cannot_reach_other_institutes_or_staff(): void
     {
         $mine = $this->student(['first_name' => 'Mine']);

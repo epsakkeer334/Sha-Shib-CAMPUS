@@ -35,12 +35,49 @@
     <div class="se-layout">
         <div class="se-main">
             {{-- 1 · Receivers --}}
-            <div class="se-panel">
-                <div class="se-panel-head">
+            <div class="se-panel {{ $receiversOpen ? '' : 'is-folded' }}">
+                <div class="se-panel-head se-fold-head" role="button" tabindex="0" data-se-fold wire:click="$toggle('receiversOpen')" aria-expanded="{{ $receiversOpen ? 'true' : 'false' }}">
                     <span class="se-step">1</span>
-                    <div class="min-w-0 flex-grow-1"><h5>Who receives it</h5><p>Choose a group with the filters, or pick people one by one.</p></div>
+                    <div class="min-w-0 flex-grow-1"><h5>Who receives it</h5><p>{{ $receiversOpen ? 'Choose a group with the filters, or pick people one by one.' : 'Click to change the receivers.' }}</p></div>
+                    <span class="se-fold-btn"><span class="d-none d-sm-inline">{{ $receiversOpen ? 'Collapse' : 'Change' }}</span> <i class="ti ti-chevron-down"></i></span>
                 </div>
-                <div class="se-panel-body">
+                @unless($receiversOpen)
+                    @php
+                        // Folded: one line of what is chosen, so the message is right below.
+                        $pick = fn ($ids, $options, $label) => collect($options)->whereIn('id', $ids)->map($label)->values();
+                        $few = fn ($names, $max, $all) => $names->isEmpty() ? $all : $names->take($max)->implode(', ') . ($names->count() > $max ? ' +' . ($names->count() - $max) : '');
+                        $parts = [['ti-send', $isStaff ? 'Institute staff' : ($isSuperAdmin ? 'Students' : 'Students of ' . $instituteName)]];
+                        if ($mode === 'selected') {
+                            $parts[] = ['ti-user-check', count($selected) . ' ' . \Illuminate\Support\Str::plural('person', count($selected)) . ' picked'];
+                        } else {
+                            if ($isSuperAdmin) {
+                                $parts[] = ['ti-building', $few($pick($institutes, $instituteOptions, fn ($i) => $i->code ?: $i->name), 3, 'All institutes')];
+                            }
+                            if (!$isStaff) {
+                                $parts[] = ['ti-books', $few($pick($courses, $courseOptions, fn ($c) => $c->code ?: $c->name), 4, 'All courses')];
+                                $parts[] = ['ti-users-group', $few($pick($batches, $batchOptions, fn ($b) => $b->code), 3, 'All batches')];
+                                $parts[] = ['ti-progress-check', $statuses ? collect($statuses)->map(fn ($k) => $statusOptions[$k][0] ?? $k)->implode(', ') : 'Any status'];
+                                if ($fees === 'unpaid') { $parts[] = ['ti-alert-circle', 'Has unpaid fees']; }
+                            } else {
+                                $parts[] = ['ti-id-badge', $roles ? collect($roles)->map(fn ($k) => $roleOptions[$k] ?? $k)->implode(', ') : 'All roles'];
+                                if ($activeOnly) { $parts[] = ['ti-user-shield', 'Active users only']; }
+                            }
+                        }
+                        if (!$isStaff) {
+                            $parts[] = ['ti-mail', 'Email to ' . (['student' => 'student', 'parent' => 'parent', 'both' => 'student and parent'][$sendTo] ?? $sendTo)];
+                        }
+                    @endphp
+                    <div class="se-panel-body se-fold-summary" wire:key="se-fold-summary">
+                        <div class="se-fold-chips">
+                            @foreach($parts as [$partIcon, $partText])
+                                <span class="se-fold-chip" title="{{ $partText }}" style="animation-delay: {{ $loop->index * 35 }}ms;"><i class="ti {{ $partIcon }}"></i> {{ $partText }}</span>
+                            @endforeach
+                        </div>
+                        <span class="se-fold-count {{ $count ? '' : 'is-zero' }}"><i class="ti ti-users"></i> {{ number_format($count) }} {{ \Illuminate\Support\Str::plural('receiver', $count) }}</span>
+                        @error('audience')<div class="se-note bad mt-2 w-100"><i class="ti ti-alert-circle"></i><span>{{ $message }}</span></div>@enderror
+                    </div>
+                @else
+                <div class="se-panel-body se-fold-body" wire:key="se-fold-body">
                     @if($isSuperAdmin)
                         <div class="se-row">
                             <span class="se-label">Send to</span>
@@ -68,7 +105,7 @@
                         @if($isSuperAdmin)
                             <div class="se-filter">
                                 <div class="se-filter-head"><span><i class="ti ti-building"></i> Institute</span><small>{{ $institutes ? count($institutes) . ' chosen' : 'All institutes' }}</small></div>
-                                <div class="se-pills">
+                                <div class="se-pills is-scroll">
                                     <button type="button" class="se-pill {{ !$institutes ? 'on' : '' }}" wire:click="clear('institutes')">All</button>
                                     @foreach($instituteOptions as $inst)
                                         <button type="button" class="se-pill {{ in_array($inst->id, $institutes) ? 'on' : '' }}" wire:click="toggle('institutes', {{ $inst->id }})" wire:key="si-{{ $inst->id }}" title="{{ $inst->name }}">{{ $inst->name }}</button>
@@ -80,7 +117,7 @@
                         @if(!$isStaff)
                             <div class="se-filter">
                                 <div class="se-filter-head"><span><i class="ti ti-books"></i> Course</span><small>{{ $courses ? count($courses) . ' chosen' : 'All courses' }}</small></div>
-                                <div class="se-pills">
+                                <div class="se-pills is-scroll">
                                     <button type="button" class="se-pill {{ !$courses ? 'on' : '' }}" wire:click="clear('courses')">All</button>
                                     @forelse($courseOptions as $c)
                                         <button type="button" class="se-pill {{ in_array($c->id, $courses) ? 'on' : '' }}" wire:click="toggle('courses', {{ $c->id }})" wire:key="sc-{{ $c->id }}" title="{{ $c->name }}">{{ $c->display_name }}</button>
@@ -184,7 +221,12 @@
                         </div>
                     @endif
                     @error('audience')<div class="se-note bad mt-3"><i class="ti ti-alert-circle"></i><span>{{ $message }}</span></div>@enderror
+                    <div class="se-fold-done">
+                        <span class="small text-muted"><i class="ti ti-users"></i> {{ number_format($count) }} {{ \Illuminate\Support\Str::plural('receiver', $count) }}</span>
+                        <button type="button" class="btn btn-sm btn-light" data-se-fold wire:click="$set('receiversOpen', false)"><i class="ti ti-chevron-up me-1"></i> Done, collapse</button>
+                    </div>
                 </div>
+                @endunless
             </div>
 
             {{-- 2 · Message --}}
@@ -388,6 +430,32 @@
         .se-ui .se-panel-head h5 { font-size: 15.5px; font-weight: 700; color: var(--se-ink); margin: 0; }
         .se-ui .se-panel-head p { margin: 1px 0 0; font-size: 12.5px; color: var(--se-muted); }
         .se-ui .se-panel-body { padding: 16px 20px 18px; }
+        .se-ui .se-fold-head { cursor: pointer; user-select: none; }
+        .se-ui .se-fold-head:hover { background: #FCFCFD; }
+        .se-ui .se-panel.is-folded .se-fold-head { border-bottom-color: transparent; }
+        .se-ui .se-fold-btn { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; padding: 5px 11px; border-radius: 8px; background: #F1F5F9; color: #475569; font-size: 12.5px; font-weight: 600; }
+        .se-ui .se-fold-head:hover .se-fold-btn { background: #E2E8F0; }
+        .se-ui .se-fold-summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding-top: 0; }
+        .se-ui .se-fold-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+        .se-ui .se-fold-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 280px; padding: 4px 10px; border-radius: 999px; background: #F8FAFC; border: 1px solid var(--se-line); font-size: 12.5px; color: #334155; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .se-ui .se-fold-chip i { color: #94A3B8; }
+        .se-ui .se-fold-count { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 999px; background: #FFF1E8; color: #9A3412; font-size: 13px; font-weight: 700; white-space: nowrap; }
+        .se-ui .se-fold-count.is-zero { background: #FEF2F2; color: #B91C1C; }
+        /* Fold animation: the chevron turns, the filters slide in, the summary chips fade in one by one,
+           and the open filters fade out while the server folds the section. */
+        .se-ui .se-fold-btn i { transition: transform .3s ease; }
+        .se-ui .se-panel:not(.is-folded) .se-fold-btn i { transform: rotate(180deg); }
+        .se-ui .se-fold-body { animation: se-unfold .32s ease-out; transform-origin: top; transition: opacity .18s ease, transform .18s ease; }
+        .se-ui .se-fold-body.is-folding { opacity: 0; transform: translateY(-8px) scaleY(.97); pointer-events: none; }
+        .se-ui .se-fold-summary { animation: se-fade .25s ease-out; }
+        .se-ui .se-fold-chip, .se-ui .se-fold-count { animation: se-pop .3s ease-out both; }
+        @keyframes se-unfold { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
+        @keyframes se-fade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes se-pop { from { opacity: 0; transform: translateY(4px) scale(.96); } to { opacity: 1; transform: none; } }
+        @media (prefers-reduced-motion: reduce) {
+            .se-ui .se-fold-body, .se-ui .se-fold-summary, .se-ui .se-fold-chip, .se-ui .se-fold-count { animation: none; transition: none; }
+        }
+        .se-ui .se-fold-done { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--se-line); }
         .se-ui .se-step { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; display: grid; place-items: center; background: #EEF2FF; color: #4338CA; font-weight: 700; font-size: 13px; }
         .se-ui .se-busy .spinner-border { width: 16px; height: 16px; border-width: 2px; color: #94A3B8; }
 
@@ -521,6 +589,17 @@
     </style>
 
     <script>
+        // "Who receives it": fade the open filters out while Livewire folds the section.
+        (function () {
+            if (window.__seFold) return;
+            window.__seFold = true;
+            document.addEventListener('click', function (e) {
+                if (!e.target.closest('[data-se-fold]')) return;
+                var body = document.querySelector('.se-ui .se-fold-body');
+                if (body) body.classList.add('is-folding');
+            }, true);
+        })();
+
         // Message editor helpers: insert a placeholder, wrap the selection in **bold**, or start the line with "- ".
         (function () {
             if (window.__seChips) return;

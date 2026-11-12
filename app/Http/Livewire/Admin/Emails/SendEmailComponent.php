@@ -41,6 +41,7 @@ class SendEmailComponent extends Component
     public $activeOnly = true;
     public $selected = [];
     public $search = '';
+    public $receiversOpen = true;    // UI only: "Who receives it" expanded or folded to a summary
 
     // What
     public $templateKey = '';
